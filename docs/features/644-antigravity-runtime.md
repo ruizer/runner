@@ -1,7 +1,7 @@
 # 644 — Antigravity CLI runtime
 
 > Tracking issue: [#644](https://github.com/yicheng47/runner/issues/644)
-> Priority: P1, milestone 0.11.x. Platforms: macOS first; Windows after a JASONPC smoke.
+> Priority: P1, milestone 0.12.x. Platforms: macOS first; Windows after a JASONPC smoke.
 > Probed 2026-09-23 against the installed `agy` on macOS, which updated itself from 1.2.8 to 1.2.9 in the middle of the probe. Every claim below comes from `--help`, the docs bundled under `~/.gemini/antigravity-cli/builtin/skills/`, agy's own logs, or a live session recorded in a PTY. This spec supersedes the issue body where they differ.
 
 ## Motivation

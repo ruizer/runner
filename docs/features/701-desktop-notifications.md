@@ -1,7 +1,7 @@
 # 701 — Desktop notifications when an agent needs you
 
 > Tracking issue: [#701](https://github.com/yicheng47/runner/issues/701)
-> Priority: P2, milestone 0.12. Platforms: macOS and Windows.
+> Priority: P2, milestone 0.13. Platforms: macOS and Windows.
 > Decision, 2026-09-22: follow Zed's agent notification, a popup window Runner draws itself, not the OS notification center.
 
 ## Motivation
