@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::ops::Range;
 use std::rc::Rc;
 use std::time::Duration;
@@ -21,11 +22,12 @@ use crate::ui::button::{Button, PressHandler};
 use crate::ui::scrollbar::Scrollbar;
 use crate::ui::select::rerender_after_draw;
 use crate::ui::tooltip::Tooltip;
-use crate::{Copy, Cut, Paste, SelectAll};
+use crate::{Copy, Cut, Paste, Redo, SelectAll, Undo};
 
 pub type KeyDownInterceptor = Rc<dyn Fn(&KeyDownEvent, &mut Window, &mut App) -> bool>;
 
 const AUTO_SCROLL_TICK: Duration = Duration::from_millis(16);
+const MAX_UNDO_STEPS: usize = 1000;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Selection {
@@ -47,6 +49,118 @@ impl Selection {
 struct MarkedText {
     range: Range<usize>,
     original: String,
+    /// The selection from before the composition, which undo restores.
+    selection_before: Selection,
+}
+
+/// What an edit does, which decides whether it merges into the step before
+/// it. The history follows gpui-kit's undo manager.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum EditIntent {
+    Typing,
+    Backspace,
+    DeleteForward,
+    Atomic,
+}
+
+/// One replacement, at a byte offset of the text as it stood before it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct Change {
+    offset: usize,
+    old_text: String,
+    new_text: String,
+}
+
+/// One undo step: its changes in the order they were made, and the selection
+/// from before the first and after the last.
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct UndoStep {
+    intent: EditIntent,
+    changes: Vec<Change>,
+    selection_before: Selection,
+    selection_after: Selection,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct History {
+    undo: VecDeque<UndoStep>,
+    redo: Vec<UndoStep>,
+    /// The last step can take an adjacent edit of the same intent.
+    run_open: bool,
+    /// Nothing but its own edits has happened since the last step.
+    just_recorded: bool,
+}
+
+impl History {
+    fn record(&mut self, change: Change, intent: EditIntent, before: Selection, after: Selection) {
+        self.redo.clear();
+        let merge = self.run_open
+            && self.undo.back().is_some_and(|step| {
+                step.intent == intent
+                    && step
+                        .changes
+                        .last()
+                        .is_some_and(|previous| is_adjacent(intent, previous, &change))
+            });
+        match self.undo.back_mut() {
+            Some(step) if merge => {
+                step.changes.push(change);
+                step.selection_after = after;
+            }
+            _ => {
+                if self.undo.len() == MAX_UNDO_STEPS {
+                    self.undo.pop_front();
+                }
+                self.undo.push_back(UndoStep {
+                    intent,
+                    changes: vec![change],
+                    selection_before: before,
+                    selection_after: after,
+                });
+            }
+        }
+        self.run_open = intent != EditIntent::Atomic;
+        self.just_recorded = true;
+    }
+
+    /// Adds `change` to the last step, as part of the edit it records.
+    fn amend(&mut self, change: Change, after: Selection) {
+        self.redo.clear();
+        if let Some(step) = self.undo.back_mut() {
+            step.changes.push(change);
+            step.selection_after = after;
+        }
+    }
+
+    fn break_run(&mut self) {
+        self.run_open = false;
+        self.just_recorded = false;
+    }
+}
+
+/// Whether `current` continues `previous` as one gesture, as gpui-kit's
+/// `is_adjacent` decides.
+fn is_adjacent(intent: EditIntent, previous: &Change, current: &Change) -> bool {
+    match intent {
+        EditIntent::Typing => {
+            previous.old_text.is_empty()
+                && current.old_text.is_empty()
+                && !previous.new_text.contains('\n')
+                && !current.new_text.contains('\n')
+                && previous.offset + previous.new_text.len() == current.offset
+        }
+        EditIntent::Backspace => {
+            previous.new_text.is_empty()
+                && current.new_text.is_empty()
+                && current.offset + current.old_text.len() == previous.offset
+        }
+        EditIntent::DeleteForward => {
+            previous.new_text.is_empty()
+                && current.new_text.is_empty()
+                && current.offset == previous.offset
+        }
+        EditIntent::Atomic => false,
+    }
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -56,6 +170,7 @@ struct TextBuffer {
     marked: Option<MarkedText>,
     edited: bool,
     multiline: bool,
+    history: History,
 }
 
 impl TextBuffer {
@@ -64,6 +179,129 @@ impl TextBuffer {
         self.move_to_end();
         self.marked = None;
         self.edited = false;
+        self.history = History::default();
+    }
+
+    /// Replaces the whole text as one step. Straight after an edit, the text
+    /// lowercased is the handle fields correcting that edit, so it joins the
+    /// edit's step and one undo takes back both.
+    fn set_text(&mut self, text: &str) -> bool {
+        self.end_composition();
+        let correction = self.history.just_recorded && text == self.text.to_lowercase();
+        let changed = if correction {
+            let change = Change {
+                offset: 0,
+                old_text: self.text.clone(),
+                new_text: text.to_owned(),
+            };
+            let changed = self.splice(0..self.text.len(), text);
+            if changed {
+                self.history.amend(change, self.selection);
+            }
+            changed
+        } else {
+            self.edit(0..self.text.len(), text, EditIntent::Atomic)
+        };
+        self.history.break_run();
+        changed
+    }
+
+    /// Writes `new_text` over `range` and leaves the caret after it; the
+    /// caller records the change.
+    fn splice(&mut self, range: Range<usize>, new_text: &str) -> bool {
+        let changed = self.text[range.clone()] != *new_text;
+        self.text.replace_range(range.clone(), new_text);
+        let end = range.start + new_text.len();
+        self.selection = Selection {
+            anchor: end,
+            caret: end,
+        };
+        self.edited |= changed;
+        changed
+    }
+
+    /// Replaces `range` with `new_text`, leaving the caret after it, and
+    /// records the change. Every edit but an IME composition's goes through
+    /// here.
+    fn edit(&mut self, range: Range<usize>, new_text: &str, intent: EditIntent) -> bool {
+        self.end_composition();
+        let before = self.selection;
+        let change = Change {
+            offset: range.start,
+            old_text: self.text[range.clone()].to_owned(),
+            new_text: new_text.to_owned(),
+        };
+        let changed = self.splice(range, new_text);
+        if changed {
+            self.history.record(change, intent, before, self.selection);
+        } else if self.selection != before {
+            self.history.break_run();
+        }
+        changed
+    }
+
+    /// Ends an IME composition, recording what it left as one step from the
+    /// text it replaced; a composition that leaves that text records nothing.
+    fn end_composition(&mut self) {
+        let Some(marked) = self.marked.take() else {
+            return;
+        };
+        let composed = &self.text[marked.range.clone()];
+        if composed != marked.original {
+            let change = Change {
+                offset: marked.range.start,
+                old_text: marked.original,
+                new_text: composed.to_owned(),
+            };
+            self.history.record(
+                change,
+                EditIntent::Atomic,
+                marked.selection_before,
+                self.selection,
+            );
+        }
+    }
+
+    /// Ends any composition and run before the caret or selection moves.
+    fn leave_run(&mut self) {
+        self.end_composition();
+        self.history.break_run();
+    }
+
+    fn undo(&mut self) -> bool {
+        if self.marked.is_some() {
+            return false;
+        }
+        let Some(step) = self.history.undo.pop_back() else {
+            return false;
+        };
+        for change in step.changes.iter().rev() {
+            let end = change.offset + change.new_text.len();
+            self.splice(change.offset..end, &change.old_text);
+        }
+        self.selection = step.selection_before;
+        self.edited = true;
+        self.history.redo.push(step);
+        self.history.break_run();
+        true
+    }
+
+    fn redo(&mut self) -> bool {
+        if self.marked.is_some() {
+            return false;
+        }
+        let Some(step) = self.history.redo.pop() else {
+            return false;
+        };
+        for change in &step.changes {
+            let end = change.offset + change.old_text.len();
+            self.splice(change.offset..end, &change.new_text);
+        }
+        self.selection = step.selection_after;
+        self.edited = true;
+        self.history.undo.push_back(step);
+        self.history.break_run();
+        true
     }
 
     fn move_to_end(&mut self) {
@@ -75,7 +313,7 @@ impl TextBuffer {
     }
 
     fn unmark_text(&mut self) {
-        self.marked = None;
+        self.end_composition();
     }
 
     fn text_for_range(
@@ -104,15 +342,22 @@ impl TextBuffer {
     fn replace_text_in_range(&mut self, range_utf16: Option<Range<usize>>, new_text: &str) -> bool {
         let range = self.resolve_range(range_utf16);
         let new_text = normalize_input_text(new_text, self.multiline);
-        let changed = self.text[range.clone()] != new_text;
-        self.text.replace_range(range.clone(), &new_text);
-        let end = range.start + new_text.len();
-        self.selection = Selection {
-            anchor: end,
-            caret: end,
+        let intent = if range.is_empty() && !new_text.is_empty() && !new_text.contains('\n') {
+            EditIntent::Typing
+        } else {
+            EditIntent::Atomic
         };
-        self.marked = None;
-        self.edited |= changed;
+        self.replace(range, &new_text, intent)
+    }
+
+    /// Replaces `range`; over the composed text, it commits the composition.
+    fn replace(&mut self, range: Range<usize>, new_text: &str, intent: EditIntent) -> bool {
+        let Some(marked) = self.marked.as_mut().filter(|marked| marked.range == range) else {
+            return self.edit(range, new_text, intent);
+        };
+        marked.range = range.start..range.start + new_text.len();
+        let changed = self.splice(range, new_text);
+        self.end_composition();
         changed
     }
 
@@ -123,19 +368,24 @@ impl TextBuffer {
         new_selected_range_utf16: Option<Range<usize>>,
     ) -> bool {
         let range = self.resolve_range(range_utf16);
-        let original = self
+        if self
             .marked
             .as_ref()
-            .filter(|marked| marked.range == range)
-            .map(|marked| marked.original.clone())
-            .unwrap_or_else(|| self.text[range.clone()].to_string());
+            .is_some_and(|marked| marked.range != range)
+        {
+            self.end_composition();
+        }
+        let (original, selection_before) = match self.marked.take() {
+            Some(marked) => (marked.original, marked.selection_before),
+            None => (self.text[range.clone()].to_string(), self.selection),
+        };
         let new_text = normalize_input_text(new_text, self.multiline);
-        let changed = self.text[range.clone()] != new_text;
-        self.text.replace_range(range.clone(), &new_text);
+        let changed = self.splice(range.clone(), &new_text);
         let marked_range = range.start..range.start + new_text.len();
-        self.marked = (!new_text.is_empty()).then_some(MarkedText {
+        self.marked = Some(MarkedText {
             range: marked_range.clone(),
             original,
+            selection_before,
         });
         self.selection = new_selected_range_utf16
             .map(|selection| {
@@ -149,7 +399,9 @@ impl TextBuffer {
                 anchor: marked_range.end,
                 caret: marked_range.end,
             });
-        self.edited |= changed;
+        if new_text.is_empty() {
+            self.end_composition();
+        }
         changed
     }
 
@@ -170,15 +422,17 @@ impl TextBuffer {
     }
 
     fn replace_selection(&mut self, new_text: &str) -> bool {
-        self.replace_text_in_range(None, new_text)
+        let range = self.resolve_range(None);
+        let new_text = normalize_input_text(new_text, self.multiline);
+        self.replace(range, &new_text, EditIntent::Atomic)
     }
 
     fn select_all(&mut self) {
+        self.leave_run();
         self.selection = Selection {
             anchor: 0,
             caret: self.text.len(),
         };
-        self.marked = None;
     }
 
     fn select_word_at(&mut self, position: usize) {
@@ -192,11 +446,11 @@ impl TextBuffer {
                     .then_some(start..end)
             })
             .unwrap_or(position..position);
+        self.leave_run();
         self.selection = Selection {
             anchor: range.start,
             caret: range.end,
         };
-        self.marked = None;
     }
 
     fn select_line_at(&mut self, position: usize) {
@@ -207,21 +461,21 @@ impl TextBuffer {
         let end = self.text[position..]
             .find('\n')
             .map_or(self.text.len(), |offset| position + offset + 1);
+        self.leave_run();
         self.selection = Selection {
             anchor: start,
             caret: end,
         };
-        self.marked = None;
     }
 
     fn move_left(&mut self, boundary: Boundary, extend: bool) {
         if !extend && !self.selection.is_empty() {
             let start = self.selection.range().start;
+            self.leave_run();
             self.selection = Selection {
                 anchor: start,
                 caret: start,
             };
-            self.marked = None;
             return;
         }
         let target = match boundary {
@@ -237,11 +491,11 @@ impl TextBuffer {
     fn move_right(&mut self, boundary: Boundary, extend: bool) {
         if !extend && !self.selection.is_empty() {
             let end = self.selection.range().end;
+            self.leave_run();
             self.selection = Selection {
                 anchor: end,
                 caret: end,
             };
-            self.marked = None;
             return;
         }
         let target = match boundary {
@@ -256,6 +510,7 @@ impl TextBuffer {
 
     fn move_to(&mut self, target: usize, extend: bool) {
         let target = target.min(self.text.len());
+        self.leave_run();
         if extend {
             self.selection.caret = target;
         } else {
@@ -264,12 +519,11 @@ impl TextBuffer {
                 caret: target,
             };
         }
-        self.marked = None;
     }
 
     fn delete_left(&mut self, boundary: Boundary) -> bool {
         let selection = self.selection.range();
-        let range = if selection.is_empty() {
+        let (range, intent) = if selection.is_empty() {
             let start = match boundary {
                 Boundary::Grapheme => {
                     text_util::prev_grapheme_boundary(&self.text, selection.start)
@@ -277,40 +531,33 @@ impl TextBuffer {
                 Boundary::Word => previous_word_boundary(&self.text, selection.start),
                 Boundary::Line => 0,
             };
-            start..selection.start
+            (start..selection.start, boundary.delete_intent(true))
         } else {
-            selection
+            (selection, EditIntent::Atomic)
         };
-        self.delete_range(range)
+        self.delete_range(range, intent)
     }
 
     fn delete_right(&mut self, boundary: Boundary) -> bool {
         let selection = self.selection.range();
-        let range = if selection.is_empty() {
+        let (range, intent) = if selection.is_empty() {
             let end = match boundary {
                 Boundary::Grapheme => text_util::next_grapheme_boundary(&self.text, selection.end),
                 Boundary::Word => next_word_boundary(&self.text, selection.end),
                 Boundary::Line => self.text.len(),
             };
-            selection.end..end
+            (selection.end..end, boundary.delete_intent(false))
         } else {
-            selection
+            (selection, EditIntent::Atomic)
         };
-        self.delete_range(range)
+        self.delete_range(range, intent)
     }
 
-    fn delete_range(&mut self, range: Range<usize>) -> bool {
+    fn delete_range(&mut self, range: Range<usize>, intent: EditIntent) -> bool {
         if range.is_empty() {
             return false;
         }
-        self.text.replace_range(range.clone(), "");
-        self.selection = Selection {
-            anchor: range.start,
-            caret: range.start,
-        };
-        self.marked = None;
-        self.edited = true;
-        true
+        self.edit(range, "", intent)
     }
 }
 
@@ -319,6 +566,18 @@ enum Boundary {
     Grapheme,
     Word,
     Line,
+}
+
+impl Boundary {
+    /// Only single-grapheme deletes merge; word and line deletes are steps
+    /// of their own.
+    fn delete_intent(self, backward: bool) -> EditIntent {
+        match (self, backward) {
+            (Boundary::Grapheme, true) => EditIntent::Backspace,
+            (Boundary::Grapheme, false) => EditIntent::DeleteForward,
+            _ => EditIntent::Atomic,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1251,7 +1510,7 @@ impl TextField {
     }
 
     pub fn set_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
-        self.buffer.reset(text);
+        self.buffer.set_text(&text.into());
         self.vertical_goal = None;
         self.buffer.edited = true;
         cx.notify();
@@ -1361,10 +1620,19 @@ impl TextField {
             cx.notify();
             return;
         }
-        let before = (self.buffer.selection, self.buffer.text.len());
+        // An undo or redo moves a step even where it leaves the length and
+        // selection as they were.
+        let state = |buffer: &TextBuffer| {
+            (
+                buffer.selection,
+                buffer.text.len(),
+                buffer.history.undo.len(),
+            )
+        };
+        let before = state(&self.buffer);
         let handled = handle_key_down(&mut self.buffer, event, cx);
         if handled {
-            if (self.buffer.selection, self.buffer.text.len()) != before {
+            if state(&self.buffer) != before {
                 self.reveal_caret();
             }
             cx.stop_propagation();
@@ -1407,6 +1675,22 @@ impl TextField {
         self.buffer.select_all();
         self.vertical_goal = None;
         cx.notify();
+    }
+
+    fn on_undo(&mut self, _: &Undo, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.disabled && self.buffer.undo() {
+            self.vertical_goal = None;
+            self.reveal_caret();
+            cx.notify();
+        }
+    }
+
+    fn on_redo(&mut self, _: &Redo, _: &mut Window, cx: &mut Context<Self>) {
+        if !self.disabled && self.buffer.redo() {
+            self.vertical_goal = None;
+            self.reveal_caret();
+            cx.notify();
+        }
     }
 
     fn reveal_caret(&self) {
@@ -1892,6 +2176,8 @@ impl Render for TextField {
             .on_action(cx.listener(Self::on_copy))
             .on_action(cx.listener(Self::on_paste))
             .on_action(cx.listener(Self::on_select_all))
+            .on_action(cx.listener(Self::on_undo))
+            .on_action(cx.listener(Self::on_redo))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
@@ -2364,7 +2650,7 @@ fn handle_key_down_for_platform<T>(
     let key = event.keystroke.key.as_str();
     let modifiers = event.keystroke.modifiers;
     let command = if windows {
-        modifiers.control && matches!(key, "a" | "c" | "x" | "v")
+        modifiers.control && matches!(key, "a" | "c" | "x" | "v" | "y" | "z")
     } else {
         modifiers.platform
     };
@@ -2391,6 +2677,18 @@ fn handle_key_down_for_platform<T>(
                 if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
                     input.replace_selection(&text);
                 }
+                true
+            }
+            "z" => {
+                if modifiers.shift {
+                    input.redo();
+                } else {
+                    input.undo();
+                }
+                true
+            }
+            "y" if windows => {
+                input.redo();
                 true
             }
             "left" => {
@@ -3402,6 +3700,477 @@ mod tests {
             enter_behavior(TextFieldKind::Textarea { rows: 3 }, true),
             EnterBehavior::Block
         );
+    }
+
+    fn type_text(input: &mut TextBuffer, text: &str) {
+        for character in text.chars() {
+            input.replace_text_in_range(None, &character.to_string());
+        }
+    }
+
+    fn caret_at(offset: usize) -> Selection {
+        Selection {
+            anchor: offset,
+            caret: offset,
+        }
+    }
+
+    #[test]
+    fn typing_merges_into_one_step() {
+        let mut input = TextBuffer::default();
+        input.reset("say ");
+        type_text(&mut input, "hello");
+        assert_eq!(input.text, "say hello");
+        assert_eq!(input.history.undo.len(), 1);
+
+        input.edited = false;
+        assert!(input.undo());
+        assert_eq!(input.text, "say ");
+        assert_eq!(input.selection, caret_at(4));
+        assert!(input.edited, "an undo is an edit");
+        assert!(!input.undo());
+        assert!(input.redo());
+        assert_eq!(input.text, "say hello");
+        assert_eq!(input.selection, caret_at(9));
+        assert!(!input.redo());
+    }
+
+    #[test]
+    fn a_newline_splits_a_run_and_typing_after_it_is_a_new_step() {
+        let mut input = TextBuffer {
+            multiline: true,
+            ..TextBuffer::default()
+        };
+        input.reset("");
+        type_text(&mut input, "one");
+        assert!(input.replace_selection("\n"), "Enter");
+        type_text(&mut input, "two");
+        type_text(&mut input, "\n");
+        type_text(&mut input, "three");
+        assert_eq!(input.text, "one\ntwo\nthree");
+
+        for text in ["one\ntwo\n", "one\ntwo", "one\n", "one", ""] {
+            assert!(input.undo());
+            assert_eq!(input.text, text);
+        }
+        assert!(!input.undo());
+    }
+
+    #[test]
+    fn paste_cut_and_delete_selection_are_one_step_each() {
+        let mut input = TextBuffer::default();
+        input.reset("");
+        type_text(&mut input, "ab");
+        assert!(input.replace_selection("cd"), "paste");
+        type_text(&mut input, "ef");
+        assert!(input.replace_selection("gh"), "paste");
+        assert!(input.replace_selection("ij"), "paste");
+        assert_eq!(input.text, "abcdefghij");
+        assert_eq!(input.history.undo.len(), 5);
+
+        input.select_all();
+        assert!(input.delete_left(Boundary::Grapheme), "cut");
+        assert_eq!(input.text, "");
+        assert!(input.undo());
+        assert_eq!(input.text, "abcdefghij");
+        assert_eq!(
+            input.selection,
+            Selection {
+                anchor: 0,
+                caret: 10
+            },
+            "the cut text is selected again"
+        );
+
+        input.move_to(2, false);
+        input.move_to(4, true);
+        assert!(input.delete_left(Boundary::Grapheme), "Backspace over cd");
+        input.move_to(0, false);
+        input.move_to(2, true);
+        assert!(input.delete_right(Boundary::Grapheme), "Delete over ab");
+        assert_eq!(input.text, "efghij");
+
+        for text in [
+            "abefghij",
+            "abcdefghij",
+            "abcdefgh",
+            "abcdef",
+            "abcd",
+            "ab",
+            "",
+        ] {
+            assert!(input.undo());
+            assert_eq!(input.text, text);
+        }
+    }
+
+    #[test]
+    fn backspace_and_forward_delete_runs_merge() {
+        let mut input = TextBuffer::default();
+        input.reset("a王菲bcdef");
+        input.move_to("a王菲".len(), false);
+        assert!(input.delete_left(Boundary::Grapheme));
+        assert!(input.delete_left(Boundary::Grapheme));
+        assert_eq!(input.text, "abcdef");
+        input.move_to(2, false);
+        assert!(input.delete_right(Boundary::Grapheme));
+        assert!(input.delete_right(Boundary::Grapheme));
+        assert_eq!(input.text, "abef");
+        assert!(
+            input.delete_left(Boundary::Grapheme),
+            "a Backspace after Delete"
+        );
+        assert_eq!(input.history.undo.len(), 3);
+
+        assert!(input.undo());
+        assert_eq!(input.text, "abef");
+        assert_eq!(input.selection, caret_at(2));
+        assert!(input.undo());
+        assert_eq!(input.text, "abcdef");
+        assert_eq!(input.selection, caret_at(2));
+        assert!(input.undo());
+        assert_eq!(input.text, "a王菲bcdef");
+        assert_eq!(input.selection, caret_at("a王菲".len()));
+
+        input.reset("one two three");
+        assert!(input.delete_left(Boundary::Word));
+        assert!(input.delete_left(Boundary::Word));
+        assert_eq!(input.history.undo.len(), 2, "word deletes are steps");
+        assert!(input.delete_left(Boundary::Line));
+        assert_eq!(input.history.undo.len(), 3, "so is a line delete");
+    }
+
+    #[test]
+    fn a_caret_move_splits_typing() {
+        let mut input = TextBuffer::default();
+        input.reset("");
+        type_text(&mut input, "ab");
+        input.move_left(Boundary::Grapheme, false);
+        input.move_right(Boundary::Grapheme, false);
+        type_text(&mut input, "cd");
+        input.select_all();
+        input.move_to(4, false);
+        type_text(&mut input, "e");
+        input.select_word_at(0);
+        input.move_to(5, false);
+        type_text(&mut input, "f");
+        assert_eq!(input.text, "abcdef");
+        assert_eq!(input.history.undo.len(), 4);
+
+        assert!(input.undo());
+        assert!(input.undo());
+        assert!(input.undo());
+        assert_eq!(input.text, "ab");
+        assert_eq!(input.selection, caret_at(2));
+    }
+
+    #[test]
+    fn a_new_edit_clears_redo() {
+        let mut input = TextBuffer::default();
+        input.reset("");
+        type_text(&mut input, "ab");
+        assert!(input.replace_selection("cd"));
+        assert!(input.undo());
+        type_text(&mut input, "x");
+        assert!(!input.redo());
+        assert_eq!(input.text, "abx");
+        assert!(input.undo());
+        assert_eq!(input.text, "ab", "typing after an undo is a new step");
+    }
+
+    #[test]
+    fn undo_and_redo_restore_the_selection() {
+        let mut input = TextBuffer::default();
+        input.reset("alpha beta");
+        let beta = Selection {
+            anchor: 10,
+            caret: 6,
+        };
+        input.selection = beta;
+        type_text(&mut input, "gamma");
+        assert_eq!(input.text, "alpha gamma");
+        assert_eq!(input.history.undo.len(), 2, "the replacement, then typing");
+
+        assert!(input.undo());
+        assert_eq!(input.text, "alpha g");
+        assert_eq!(input.selection, caret_at(7));
+        assert!(input.undo());
+        assert_eq!(input.text, "alpha beta");
+        assert_eq!(
+            input.selection, beta,
+            "the replaced text, as it was selected"
+        );
+        assert!(input.redo());
+        assert_eq!(input.text, "alpha g");
+        assert_eq!(input.selection, caret_at(7));
+        assert!(input.redo());
+        assert_eq!(input.text, "alpha gamma");
+        assert_eq!(input.selection, caret_at(11), "the end of the merged run");
+    }
+
+    #[test]
+    fn an_ime_composition_is_one_step_with_utf8_offsets() {
+        let mut input = TextBuffer::default();
+        input.reset("王菲");
+        input.move_to("王".len(), false);
+        for (marked, caret) in [("n", 1), ("ni", 2), ("ni h", 4), ("ni hao", 6)] {
+            input.replace_and_mark_text_in_range(None, marked, Some(caret..caret));
+            assert_eq!(input.text, format!("王{marked}菲"));
+            assert!(input.history.undo.is_empty(), "{marked} is not a step");
+            assert!(!input.undo(), "undo waits for the composition");
+            assert!(!input.redo());
+            assert_eq!(input.text, format!("王{marked}菲"));
+        }
+        assert!(input.replace_text_in_range(None, "你好"));
+        assert_eq!(input.text, "王你好菲");
+        assert!(input.marked.is_none());
+        assert_eq!(input.history.undo.len(), 1);
+        assert_eq!(
+            input.history.undo[0].changes,
+            [Change {
+                offset: "王".len(),
+                old_text: String::new(),
+                new_text: "你好".into(),
+            }]
+        );
+
+        assert!(input.undo());
+        assert_eq!(input.text, "王菲");
+        assert_eq!(input.selection, caret_at("王".len()));
+        assert!(input.redo());
+        assert_eq!(input.text, "王你好菲");
+        assert_eq!(input.selection, caret_at("王你好".len()));
+
+        type_text(&mut input, "!");
+        assert_eq!(input.history.undo.len(), 2, "the next keystroke is a step");
+
+        // A composition over a selection undoes to that selection.
+        input.move_to("王你好!".len(), false);
+        input.move_to("王你好!菲".len(), true);
+        input.replace_and_mark_text_in_range(None, "fei", Some(3..3));
+        input.replace_text_in_range(None, "飞");
+        assert_eq!(input.text, "王你好!飞");
+        assert!(input.undo());
+        assert_eq!(input.text, "王你好!菲");
+        assert_eq!(
+            input.selection,
+            Selection {
+                anchor: "王你好!".len(),
+                caret: "王你好!菲".len(),
+            }
+        );
+    }
+
+    #[test]
+    fn a_cancelled_composition_records_nothing_and_an_unmarked_one_is_a_step() {
+        let mut input = TextBuffer::default();
+        input.reset("ab");
+        input.replace_and_mark_text_in_range(None, "n", Some(1..1));
+        input.replace_and_mark_text_in_range(None, "ni", Some(2..2));
+        input.replace_and_mark_text_in_range(None, "", None);
+        assert_eq!(input.text, "ab");
+        assert!(input.marked.is_none());
+        assert!(input.history.undo.is_empty());
+
+        input.replace_and_mark_text_in_range(None, "ni", Some(2..2));
+        input.replace_text_in_range(None, "");
+        assert_eq!(input.text, "ab");
+        assert!(input.history.undo.is_empty());
+
+        input.replace_and_mark_text_in_range(None, "ni", Some(2..2));
+        input.unmark_text();
+        assert_eq!(input.text, "abni");
+        assert_eq!(input.history.undo.len(), 1);
+
+        input.replace_and_mark_text_in_range(None, "hao", Some(3..3));
+        input.move_to(0, false);
+        assert_eq!(input.history.undo.len(), 2, "a click keeps the composition");
+        assert!(input.undo());
+        assert_eq!(input.text, "abni");
+        assert_eq!(input.selection, caret_at(4));
+        assert!(input.undo());
+        assert_eq!(input.text, "ab");
+    }
+
+    #[test]
+    fn reset_clears_the_history() {
+        let mut input = TextBuffer::default();
+        input.reset("");
+        type_text(&mut input, "ab");
+        assert!(input.replace_selection("cd"));
+        assert!(input.undo());
+        input.replace_and_mark_text_in_range(None, "ni", Some(2..2));
+
+        input.reset("fresh");
+        assert!(!input.undo());
+        assert!(!input.redo());
+        assert_eq!(input.text, "fresh");
+        type_text(&mut input, "!");
+        assert!(input.undo());
+        assert_eq!(input.text, "fresh");
+        assert!(!input.undo());
+    }
+
+    #[test]
+    fn set_text_is_one_step_and_corrects_the_edit_it_follows() {
+        let mut input = TextBuffer::default();
+        input.reset("draft");
+        assert!(input.set_text("final copy"));
+        assert!(!input.set_text("final copy"));
+        assert_eq!(input.history.undo.len(), 1);
+        assert!(input.undo());
+        assert_eq!(input.text, "draft");
+        assert_eq!(input.selection, caret_at(5));
+        assert!(input.redo());
+        assert_eq!(input.text, "final copy");
+        assert_eq!(input.selection, caret_at(10));
+
+        // The handle fields lowercase what was typed through `set_text`.
+        type_text(&mut input, "A");
+        assert!(input.set_text("final copya"));
+        assert!(input.replace_selection("BC"));
+        assert!(input.set_text("final copyabc"));
+        assert_eq!(input.history.undo.len(), 3);
+        assert!(input.undo());
+        assert_eq!(input.text, "final copya");
+        assert!(input.undo());
+        assert_eq!(input.text, "final copy");
+        assert_eq!(input.selection, caret_at(10));
+        assert!(input.redo());
+        assert_eq!(input.text, "final copya");
+        assert_eq!(input.selection, caret_at(11));
+
+        type_text(&mut input, "D");
+        input.move_to(0, false);
+        assert!(input.set_text("final copyad"));
+        assert!(input.undo());
+        assert_eq!(input.text, "final copyaD", "after a move it is a step");
+
+        type_text(&mut input, "e");
+        assert!(input.set_text("FINAL COPYAD"));
+        assert!(input.undo());
+        assert_eq!(input.text, "efinal copyaD", "so is uppercasing");
+        assert!(input.undo());
+        assert_eq!(input.text, "final copyaD");
+
+        type_text(&mut input, "x");
+        assert!(input.set_text("canonical"));
+        assert!(input.undo());
+        assert_eq!(
+            input.text, "xfinal copyaD",
+            "a new value after an edit is a step"
+        );
+        assert!(input.undo());
+        assert_eq!(input.text, "final copyaD");
+    }
+
+    #[test]
+    fn the_history_keeps_the_last_1000_steps() {
+        let mut input = TextBuffer::default();
+        input.reset("");
+        for _ in 0..1100 {
+            input.replace_selection("x");
+        }
+        assert_eq!(input.history.undo.len(), MAX_UNDO_STEPS);
+        type_text(&mut input, "A");
+        assert!(input.set_text(&format!("{}a", "x".repeat(1100))));
+        assert_eq!(
+            input.history.undo.len(),
+            MAX_UNDO_STEPS,
+            "a correction drops no step"
+        );
+        assert!(input.undo());
+        assert_eq!(input.text, "x".repeat(1100));
+        for _ in 1..MAX_UNDO_STEPS {
+            assert!(input.undo());
+        }
+        assert!(!input.undo());
+        assert_eq!(input.text, "x".repeat(101));
+    }
+
+    #[test]
+    fn undo_and_redo_keys_follow_the_platform() {
+        let cx = gpui::TestAppContext::single();
+        for windows in [false, true] {
+            cx.update(|cx| {
+                let input = cx.new(|_| TextBuffer::default());
+                input.update(cx, |input, cx| {
+                    let press =
+                        |input: &mut TextBuffer, key: &str, cx: &mut Context<TextBuffer>| {
+                            handle_key_down_for_platform(
+                                input,
+                                &KeyDownEvent {
+                                    keystroke: gpui::Keystroke::parse(key).unwrap(),
+                                    is_held: false,
+                                    prefer_character_input: false,
+                                },
+                                cx,
+                                windows,
+                            )
+                        };
+                    let command = if windows { "ctrl" } else { "cmd" };
+                    input.reset("");
+                    type_text(input, "one");
+                    cx.write_to_clipboard(ClipboardItem::new_string(" two".into()));
+                    assert!(press(input, &format!("{command}-v"), cx));
+                    assert_eq!(input.text, "one two");
+                    assert!(press(input, &format!("{command}-z"), cx));
+                    assert_eq!(input.text, "one");
+                    assert!(press(input, &format!("{command}-shift-z"), cx));
+                    assert_eq!(input.text, "one two");
+                    assert!(press(input, &format!("{command}-a"), cx));
+                    assert!(press(input, &format!("{command}-x"), cx));
+                    assert_eq!(input.text, "");
+                    assert!(press(input, &format!("{command}-z"), cx));
+                    assert_eq!(input.text, "one two");
+                    assert_eq!(input.selected_text(), Some("one two"));
+                    assert!(press(input, &format!("{command}-z"), cx));
+                    assert!(press(input, &format!("{command}-z"), cx));
+                    assert_eq!(input.text, "");
+                    assert!(press(input, &format!("{command}-z"), cx), "nothing left");
+                    if windows {
+                        assert!(press(input, "ctrl-y", cx));
+                        assert_eq!(input.text, "one");
+                        assert!(!press(input, "cmd-z", cx));
+                    } else {
+                        assert!(!press(input, "cmd-y", cx));
+                        assert!(!press(input, "ctrl-z", cx));
+                        assert!(press(input, "cmd-shift-z", cx));
+                        assert_eq!(input.text, "one");
+                    }
+                });
+            });
+        }
+    }
+
+    #[test]
+    fn undo_and_redo_reach_an_enabled_field_by_key_and_action() {
+        let (mut visual, input) = open_field(300., |focus| TextField::new(focus, "", "", false));
+        let origin = text_origin(&visual, &input);
+        let text = |visual: &gpui::VisualTestContext| {
+            input.read_with(visual, |field, _| field.text().to_owned())
+        };
+        let undo = if cfg!(windows) { "ctrl-z" } else { "cmd-z" };
+        click(&mut visual, origin + point(px(40.), px(5.)), 1);
+        visual.simulate_input("one");
+        visual.simulate_keystrokes("left");
+        visual.simulate_input("x");
+        assert_eq!(text(&visual), "onxe");
+
+        input.update(&mut visual, |field, _| field.mark_clean());
+        visual.simulate_keystrokes(undo);
+        assert_eq!(text(&visual), "one");
+        assert_eq!(caret(&visual, &input), 2);
+        assert!(input.read_with(&visual, |field, _| field.edited()));
+        visual.dispatch_action(Undo);
+        assert_eq!(text(&visual), "");
+        visual.dispatch_action(Redo);
+        assert_eq!(text(&visual), "one");
+
+        input.update(&mut visual, |field, cx| field.set_disabled(true, cx));
+        visual.dispatch_action(Undo);
+        visual.simulate_keystrokes(undo);
+        assert_eq!(text(&visual), "one", "a disabled field keeps its text");
     }
 
     #[test]

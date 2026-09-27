@@ -1087,3 +1087,43 @@ fn the_edit_popup_fits_the_minimum_window_and_its_footer_stays_reachable() {
     assert_eq!(slot.slot.runtime_override.as_deref(), Some("claude-code"));
     assert_eq!(slot.slot.model_override.as_deref(), Some("sonnet"));
 }
+
+#[test]
+fn a_lowercased_handle_undoes_to_before_the_keystroke_and_redoes() {
+    let mut page = crew_page_harness("crew-add-slot-undo");
+    let crew = page.crew("Pair", None, &["lead", "reviewer"]);
+    page.open_crew(&crew);
+    page.update(|root, window, cx| root.open_add_slot(window, cx));
+    let handle = page.read(|root| {
+        root.crew_surfaces
+            .add_slot
+            .as_ref()
+            .unwrap()
+            .slot_handle
+            .clone()
+    });
+    let text =
+        |page: &mut CrewPageHarness| page.update(|_, _, cx| handle.read(cx).text().to_owned());
+    let suggested = text(&mut page);
+    page.update(|_, window, cx| handle.read(cx).focus_handle().focus(window));
+
+    page.visual.simulate_input("A");
+    page.visual.run_until_parked();
+    assert_eq!(text(&mut page), format!("{suggested}a"));
+
+    let (undo, redo) = if cfg!(windows) {
+        ("ctrl-z", "ctrl-y")
+    } else {
+        ("cmd-z", "cmd-shift-z")
+    };
+    page.visual.simulate_keystrokes(undo);
+    page.visual.run_until_parked();
+    assert_eq!(
+        text(&mut page),
+        suggested,
+        "one undo takes back the keystroke"
+    );
+    page.visual.simulate_keystrokes(redo);
+    page.visual.run_until_parked();
+    assert_eq!(text(&mut page), format!("{suggested}a"));
+}
