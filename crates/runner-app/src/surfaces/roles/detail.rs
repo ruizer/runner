@@ -6,7 +6,6 @@ use super::logic::permission_mode_description;
 use super::logic::permission_mode_label;
 use super::logic::permission_modes;
 use super::logic::prompt_meta;
-use super::logic::prompt_preview;
 use super::logic::role_edit_form_is_composing;
 use super::logic::role_edit_is_dirty;
 use super::logic::role_permission_mode;
@@ -14,42 +13,54 @@ use super::logic::role_setting_label;
 use super::logic::runtime_display_name;
 use super::logic::runtime_efforts;
 use super::logic::short_id;
+use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-    div, linear_color_stop, linear_gradient, px, rems, svg, AnyElement, Context, Div, Entity,
-    FontWeight, KeyDownEvent, SharedString, Window,
+    div, px, rems, svg, AnyElement, Context, Div, Entity, FontWeight, KeyDownEvent, SharedString,
+    Window,
 };
-use runner_app::ui::{focus_ring, Button, ButtonVariant, IconButton, IconButtonSize, RoleAvatar};
+use runner_app::ui::{focus_ring, Button, ButtonVariant, RoleAvatar, WorkingDirField};
 use runner_backend::model::Role;
 use runner_backend::ops::role::RoleActivity;
 use runner_backend::ops::slot::CrewMembership;
 
 use super::ROLE_COLUMN_WIDTH;
 use crate::chat_icon::ChatIcon;
-use crate::surfaces::mission_markdown::render_markdown;
+pub(super) use crate::surfaces::profile_page::column_text;
+use crate::surfaces::profile_page::{
+    breadcrumb, caption, card, card_column, card_meta, clamped_markdown, dot_note, editing_tag,
+    markdown_editor_body, markdown_mode_switch, page_columns, page_container, profile_column,
+    section, section_label,
+};
 use crate::*;
 
-/// Below this the prompt card wraps under the profile column.
-const PROMPT_COLUMN_BASIS: f32 = 360.;
 /// Model and Effort share a row of the profile column, 16 px apart.
-const HALF_COLUMN_WIDTH: f32 = (ROLE_COLUMN_WIDTH - 16.) / 2.;
+fn half_column(column: f32) -> f32 {
+    (column - 16.) / 2.
+}
+
 /// A crew row's text, beside its 20 px avatar and 14 px chevron with 10 px gaps.
-const CREW_TEXT_WIDTH: f32 = ROLE_COLUMN_WIDTH - 20. - 14. - 2. * 10.;
+fn crew_text_width(column: f32) -> f32 {
+    column - 20. - 14. - 2. * 10.
+}
 const PROMPT_CAPTION: &str = "Used in every chat and crew slot. A crew adds its own conventions; a slot can override runtime, model and effort.";
 
 impl NativeRoot {
-    pub(super) fn render_role_detail(&mut self, cx: &mut Context<Self>) -> AnyElement {
-        let root = cx.entity();
-        let back_root = root.clone();
-        let back_key_root = root.clone();
+    pub(super) fn render_role_detail(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let column = self.profile_page_column_width(window, cx);
+        let back_root = cx.entity();
         let detail = &self.role_surfaces.detail;
         let handle = detail.handle.clone();
         let editing = self
             .role_surfaces
             .edit
             .as_ref()
-            .is_some_and(|form| form.slot.is_none() && form.role.handle == handle);
+            .is_some_and(|form| form.role.handle == handle);
         let edit_error = self
             .role_surfaces
             .edit
@@ -67,9 +78,9 @@ impl NativeRoot {
             let activity = detail.activity.clone();
             let crews = detail.crews.clone();
             if editing {
-                self.render_role_edit_page(role, activity, crews, cx)
+                self.render_role_edit_page(role, activity, crews, column, cx)
             } else {
-                self.render_role_view_page(role, activity, crews, cx)
+                self.render_role_view_page(role, activity, crews, column, cx)
             }
         } else {
             div()
@@ -84,6 +95,9 @@ impl NativeRoot {
                 .child(format!("Role @{handle} not found."))
                 .into_any_element()
         };
+        let on_back: crate::surfaces::profile_page::ClickHandler = Rc::new(move |window, cx| {
+            back_root.update(cx, |this, cx| this.open_roles(window, cx));
+        });
         div()
             .id("role-detail-scroll")
             .when(cfg!(test), |scroll| {
@@ -96,84 +110,31 @@ impl NativeRoot {
                 page.on_key_down(cx.listener(Self::on_role_page_key_down))
             })
             .child(
-                div()
+                page_container()
                     .when(cfg!(test), |container| {
                         container.debug_selector(|| "ROLE_DETAIL_CONTAINER".into())
                     })
-                    .mx_auto()
-                    .w_full()
-                    .max_w(rems(1104. / 16.))
-                    .flex()
-                    .flex_col()
-                    .gap(rems(28. / 16.))
-                    .px_8()
-                    .pt(rems(40. / 16.))
-                    .pb_8()
                     .child(
-                        div()
-                            .when(cfg!(test), |header| {
-                                header.debug_selector(|| "ROLE_DETAIL_HEADER".into())
+                        breadcrumb(
+                            "role-detail-back",
+                            "Roles",
+                            on_back,
+                            div()
+                                .min_w(px(0.))
+                                .truncate()
+                                .font_family(theme::UI_MONOSPACE_FONT)
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(theme::text())
+                                .child(format!("@{handle}")),
+                        )
+                        .when(cfg!(test), |header| {
+                            header.debug_selector(|| "ROLE_DETAIL_HEADER".into())
+                        })
+                        .children(editing.then(|| {
+                            editing_tag().when(cfg!(test), |tag| {
+                                tag.debug_selector(|| "ROLE_EDITING_TAG".into())
                             })
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .text_size(theme::text_body())
-                            .text_color(theme::muted())
-                            .child(
-                                div()
-                                    .id("role-detail-back")
-                                    .flex_none()
-                                    .tab_index(0)
-                                    .cursor_pointer()
-                                    .hover(|text| text.text_color(theme::text()))
-                                    .focus_visible(|text| {
-                                        text.text_color(theme::text()).underline()
-                                    })
-                                    .on_click(move |_, window, cx| {
-                                        back_root
-                                            .update(cx, |this, cx| this.open_roles(window, cx));
-                                    })
-                                    .on_key_down(move |event: &KeyDownEvent, window, cx| {
-                                        if matches!(event.keystroke.key.as_str(), "enter" | "space")
-                                        {
-                                            cx.stop_propagation();
-                                            back_key_root
-                                                .update(cx, |this, cx| this.open_roles(window, cx));
-                                        }
-                                    })
-                                    .child("Roles"),
-                            )
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .text_color(theme::border_strong())
-                                    .child("›"),
-                            )
-                            .child(
-                                div()
-                                    .min_w(px(0.))
-                                    .truncate()
-                                    .font_family(theme::UI_MONOSPACE_FONT)
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .text_color(theme::text())
-                                    .child(format!("@{handle}")),
-                            )
-                            .children(editing.then(|| {
-                                div()
-                                    .when(cfg!(test), |tag| {
-                                        tag.debug_selector(|| "ROLE_EDITING_TAG".into())
-                                    })
-                                    .flex_none()
-                                    .rounded(rems(3. / 16.))
-                                    .bg(theme::raised())
-                                    .px(rems(6. / 16.))
-                                    .py(rems(1. / 16.))
-                                    .font_family(theme::UI_MONOSPACE_FONT)
-                                    .text_size(theme::text_micro())
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(theme::muted())
-                                    .child("EDITING")
-                            })),
+                        })),
                     )
                     .children(detail_error.map(error_banner))
                     .children(edit_error.map(error_banner))
@@ -192,9 +153,11 @@ impl NativeRoot {
             self.on_role_edit_key_down(event, window, cx);
             return;
         }
-        let cancel = self.role_surfaces.edit.as_ref().is_some_and(|form| {
-            form.slot.is_none() && !form.submitting && !role_edit_form_is_composing(form, cx)
-        });
+        let cancel = self
+            .role_surfaces
+            .edit
+            .as_ref()
+            .is_some_and(|form| !form.submitting && !role_edit_form_is_composing(form, cx));
         if cancel {
             cx.stop_propagation();
             self.close_role_edit(window, cx);
@@ -206,8 +169,12 @@ impl NativeRoot {
         role: Role,
         activity: Option<RoleActivity>,
         crews: Vec<CrewMembership>,
+        column: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // The actions keep the fixed column's width when the column spans a
+        // stacked page.
+        let actions = rems(column.min(ROLE_COLUMN_WIDTH) / 16.);
         let root = cx.entity();
         let chat_root = root.clone();
         let edit_root = root.clone();
@@ -233,13 +200,13 @@ impl NativeRoot {
                     .flex_col()
                     .gap_1()
                     .child(
-                        column_text(role.display_name.clone(), ROLE_COLUMN_WIDTH)
+                        column_text(role.display_name.clone(), column)
                             .text_size(theme::text_display())
                             .font_weight(FontWeight::SEMIBOLD)
                             .text_color(theme::text()),
                     )
                     .child(
-                        column_text(format!("@{}", role.handle), ROLE_COLUMN_WIDTH)
+                        column_text(format!("@{}", role.handle), column)
                             .font_family(theme::UI_MONOSPACE_FONT)
                             .text_size(theme::text_body())
                             .text_color(theme::muted()),
@@ -247,6 +214,10 @@ impl NativeRoot {
             )
             .child(
                 div()
+                    .when(cfg!(test), |actions| {
+                        actions.debug_selector(|| "ROLE_PAGE_ACTIONS".into())
+                    })
+                    .w(actions)
                     .flex()
                     .items_center()
                     .gap_2()
@@ -273,13 +244,15 @@ impl NativeRoot {
                             .tooltip("Edit role")
                             .on_press(move |window, cx| {
                                 let role = edit_role.clone();
-                                edit_root.update(cx, |this, cx| {
-                                    this.open_role_edit(role, None, window, cx)
-                                });
+                                edit_root
+                                    .update(cx, |this, cx| this.open_role_edit(role, window, cx));
                             }),
                     ),
             );
         let setup = section()
+            .when(cfg!(test), |setup| {
+                setup.debug_selector(|| "ROLE_PAGE_SETUP".into())
+            })
             .gap(rems(14. / 16.))
             .child(setup_row(
                 "Runtime",
@@ -297,7 +270,7 @@ impl NativeRoot {
                     )
                     .child(setup_value(
                         runtime_display_name(&role.runtime),
-                        ROLE_COLUMN_WIDTH - 18.,
+                        column - 18.,
                         false,
                         false,
                     ))
@@ -310,14 +283,19 @@ impl NativeRoot {
                     .child(
                         setup_row(
                             "Model",
-                            setup_value(model, HALF_COLUMN_WIDTH, !model_default, model_default),
+                            setup_value(model, half_column(column), !model_default, model_default),
                         )
                         .flex_1(),
                     )
                     .child(
                         setup_row(
                             "Effort",
-                            setup_value(effort, HALF_COLUMN_WIDTH, !effort_default, effort_default),
+                            setup_value(
+                                effort,
+                                half_column(column),
+                                !effort_default,
+                                effort_default,
+                            ),
                         )
                         .flex_1(),
                     ),
@@ -325,36 +303,36 @@ impl NativeRoot {
             .children(role_permission_mode(&role).map(|mode| {
                 setup_row(
                     "Permissions",
-                    setup_value(permission_mode_label(mode), ROLE_COLUMN_WIDTH, false, false),
+                    setup_value(permission_mode_label(mode), column, false, false),
                 )
             }))
             .child(setup_row(
                 "Command",
-                setup_value(format!("$ {command}"), ROLE_COLUMN_WIDTH, true, false),
+                setup_value(format!("$ {command}"), column, true, false),
             ))
-            .child(setup_row(
-                "Working directory",
-                match role.working_dir.clone() {
-                    Some(dir) => setup_value(dir, ROLE_COLUMN_WIDTH, true, false),
-                    None => setup_value("default", ROLE_COLUMN_WIDTH, false, true),
-                },
-            ));
-        let left = div()
+            .child(
+                setup_row(
+                    "Working directory",
+                    match role.working_dir.clone() {
+                        Some(dir) => setup_value(dir, column, true, false),
+                        None => setup_value("default", column, false, true),
+                    },
+                )
+                .when(cfg!(test), |row| {
+                    row.debug_selector(|| "ROLE_SETUP_LAST".into())
+                }),
+            );
+        let left = profile_column(column)
             .when(cfg!(test), |column| {
                 column.debug_selector(|| "ROLE_PAGE_PROFILE".into())
             })
-            .w(rems(ROLE_COLUMN_WIDTH / 16.))
-            .min_w(px(0.))
-            .flex()
-            .flex_col()
-            .gap(rems(20. / 16.))
             .child(profile)
             .child(setup)
-            .child(self.render_role_crews(crews, true, cx))
+            .child(self.render_role_crews(crews, true, column, cx))
             .child(role_activity_lines(&role, activity.as_ref(), true));
         let right = prompt_column()
             .child(self.render_prompt_card(&role, cx))
-            .child(prompt_caption());
+            .child(caption(PROMPT_CAPTION));
         role_page_columns(left, right, false)
     }
 
@@ -363,8 +341,12 @@ impl NativeRoot {
         role: Role,
         activity: Option<RoleActivity>,
         crews: Vec<CrewMembership>,
+        column: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        // The form keeps the fixed column's width: its selects are sized when
+        // the edit opens. The column's rules and lists still span the page.
+        let form_width = rems(column.min(ROLE_COLUMN_WIDTH) / 16.);
         let form = self
             .role_surfaces
             .edit
@@ -392,9 +374,9 @@ impl NativeRoot {
                     .flex()
                     .flex_col()
                     .gap_1()
-                    .child(div().w_full().child(form.display_name.clone()))
+                    .child(div().w(form_width).child(form.display_name.clone()))
                     .child(
-                        column_text(format!("@{}", role.handle), ROLE_COLUMN_WIDTH)
+                        column_text(format!("@{}", role.handle), column)
                             .mt_1()
                             .font_family(theme::UI_MONOSPACE_FONT)
                             .text_size(theme::text_body())
@@ -409,6 +391,7 @@ impl NativeRoot {
             )
             .child(
                 div()
+                    .w(form_width)
                     .flex()
                     .flex_col()
                     .gap_3()
@@ -460,96 +443,82 @@ impl NativeRoot {
                                     ),
                             ),
                     )
-                    .children(dirty.then(|| {
-                        div()
-                            .when(cfg!(test), |line| {
+                    // Always laid out, so the setup below never jumps.
+                    .child(
+                        dot_note("Unsaved changes")
+                            .when(!dirty, |line| line.opacity(0.))
+                            .when(cfg!(test) && dirty, |line| {
                                 line.debug_selector(|| "ROLE_EDIT_DIRTY".into())
-                            })
-                            .flex()
-                            .items_center()
-                            .gap(rems(6. / 16.))
-                            .text_size(theme::text_meta())
-                            .text_color(theme::faint())
-                            .child(
-                                div()
-                                    .flex_none()
-                                    .size(rems(6. / 16.))
-                                    .rounded_full()
-                                    .bg(theme::warning()),
-                            )
-                            .child("Unsaved changes")
-                    })),
+                            }),
+                    ),
             );
         let setup = section()
-            .gap(rems(14. / 16.))
-            .child(edit_row("Runtime", form.runtime_select.clone()).children(
-                form.agents_error.clone().map(|error| {
-                    div()
-                        .text_size(theme::text_meta())
-                        .text_color(theme::danger())
-                        .child(error)
-                }),
-            ))
+            .when(cfg!(test), |setup| {
+                setup.debug_selector(|| "ROLE_PAGE_SETUP".into())
+            })
             .child(
                 div()
+                    .w(form_width)
                     .flex()
-                    .gap_3()
-                    .child(edit_row("Model", form.model_field.clone()).flex_1())
-                    .children(
-                        has_efforts
-                            .then(|| edit_row("Effort", form.effort_select.clone()).flex_none()),
-                    ),
-            )
-            .children(has_permissions.then(|| {
-                edit_row("Permissions", form.permission_select.clone()).child(
-                    div()
-                        .text_size(theme::text_meta())
-                        .line_height(rems(1.))
-                        .text_color(theme::faint())
-                        .child(permission_mode_description(
-                            &form.runtime,
-                            form.permission_mode,
-                        )),
-                )
-            }))
-            .child(edit_row("Command", form.command.clone()))
-            .child(edit_row("Args", form.args.clone()))
-            .child(edit_row(
-                "Working directory",
-                div().relative().child(form.working_dir.clone()).child(
-                    div()
-                        .absolute()
-                        .top(rems(5. / 16.))
-                        .right(rems(5. / 16.))
-                        .child(
-                            IconButton::new("role-page-browse", "folder.svg")
-                                .size(IconButtonSize::Sm)
-                                .focus_handle(form.browse_focus.clone())
-                                .tooltip("Pick a working directory")
-                                .disabled(submitting)
-                                .on_press(move |_, cx| {
+                    .flex_col()
+                    .gap(rems(14. / 16.))
+                    .child(edit_row("Runtime", form.runtime_select.clone()).children(
+                        form.agents_error.clone().map(|error| {
+                            div()
+                                .text_size(theme::text_meta())
+                                .text_color(theme::danger())
+                                .child(error)
+                        }),
+                    ))
+                    .child(edit_row("Model", form.model_field.clone()))
+                    .children(has_efforts.then(|| edit_row("Effort", form.effort_select.clone())))
+                    .children(has_permissions.then(|| {
+                        edit_row("Permissions", form.permission_select.clone()).child(
+                            // Wraps at the column's width from the first sizing
+                            // pass, which offers this min_w(0) row none.
+                            div()
+                                .w(rems(ROLE_COLUMN_WIDTH / 16.))
+                                .text_size(theme::text_meta())
+                                .line_height(rems(1.))
+                                .text_color(theme::faint())
+                                .child(permission_mode_description(
+                                    &form.runtime,
+                                    form.permission_mode,
+                                )),
+                        )
+                    }))
+                    .child(edit_row("Command", form.command.clone()))
+                    .child(edit_row("Args", form.args.clone()))
+                    .child(
+                        edit_row(
+                            "Working directory",
+                            WorkingDirField::new(
+                                form.working_dir.clone(),
+                                submitting,
+                                Rc::new(move |_, cx| {
                                     browse_root
                                         .update(cx, |this, cx| this.browse_role_edit_cwd(cx));
                                 }),
-                        ),
-                ),
-            ));
-        let left = div()
+                            )
+                            .browse_id("role-page-browse")
+                            .browse_focus(form.browse_focus.clone()),
+                        )
+                        .when(cfg!(test), |row| {
+                            row.debug_selector(|| "ROLE_SETUP_LAST".into())
+                        }),
+                    ),
+            );
+        let left = profile_column(column)
             .when(cfg!(test), |column| {
                 column.debug_selector(|| "ROLE_PAGE_PROFILE".into())
             })
-            .w(rems(ROLE_COLUMN_WIDTH / 16.))
-            .min_w(px(0.))
-            .flex()
-            .flex_col()
-            .gap(rems(20. / 16.))
             .child(profile)
             .child(setup)
-            .child(self.render_role_crews(crews, false, cx))
+            .child(self.render_role_crews(crews, false, column, cx))
             .child(role_activity_lines(&role, activity.as_ref(), false));
         let right = prompt_column()
             .child(self.render_prompt_editor_card(cx))
-            .child(prompt_caption());
+            .child(caption(PROMPT_CAPTION));
         role_page_columns(left, right, true)
     }
 
@@ -557,28 +526,29 @@ impl NativeRoot {
         &self,
         crews: Vec<CrewMembership>,
         interactive: bool,
+        column: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let text_width = crew_text_width(column);
         let root = cx.entity();
         let label = format!("Crews using this role · {}", distinct_crew_count(&crews));
-        let rows = if crews.is_empty() {
-            div()
-                .text_size(theme::text_ui())
-                .text_color(theme::faint())
-                .child("Not in any crew yet. Add it to one from a crew's page.")
-                .into_any_element()
-        } else {
-            div()
-                .flex()
-                .flex_col()
-                .gap_1()
-                .children(
-                    crews
-                        .into_iter()
-                        .map(|membership| crew_row(membership, interactive, root.clone())),
-                )
-                .into_any_element()
-        };
+        let rows =
+            if crews.is_empty() {
+                div()
+                    .text_size(theme::text_ui())
+                    .text_color(theme::faint())
+                    .child("Not in any crew yet. Add it to one from a crew's page.")
+                    .into_any_element()
+            } else {
+                div()
+                    .flex()
+                    .flex_col()
+                    .gap_1()
+                    .children(crews.into_iter().map(|membership| {
+                        crew_row(membership, interactive, text_width, root.clone())
+                    }))
+                    .into_any_element()
+            };
         section()
             .gap_2()
             .when(!interactive, |section| section.opacity(0.4))
@@ -589,12 +559,10 @@ impl NativeRoot {
 
     fn render_prompt_card(&self, role: &Role, cx: &mut Context<Self>) -> AnyElement {
         let root = cx.entity();
-        let key_root = root.clone();
         let prompt = role
             .system_prompt
             .as_deref()
             .filter(|prompt| !prompt.trim().is_empty());
-        let meta = prompt.map(prompt_meta);
         let body = match prompt {
             None => div()
                 .text_size(theme::text_body())
@@ -602,119 +570,21 @@ impl NativeRoot {
                 .text_color(theme::faint())
                 .child("No system prompt yet. Edit the role to add one.")
                 .into_any_element(),
-            Some(prompt) => {
-                let expanded = self.role_surfaces.prompt_expanded;
-                let preview = prompt_preview(prompt);
-                let clamped = !expanded && preview.is_some();
-                let shown = if clamped {
-                    preview.unwrap_or(prompt)
-                } else {
-                    prompt
-                };
-                let lines = prompt.lines().count();
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_3()
-                    .child(
-                        div()
-                            .when(cfg!(test), |text| {
-                                text.debug_selector(|| "ROLE_PROMPT_TEXT".into())
-                            })
-                            .relative()
-                            .min_w(px(0.))
-                            .text_size(theme::text_body())
-                            .text_color(theme::text())
-                            .child(render_markdown(
-                                &format!("role-prompt-{}", role.id),
-                                shown,
-                                cx.entity_id(),
-                                None,
-                                theme::accent(),
-                                None,
-                                cx,
-                            ))
-                            .when(clamped, |text| {
-                                text.child(
-                                    div()
-                                        .absolute()
-                                        .left_0()
-                                        .right_0()
-                                        .bottom_0()
-                                        .h(rems(64. / 16.))
-                                        .bg(linear_gradient(
-                                            180.,
-                                            linear_color_stop(
-                                                theme::with_alpha(theme::panel(), 0.),
-                                                0.,
-                                            ),
-                                            linear_color_stop(theme::panel(), 1.),
-                                        )),
-                                )
-                            }),
-                    )
-                    .children(preview.is_some().then(|| {
-                        div().flex().child(
-                            div()
-                                .id("role-prompt-toggle")
-                                .when(cfg!(test), |toggle| {
-                                    toggle.debug_selector(|| "ROLE_PROMPT_TOGGLE".into())
-                                })
-                                .tab_index(0)
-                                .flex()
-                                .items_center()
-                                .gap_1()
-                                .rounded(rems(3. / 16.))
-                                .text_size(theme::text_ui())
-                                .text_color(theme::muted())
-                                .cursor_pointer()
-                                .hover(|toggle| toggle.text_color(theme::text()))
-                                .focus_visible(|toggle| {
-                                    toggle
-                                        .text_color(theme::text())
-                                        .shadow(focus_ring(theme::border_strong()))
-                                })
-                                .on_click(move |_, _, cx| {
-                                    root.update(cx, |this, cx| this.toggle_role_prompt(cx));
-                                })
-                                .on_key_down(move |event: &KeyDownEvent, _, cx| {
-                                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                                        cx.stop_propagation();
-                                        key_root.update(cx, |this, cx| this.toggle_role_prompt(cx));
-                                    }
-                                })
-                                .child(if expanded {
-                                    "Show less".to_owned()
-                                } else {
-                                    format!("Show all {lines} lines")
-                                })
-                                .child(
-                                    svg()
-                                        .flex_none()
-                                        .path(if expanded {
-                                            "chevron-up.svg"
-                                        } else {
-                                            "chevron-down.svg"
-                                        })
-                                        .size(rems(12. / 16.))
-                                        .text_color(theme::faint()),
-                                ),
-                        )
-                    }))
-                    .into_any_element()
-            }
+            Some(prompt) => clamped_markdown(
+                &format!("role-prompt-{}", role.id),
+                prompt,
+                self.role_surfaces.prompt_expanded,
+                "ROLE_PROMPT",
+                Rc::new(move |_, cx| {
+                    root.update(cx, |this, cx| this.toggle_role_prompt(cx));
+                }),
+                cx.entity_id(),
+                cx,
+            ),
         };
-        prompt_card(
-            div()
-                .flex_none()
-                .font_family(theme::UI_MONOSPACE_FONT)
-                .text_size(theme::text_caption())
-                .text_color(theme::faint())
-                .children(meta)
-                .into_any_element(),
-        )
-        .child(div().px_5().py_4().child(body))
-        .into_any_element()
+        prompt_card(card_meta(prompt.map(prompt_meta)))
+            .child(div().px_5().py_4().child(body))
+            .into_any_element()
     }
 
     fn render_prompt_editor_card(&self, cx: &mut Context<Self>) -> AnyElement {
@@ -725,72 +595,34 @@ impl NativeRoot {
             .expect("in-place role edit form");
         let root = cx.entity();
         let preview = self.role_surfaces.prompt_preview;
-        let draft = form.system_prompt.read(cx).text().to_owned();
-        let meta = (!draft.trim().is_empty()).then(|| prompt_meta(&draft));
-        let body = if preview {
-            div()
-                .id("role-prompt-preview")
-                .when(cfg!(test), |body| {
-                    body.debug_selector(|| "ROLE_PROMPT_PREVIEW".into())
-                })
-                .flex_1()
-                .min_h(px(0.))
-                .overflow_y_scroll()
-                .px_5()
-                .py_4()
-                .text_size(theme::text_body())
-                .text_color(theme::text())
-                .child(if draft.trim().is_empty() {
-                    div()
-                        .italic()
-                        .text_color(theme::faint())
-                        .child("Nothing to preview.")
-                        .into_any_element()
-                } else {
-                    render_markdown(
-                        "role-prompt-draft",
-                        &draft,
-                        cx.entity_id(),
-                        None,
-                        theme::accent(),
-                        None,
-                        cx,
-                    )
-                })
-                .into_any_element()
-        } else {
-            div()
-                .when(cfg!(test), |body| {
-                    body.debug_selector(|| "ROLE_PROMPT_EDITOR".into())
-                })
-                .flex_1()
-                .min_h(px(0.))
-                .flex()
-                .flex_col()
-                .px_5()
-                .py_4()
-                .child(form.system_prompt.clone())
-                .into_any_element()
-        };
+        let draft = form.system_prompt.read(cx).text();
+        let meta = (!draft.trim().is_empty()).then(|| prompt_meta(draft));
         prompt_card(
             div()
                 .flex_none()
                 .flex()
                 .items_center()
                 .gap_3()
-                .child(prompt_mode_switch(preview, root))
-                .children(meta.map(|meta| {
-                    div()
-                        .font_family(theme::UI_MONOSPACE_FONT)
-                        .text_size(theme::text_caption())
-                        .text_color(theme::faint())
-                        .child(meta)
-                }))
+                .child(markdown_mode_switch(
+                    "role-prompt-mode",
+                    preview,
+                    Rc::new(move |preview, cx| {
+                        root.update(cx, |this, cx| this.set_role_prompt_preview(preview, cx));
+                    }),
+                ))
+                .child(card_meta(meta))
                 .into_any_element(),
         )
         .flex_1()
         .min_h(rems(420. / 16.))
-        .child(body)
+        .child(markdown_editor_body(
+            "role-prompt-draft",
+            form.system_prompt.clone(),
+            preview,
+            "ROLE_PROMPT",
+            cx.entity_id(),
+            cx,
+        ))
         .into_any_element()
     }
 
@@ -798,159 +630,7 @@ impl NativeRoot {
         self.role_surfaces.prompt_expanded = !self.role_surfaces.prompt_expanded;
         cx.notify();
     }
-}
 
-/// The profile column and the prompt column. The prompt wraps under the
-/// profile when the page is too narrow for both; while editing, the prompt
-/// card stretches to the profile column's height.
-fn role_page_columns(left: Div, right: Div, stretch: bool) -> AnyElement {
-    div()
-        .when(cfg!(test), |body| {
-            body.debug_selector(|| "ROLE_DETAIL_BODY".into())
-        })
-        .flex()
-        .flex_wrap()
-        .when(!stretch, |body| body.items_start())
-        .gap_x(rems(48. / 16.))
-        .gap_y(rems(32. / 16.))
-        .child(left)
-        .child(right)
-        .into_any_element()
-}
-
-fn prompt_column() -> Div {
-    div()
-        .when(cfg!(test), |column| {
-            column.debug_selector(|| "ROLE_PAGE_PROMPT".into())
-        })
-        .flex_1()
-        .flex_basis(rems(PROMPT_COLUMN_BASIS / 16.))
-        .min_w(px(0.))
-        .flex()
-        .flex_col()
-        .gap_3()
-}
-
-fn prompt_caption() -> AnyElement {
-    div()
-        .flex_none()
-        .text_size(theme::text_ui())
-        .line_height(rems(18. / 16.))
-        .text_color(theme::faint())
-        .child(PROMPT_CAPTION)
-        .into_any_element()
-}
-
-fn prompt_card(header_right: AnyElement) -> Div {
-    div()
-        .when(cfg!(test), |card| {
-            card.debug_selector(|| "ROLE_PROMPT_CARD".into())
-        })
-        .min_w(px(0.))
-        .flex()
-        .flex_col()
-        .overflow_hidden()
-        .rounded_lg()
-        .border_1()
-        .border_color(theme::border())
-        .bg(theme::panel())
-        .child(
-            div()
-                .flex_none()
-                .flex()
-                .items_center()
-                .gap_3()
-                .px_4()
-                .py(rems(10. / 16.))
-                .border_b_1()
-                .border_color(theme::border())
-                .child(
-                    div()
-                        .flex_1()
-                        .min_w(px(0.))
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(
-                            svg()
-                                .flex_none()
-                                .path("file-text.svg")
-                                .size(rems(14. / 16.))
-                                .text_color(theme::muted()),
-                        )
-                        .child(
-                            div()
-                                .truncate()
-                                .text_size(theme::text_body())
-                                .font_weight(FontWeight::SEMIBOLD)
-                                .text_color(theme::text())
-                                .child("System prompt"),
-                        ),
-                )
-                .child(header_right),
-        )
-}
-
-fn prompt_mode_switch(preview: bool, root: Entity<NativeRoot>) -> AnyElement {
-    let segment = |id: &'static str, label: &'static str, active: bool, show_preview: bool| {
-        let click_root = root.clone();
-        let key_root = root.clone();
-        div()
-            .id(id)
-            .tab_index(0)
-            .px_2()
-            .py(rems(2. / 16.))
-            .rounded(rems(3. / 16.))
-            .text_size(theme::text_ui())
-            .text_color(if active {
-                theme::text()
-            } else {
-                theme::muted()
-            })
-            .when(active, |segment| segment.bg(theme::raised()))
-            .cursor_pointer()
-            .hover(|segment| segment.text_color(theme::text()))
-            .focus_visible(|segment| segment.shadow(focus_ring(theme::border_strong())))
-            .on_click(move |_, _, cx| {
-                click_root.update(cx, |this, cx| {
-                    this.set_role_prompt_preview(show_preview, cx)
-                });
-            })
-            .on_key_down(move |event: &KeyDownEvent, _, cx| {
-                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                    cx.stop_propagation();
-                    key_root.update(cx, |this, cx| {
-                        this.set_role_prompt_preview(show_preview, cx)
-                    });
-                }
-            })
-            .child(label)
-    };
-    div()
-        .flex()
-        .items_center()
-        .gap(rems(2. / 16.))
-        .p(rems(2. / 16.))
-        .rounded(rems(4. / 16.))
-        .border_1()
-        .border_color(theme::border())
-        .bg(theme::bg())
-        .child(segment(
-            "role-prompt-mode-markdown",
-            "Markdown",
-            !preview,
-            false,
-        ))
-        .child(segment(
-            "role-prompt-mode-preview",
-            "Preview",
-            preview,
-            true,
-        ))
-        .into_any_element()
-}
-
-impl NativeRoot {
     fn set_role_prompt_preview(&mut self, preview: bool, cx: &mut Context<Self>) {
         if self.role_surfaces.prompt_preview != preview {
             self.role_surfaces.prompt_preview = preview;
@@ -959,7 +639,32 @@ impl NativeRoot {
     }
 }
 
-fn crew_row(membership: CrewMembership, interactive: bool, root: Entity<NativeRoot>) -> AnyElement {
+fn role_page_columns(left: Div, right: Div, stretch: bool) -> AnyElement {
+    page_columns(left, right, stretch)
+        .when(cfg!(test), |body| {
+            body.debug_selector(|| "ROLE_DETAIL_BODY".into())
+        })
+        .into_any_element()
+}
+
+fn prompt_column() -> Div {
+    card_column().when(cfg!(test), |column| {
+        column.debug_selector(|| "ROLE_PAGE_PROMPT".into())
+    })
+}
+
+fn prompt_card(header_right: AnyElement) -> Div {
+    card("file-text.svg", "System prompt", None, header_right).when(cfg!(test), |card| {
+        card.debug_selector(|| "ROLE_PROMPT_CARD".into())
+    })
+}
+
+fn crew_row(
+    membership: CrewMembership,
+    interactive: bool,
+    text_width: f32,
+    root: Entity<NativeRoot>,
+) -> AnyElement {
     let crew_id = membership.crew_id.clone();
     let key_crew_id = crew_id.clone();
     let key_root = root.clone();
@@ -978,7 +683,7 @@ fn crew_row(membership: CrewMembership, interactive: bool, root: Entity<NativeRo
         .child(RoleAvatar::new(membership.slot_handle.clone(), 20.))
         .child(
             div()
-                .w(rems(CREW_TEXT_WIDTH / 16.))
+                .w(rems(text_width / 16.))
                 .flex_none()
                 .flex()
                 .flex_col()
@@ -1011,7 +716,7 @@ fn crew_row(membership: CrewMembership, interactive: bool, root: Entity<NativeRo
                         })),
                 )
                 .child(
-                    column_text(format!("as @{}", membership.slot_handle), CREW_TEXT_WIDTH)
+                    column_text(format!("as @{}", membership.slot_handle), text_width)
                         .font_family(theme::UI_MONOSPACE_FONT)
                         .text_size(theme::text_meta())
                         .text_color(theme::faint()),
@@ -1081,24 +786,6 @@ fn role_activity_lines(
         .into_any_element()
 }
 
-/// A left-column block under a hairline rule.
-fn section() -> Div {
-    div()
-        .flex()
-        .flex_col()
-        .border_t_1()
-        .border_color(theme::border())
-        .pt(rems(20. / 16.))
-}
-
-fn section_label(label: impl Into<SharedString>) -> AnyElement {
-    div()
-        .text_size(theme::text_meta())
-        .text_color(theme::faint())
-        .child(label.into())
-        .into_any_element()
-}
-
 fn setup_row(label: &'static str, value: AnyElement) -> Div {
     div()
         .min_w(px(0.))
@@ -1122,14 +809,6 @@ fn setup_value(
             value.font_family(theme::UI_MONOSPACE_FONT)
         })
         .into_any_element()
-}
-
-/// One line of truncated text in the fixed-width profile column. GPUI shapes
-/// a non-wrapping line once, at the first width layout offers, and a flex
-/// column's first sizing pass offers none (a 0 px width), which left every
-/// value as a bare "…". An explicit width makes that first pass the real one.
-pub(super) fn column_text(text: impl Into<SharedString>, width: f32) -> Div {
-    div().w(rems(width / 16.)).truncate().child(text.into())
 }
 
 fn edit_row(label: &'static str, control: impl IntoElement) -> Div {

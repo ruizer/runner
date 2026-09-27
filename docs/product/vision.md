@@ -56,7 +56,7 @@ The user-facing surfaces, described by the value they deliver, not by their impl
 ### 4.2 Missions
 
 - One-click **Start Mission** on a crew. The mission spawns one session per slot and opens the mission workspace.
-- A mission has its own goal (optional override of the crew default) and its own working directory — the mission cwd is the authoritative working dir for every spawned slot, overriding the role's `working_dir`.
+- A mission states its own goal (a crew carries no default goal) and has its own working directory — the mission cwd is the authoritative working dir for every spawned slot, overriding the role's `working_dir`.
 - Concurrent missions on the same crew are allowed; each one is fully namespaced (its own session set, event log, router state).
 - **Stop Mission** kills the live PTYs but keeps the mission row running and resumable. Resume respawns stopped/crashed slots from their persisted session rows.
 - **Archive Mission** is the terminal end state: it appends `mission_stopped`, marks the mission completed, sets `archived_at`, hides it from active lists, and leaves the workspace read-only by direct URL.

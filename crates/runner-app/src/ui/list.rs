@@ -683,8 +683,14 @@ impl RenderOnce for PaginatedListPage {
                 .flex_1()
                 .flex()
                 .flex_col()
-                .gap_4()
-                .child(div().flex().items_center().child(self.search))
+                .gap(rems(36. / 16.))
+                .child(
+                    div()
+                        .debug_selector(|| "PAGINATED_LIST_SEARCH".into())
+                        .flex()
+                        .items_center()
+                        .child(self.search),
+                )
                 .child(list)
                 .into_any_element()
         };
@@ -713,7 +719,11 @@ impl RenderOnce for PaginatedListPage {
                             .justify_between()
                             .gap_4()
                             .child(
+                                // Shrinks and wraps its description so the
+                                // action keeps its place on a narrow window.
                                 div()
+                                    .flex_1()
+                                    .min_w(px(0.))
                                     .flex()
                                     .flex_col()
                                     .gap_1()
@@ -731,7 +741,12 @@ impl RenderOnce for PaginatedListPage {
                                             .child(self.description),
                                     ),
                             )
-                            .child(self.action),
+                            .child(
+                                div()
+                                    .debug_selector(|| "PAGINATED_LIST_ACTION".into())
+                                    .flex_none()
+                                    .child(self.action),
+                            ),
                     )
                     .children(self.error.map(|error| {
                         div()

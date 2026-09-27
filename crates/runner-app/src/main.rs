@@ -645,6 +645,7 @@ impl NativeRoot {
                             this.refresh_start_chat_runtimes(cx);
                             this.refresh_role_form_runtimes(cx);
                             this.refresh_add_slot_runtimes(cx);
+                            this.refresh_slot_override_runtimes(cx);
                             this.refresh_agents_pane(cx);
                             this.usage_installed =
                                 crate::surfaces::app_shell::usage_installed(this.core(cx));

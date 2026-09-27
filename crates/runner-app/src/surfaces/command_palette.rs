@@ -207,22 +207,15 @@ fn palette_items(
         search_text: format!("{} {}", role.handle, role.display_name).to_lowercase(),
         order,
     }));
-    items.extend(crews.iter().enumerate().map(|(order, crew)| {
-        PaletteItem {
-            kind: PaletteKind::Crew,
-            runtime: None,
-            live: false,
-            id: crew.crew.id.clone(),
-            label: crew.crew.name.clone(),
-            destination: PaletteDestination::Crew(crew.crew.id.clone()),
-            search_text: format!(
-                "{} {}",
-                crew.crew.name,
-                crew.crew.purpose.as_deref().unwrap_or_default()
-            )
-            .to_lowercase(),
-            order,
-        }
+    items.extend(crews.iter().enumerate().map(|(order, crew)| PaletteItem {
+        kind: PaletteKind::Crew,
+        runtime: None,
+        live: false,
+        id: crew.crew.id.clone(),
+        label: crew.crew.name.clone(),
+        destination: PaletteDestination::Crew(crew.crew.id.clone()),
+        search_text: crew.crew.name.to_lowercase(),
+        order,
     }));
     items.push(PaletteItem {
         kind: PaletteKind::Settings,

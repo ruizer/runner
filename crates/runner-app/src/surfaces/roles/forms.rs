@@ -34,7 +34,7 @@ impl NativeRoot {
             &form.runtimes,
             &form.runtime,
             &form.role,
-            form.slot.is_some(),
+            false,
             form.model.read(cx).text(),
         );
         if !options.iter().any(|option| option.value == form.effort) {
@@ -115,27 +115,14 @@ impl NativeRoot {
                 let mut runtimes = selectable;
                 ensure_runtime_present(&core, &mut runtimes, &form.runtime);
                 form.runtimes = runtimes;
-                let runtime_value = if form.slot.is_some() && !form.runtime_pinned {
-                    String::new()
-                } else {
-                    form.runtime.clone()
-                };
-                let options = role_edit_runtime_options(
-                    &form.runtimes,
-                    &form.role,
-                    &form.runtime,
-                    form.slot.is_some(),
-                );
+                let options = role_edit_runtime_options(&form.runtimes, &form.role, &form.runtime);
                 form.runtime_select.update(cx, |select, select_cx| {
                     select.set_options(options, select_cx);
-                    select.set_value(runtime_value, select_cx);
+                    select.set_value(form.runtime.clone(), select_cx);
                     select.set_placeholder(placeholder, select_cx);
                 });
-                let model_placeholder = runtime_model_placeholder(
-                    &form.runtimes,
-                    &form.runtime,
-                    form.slot.as_ref().map(|_| &form.role),
-                );
+                let model_placeholder =
+                    runtime_model_placeholder(&form.runtimes, &form.runtime, None);
                 form.model.update(cx, |input, input_cx| {
                     input.set_placeholder(model_placeholder, input_cx)
                 });
@@ -327,38 +314,26 @@ impl NativeRoot {
         cx.notify();
     }
 
+    /// Opens the role page's in-place editor for `role`.
     pub(crate) fn open_role_edit(
         &mut self,
         role: Role,
-        slot: Option<runner_backend::model::SlotWithRole>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
         let (mut runtimes, agents_checking, agents_error) =
             crate::surfaces::start_chat::load_selectable_runtimes(self.core(cx), self.settings(cx));
-        let resolution = resolve_role_edit(&role, slot.as_ref());
+        let resolution = resolve_role_edit(&role);
         ensure_runtime_present(self.core(cx), &mut runtimes, &resolution.runtime);
         self.request_model_catalog(&resolution.runtime, cx);
-        // Without a slot the role page edits in place, in its narrow left column;
-        // a crew slot's Edit role keeps the drawer.
-        let in_place = slot.is_none();
-        let field_width = if in_place {
-            ROLE_COLUMN_WIDTH
-        } else {
-            FIELD_WIDTH
-        };
         let display_name = cx.new(|input_cx| {
-            let input = TextField::new(
+            TextField::new(
                 input_cx.focus_handle(),
                 role.display_name.clone(),
                 "",
                 false,
-            );
-            if in_place {
-                input.text_size(theme::text_display())
-            } else {
-                input
-            }
+            )
+            .text_size(theme::text_display())
         });
         let command = cx.new(|input_cx| {
             let mut input = TextField::new(
@@ -370,20 +345,11 @@ impl NativeRoot {
             input.set_disabled(true, input_cx);
             input
         });
-        let visible_args = if slot.is_some() {
-            String::new()
-        } else {
-            role_visible_args(&role).join(" ")
-        };
         let args = cx.new(|input_cx| {
             TextField::new(
                 input_cx.focus_handle(),
-                visible_args,
-                if in_place {
-                    "Extra flags"
-                } else {
-                    "--mcp-debug"
-                },
+                role_visible_args(&role).join(" "),
+                "Extra flags",
                 true,
             )
         });
@@ -399,64 +365,46 @@ impl NativeRoot {
                 model_cx,
             )
         });
-        let model_placeholder =
-            runtime_model_placeholder(&runtimes, &resolution.runtime, slot.as_ref().map(|_| &role));
+        let model_placeholder = runtime_model_placeholder(&runtimes, &resolution.runtime, None);
         model.update(cx, |input, input_cx| {
             input.set_placeholder(model_placeholder, input_cx)
         });
         let working_dir = cx.new(|input_cx| {
-            let input = working_dir_text_field(
+            working_dir_text_field(
                 input_cx.focus_handle(),
                 role.working_dir.clone().unwrap_or_default(),
                 "",
             )
-            .text_size(theme::text_body());
-            if in_place {
-                input.right_padding(34.)
-            } else {
-                input
-            }
+            .text_size(theme::text_body())
         });
         let system_prompt = cx.new(|input_cx| {
             let mut input = TextField::textarea(
                 input_cx.focus_handle(),
                 role.system_prompt.clone().unwrap_or_default(),
-                "",
+                "Who this agent is and how it works: its strengths, its habits, what it leaves alone. Markdown works.",
                 6,
                 true,
             )
             .text_size(theme::text_body());
-            if in_place {
-                input.set_bare(true, input_cx);
-                input.fill_height().with_scrollbar(input_cx)
-            } else {
-                input
-            }
+            input.set_bare(true, input_cx);
+            input.fill_height().with_scrollbar(input_cx)
         });
         let root = cx.entity();
         let runtime_root = root.clone();
-        let runtime_value = if slot.is_some() && !resolution.runtime_pinned {
-            String::new()
-        } else {
-            resolution.runtime.clone()
-        };
-        let runtime_options =
-            role_edit_runtime_options(&runtimes, &role, &resolution.runtime, slot.is_some());
+        let runtime_options = role_edit_runtime_options(&runtimes, &role, &resolution.runtime);
         let runtime_select = cx.new(|select_cx| {
             StyledSelect::new(
                 "edit-role-runtime",
                 select_cx.focus_handle(),
-                runtime_value,
+                resolution.runtime.clone(),
                 runtime_options,
                 Rc::new(move |value, _, cx| {
                     runtime_root.update(cx, |this, cx| this.select_role_edit_runtime(value, cx));
                 }),
                 select_cx,
             )
-            .width(px(field_width))
-            .min_menu_width(px(field_width))
-            .detailed(!in_place)
-            .monospace(!in_place)
+            .width(px(ROLE_COLUMN_WIDTH))
+            .min_menu_width(px(ROLE_COLUMN_WIDTH))
             .placeholder(if agents_checking {
                 "Detecting agents…"
             } else {
@@ -473,7 +421,7 @@ impl NativeRoot {
                     &runtimes,
                     &resolution.runtime,
                     &role,
-                    slot.is_some(),
+                    false,
                     &resolution.model,
                 ),
                 Rc::new(move |value, _, cx| {
@@ -486,18 +434,10 @@ impl NativeRoot {
                 }),
                 select_cx,
             )
-            .width(px(if in_place {
-                (ROLE_COLUMN_WIDTH - 12.) / 2.
-            } else {
-                FIELD_WIDTH
-            }))
-            .min_menu_width(px(if in_place { 240. } else { FIELD_WIDTH }))
+            .width(px(ROLE_COLUMN_WIDTH))
+            .min_menu_width(px(ROLE_COLUMN_WIDTH))
         });
-        let permission_mode = if slot.is_some() {
-            PermissionMode::Default
-        } else {
-            role_permission_mode(&role).unwrap_or(PermissionMode::Default)
-        };
+        let permission_mode = role_permission_mode(&role).unwrap_or(PermissionMode::Default);
         let permission_root = root.clone();
         let permission_select = cx.new(|select_cx| {
             StyledSelect::new(
@@ -515,12 +455,9 @@ impl NativeRoot {
                 }),
                 select_cx,
             )
-            .width(px(field_width))
-            .min_menu_width(px(if in_place { 320. } else { FIELD_WIDTH }))
+            .width(px(ROLE_COLUMN_WIDTH))
+            .min_menu_width(px(320.))
         });
-        let scroll = ScrollHandle::new();
-        let scroll_owner = cx.entity_id();
-        let scrollbar = cx.new(|_| Scrollbar::app(scroll.clone(), scroll_owner));
         let mut subscriptions = vec![cx.observe(&display_name, |this, input, cx| {
             let valid = !input.read(cx).text().trim().is_empty();
             let Some(form) = this.role_surfaces.edit.as_mut() else {
@@ -534,19 +471,15 @@ impl NativeRoot {
         subscriptions.push(cx.observe(&model, |this, _, cx| {
             this.sync_role_edit_efforts(cx);
         }));
-        if in_place {
-            self.role_surfaces.prompt_preview = false;
-            // The page redraws on every keystroke to keep "Unsaved changes" honest.
-            for input in [&display_name, &args, &model, &working_dir, &system_prompt] {
-                subscriptions.push(cx.observe(input, |_, _, cx| cx.notify()));
-            }
+        self.role_surfaces.prompt_preview = false;
+        // The page redraws on every keystroke to keep "Unsaved changes" honest.
+        for input in [&display_name, &args, &model, &working_dir, &system_prompt] {
+            subscriptions.push(cx.observe(input, |_, _, cx| cx.notify()));
         }
         self.role_surfaces.edit = Some(RoleEditForm {
             role,
-            slot,
             runtimes,
             runtime: resolution.runtime,
-            runtime_pinned: resolution.runtime_pinned,
             permission_mode,
             display_name: display_name.clone(),
             command,
@@ -559,15 +492,7 @@ impl NativeRoot {
             runtime_select,
             working_dir,
             system_prompt,
-            scroll,
-            scrollbar,
             browse_focus: cx.focus_handle(),
-            runtime_hint_focus: cx.focus_handle(),
-            args_hint_focus: cx.focus_handle(),
-            model_hint_focus: cx.focus_handle(),
-            effort_hint_focus: cx.focus_handle(),
-            permission_hint_focus: cx.focus_handle(),
-            close_focus: cx.focus_handle(),
             cancel_focus: cx.focus_handle(),
             submit_focus: cx.focus_handle(),
             display_name_valid: true,

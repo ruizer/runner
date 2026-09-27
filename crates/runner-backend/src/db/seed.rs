@@ -85,21 +85,13 @@ pub(super) fn seed_defaults(conn: &mut Connection) -> Result<()> {
 /// creates and reads the copyable example prompts directly.
 fn seed_default_crew(tx: &rusqlite::Transaction) -> Result<()> {
     let addendum = SEED_CREW_ADDENDUM.trim_end_matches('\n');
+    // No purpose or default goal: neither reaches the app or a mission
+    // (#699). The conventions carry the crew's definition of done.
     tx.execute(
         "INSERT INTO crews (
-            id, name, purpose, goal, system_prompt_addendum, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)",
-        params![
-            SEED_CREW_ID,
-            "Pair coding crew",
-            "A two-role coder/reviewer loop for a single implementation task. \
-             The coder ships the change; the reviewer audits it; the coder fixes \
-             findings until review is clean.",
-            "Definition of done: implemented, relevant checks passed, and reviewer \
-             reports no remaining must-fix issues.",
-            addendum,
-            SEED_TIMESTAMP,
-        ],
+            id, name, system_prompt_addendum, created_at, updated_at
+         ) VALUES (?1, ?2, ?3, ?4, ?4)",
+        params![SEED_CREW_ID, "Pair coding crew", addendum, SEED_TIMESTAMP],
     )?;
 
     insert_seed_role(tx, SEED_CODER_ROLE_ID, "coder", "Coder", SEED_CODER_PROMPT)?;

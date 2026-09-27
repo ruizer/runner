@@ -2,16 +2,19 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, px, rems, svg, Bounds, Context, Entity, KeyDownEvent, MouseButton, Pixels, Render,
+    canvas, div, rems, svg, Bounds, Context, Entity, KeyDownEvent, MouseButton, Pixels, Render,
     ScrollHandle, Window,
 };
 use runner_backend::ops::runtime::RuntimeCatalogOption;
 
 use crate::theme;
+use crate::ui::app_zoom;
 use crate::ui::field::TextField;
-use crate::ui::menu::{popup_layer, DismissHandler, MenuKey};
+use crate::ui::menu::{popup_layer_sized, DismissHandler, MenuKey};
 use crate::ui::scrollbar::Scrollbar;
-use crate::ui::select::{SelectAction, SelectOption, SelectState};
+use crate::ui::select::{
+    option_menu, option_menu_width, OptionMenuStyle, SelectAction, SelectOption, SelectState,
+};
 
 pub struct ModelField {
     input: Entity<TextField>,
@@ -206,98 +209,23 @@ impl Render for ModelField {
         if let (true, Some(anchor)) = (open, self.anchor_bounds) {
             let current = self.input.read(cx).text().to_owned();
             let field_entity = cx.entity();
-            let rows = self
-                .suggestions
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(index, option)| {
-                    let active = option.value == current;
-                    let highlighted = self.state.highlighted() == index;
-                    let foreground = if active {
-                        theme::text()
-                    } else {
-                        theme::muted()
-                    };
-                    let click_entity = field_entity.clone();
-                    div()
-                        .id(("model-option", index))
-                        .w_full()
-                        .px_3()
-                        .py_2()
-                        .flex()
-                        .flex_col()
-                        .gap(rems(2. / 16.))
-                        .cursor_pointer()
-                        .when(active || highlighted, |row| row.bg(theme::raised()))
-                        .hover(|row| row.bg(theme::raised()))
-                        .child(
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_between()
-                                .gap_2()
-                                .child(
-                                    div()
-                                        .truncate()
-                                        .text_size(theme::text_title())
-                                        .font_weight(gpui::FontWeight::MEDIUM)
-                                        .text_color(foreground)
-                                        .child(option.label),
-                                )
-                                .when(active, |label| {
-                                    label.child(
-                                        svg()
-                                            .flex_none()
-                                            .path("check.svg")
-                                            .size(rems(14. / 16.))
-                                            .text_color(theme::accent()),
-                                    )
-                                }),
-                        )
-                        .children(option.description.map(|description| {
-                            div()
-                                .text_size(theme::text_meta())
-                                .text_color(theme::faint())
-                                .child(description)
-                        }))
-                        .on_click(move |_, _, cx| {
-                            click_entity.update(cx, |field, cx| field.choose(index, cx));
-                        })
-                });
-            let menu = div()
-                .id("model-field-options")
-                .relative()
-                .max_h(rems(260. / 16.))
-                .overflow_hidden()
-                .rounded(rems(4. / 16.))
-                .border_1()
-                .border_color(theme::border_strong())
-                .bg(theme::panel())
-                .shadow_xl()
-                .child(
-                    div()
-                        .id("model-field-scroll")
-                        .max_h(rems(260. / 16.))
-                        .overflow_y_scroll()
-                        .scrollbar_width(px(0.))
-                        .track_scroll(&self.menu_scroll)
-                        .py_1()
-                        .children(rows),
-                )
-                .child(self.menu_scrollbar.clone())
-                .into_any_element();
+            let menu = option_menu(
+                &self.suggestions,
+                &current,
+                self.state.highlighted(),
+                OptionMenuStyle::default(),
+                &self.menu_scroll,
+                self.menu_scrollbar.clone(),
+                Rc::new(move |index, _, cx| {
+                    field_entity.update(cx, |field, cx| field.choose(index, cx));
+                }),
+            );
             let dismiss_entity: Entity<Self> = cx.entity();
             let dismiss: DismissHandler = Rc::new(move |_, cx| {
                 dismiss_entity.update(cx, |field, cx| field.close(cx));
             });
-            root = root.child(popup_layer(
-                anchor,
-                window,
-                anchor.size.width,
-                menu,
-                dismiss,
-            ));
+            let width = option_menu_width(&self.suggestions, anchor.size.width, app_zoom(window));
+            root = root.child(popup_layer_sized(anchor, window, width, menu, dismiss));
         }
         root
     }
@@ -314,4 +242,88 @@ fn model_options(options: &[RuntimeCatalogOption]) -> Vec<SelectOption> {
             mapped
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gpui::{px, TestAppContext, VisualTestContext};
+
+    struct FieldHost {
+        field: Entity<ModelField>,
+    }
+
+    impl Render for FieldHost {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            div()
+                .size_full()
+                .p_4()
+                .child(div().w(px(272.)).child(self.field.clone()))
+        }
+    }
+
+    fn option(value: &str, label: &str, description: &str) -> RuntimeCatalogOption {
+        RuntimeCatalogOption {
+            value: value.into(),
+            label: label.into(),
+            description: Some(description.into()),
+            supported_efforts: None,
+        }
+    }
+
+    /// The model suggestions open the select's own menu: a centred check,
+    /// a menu grown to its descriptions, and a scrollbar inside its frame.
+    #[test]
+    fn model_suggestions_share_the_select_menu() {
+        let mut cx = TestAppContext::single();
+        let window = cx.add_window(|window, cx| {
+            window.resize(gpui::size(px(1200.), px(900.)));
+            let input = cx.new(|cx| TextField::new(cx.focus_handle(), "", "", true));
+            let options = [
+                option("", "default", "Use the agent's own default model."),
+                option(
+                    "opus",
+                    "Opus 5.5",
+                    "Most capable for ambitious, long-running work",
+                ),
+                option("fable", "Fable 5.1", "For your toughest challenges"),
+                option("sonnet", "Sonnet 5", "Most efficient for everyday tasks"),
+                option("haiku", "Haiku 4.5", "Fastest for quick answers"),
+                option("opus-1m", "Opus 5.5 (1M)", "The long-context variant"),
+            ];
+            let field = cx.new(|cx| ModelField::new(input, &options, cx));
+            FieldHost { field }
+        });
+        cx.run_until_parked();
+        let field = window.read_with(&cx, |host, _| host.field.clone()).unwrap();
+        let mut visual = VisualTestContext::from_window(window.into(), &cx);
+        visual.run_until_parked();
+        field.update(&mut visual, |field, cx| field.toggle(cx));
+        visual.run_until_parked();
+
+        let menu = visual.debug_bounds("STYLED_SELECT_MENU").unwrap();
+        let row = visual.debug_bounds("STYLED_SELECT_OPTION_0").unwrap();
+        let check = visual.debug_bounds("STYLED_SELECT_CHECK").unwrap();
+        let track = visual.debug_bounds("STYLED_SELECT_SCROLLBAR").unwrap();
+        assert!(
+            (check.center().y - row.center().y).abs() <= px(1.),
+            "the check is centred in its row: {check:?} {row:?}"
+        );
+        assert!(
+            menu.size.width > px(272.),
+            "the menu grows past the field to fit its descriptions: {menu:?}"
+        );
+        assert!(
+            row.size.height < px(60.),
+            "a described row stays on two lines: {row:?}"
+        );
+        assert!(
+            track.top() >= menu.top() + px(4.) && track.bottom() <= menu.bottom() - px(4.),
+            "the scrollbar's track sits inside the menu's padding: {track:?} in {menu:?}"
+        );
+        assert!(
+            row.right() <= track.left() + px(0.5) && check.right() <= track.left(),
+            "six models scroll, so the rows end at the scrollbar's lane: {row:?} {check:?} {track:?}"
+        );
+    }
 }

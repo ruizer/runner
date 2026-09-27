@@ -1,6 +1,4 @@
-use super::logic::create_crew_form_is_composing;
 use super::logic::error_banner;
-use super::logic::trimmed_option;
 use std::rc::Rc;
 
 use gpui::prelude::*;
@@ -20,31 +18,9 @@ impl NativeRoot {
         }
         let name =
             cx.new(|input_cx| TextField::new(input_cx.focus_handle(), "", "roles-feature", false));
-        let purpose = cx.new(|input_cx| {
-            TextField::textarea(
-                input_cx.focus_handle(),
-                "",
-                "What does this crew exist to do?",
-                2,
-                false,
-            )
-        });
-        let goal = cx.new(|input_cx| {
-            TextField::textarea(
-                input_cx.focus_handle(),
-                "",
-                "Pre-fills the Start Mission goal.",
-                3,
-                false,
-            )
-        });
         let focus = name.read(cx).focus_handle();
         self.crew_surfaces.create = Some(CreateCrewForm {
             name,
-            purpose,
-            goal,
-            purpose_hint_focus: cx.focus_handle(),
-            goal_hint_focus: cx.focus_handle(),
             close_focus: cx.focus_handle(),
             cancel_focus: cx.focus_handle(),
             submit_focus: cx.focus_handle(),
@@ -76,12 +52,11 @@ impl NativeRoot {
         cx: &mut Context<Self>,
     ) {
         if event.keystroke.key == "enter"
-            && self.crew_surfaces.create.as_ref().is_some_and(|form| {
-                let multiline_focused = [&form.purpose, &form.goal]
-                    .into_iter()
-                    .any(|field| field.read(cx).focus_handle().is_focused(window));
-                !multiline_focused && !create_crew_form_is_composing(form, cx)
-            })
+            && self
+                .crew_surfaces
+                .create
+                .as_ref()
+                .is_some_and(|form| !form.name.read(cx).is_composing())
         {
             cx.stop_propagation();
             self.submit_create_crew(window, cx);
@@ -105,9 +80,7 @@ impl NativeRoot {
         form.error = None;
         let input = CreateCrewInput {
             name,
-            purpose: trimmed_option(form.purpose.read(cx).text()),
-            goal: trimmed_option(form.goal.read(cx).text()),
-            system_prompt_addendum: None,
+            ..Default::default()
         };
         let core = self.core(cx).clone();
         let task = cx.background_spawn(async move {
@@ -190,16 +163,6 @@ impl NativeRoot {
             .child(
                 Field::new("crew-name", "Name", form.name.clone())
                     .focus_target(form.name.read(cx).focus_handle()),
-            )
-            .child(
-                Field::new("crew-purpose", "Purpose", form.purpose.clone())
-                    .focus_target(form.purpose.read(cx).focus_handle())
-                    .hint("optional", form.purpose_hint_focus.clone()),
-            )
-            .child(
-                Field::new("crew-goal", "Default goal", form.goal.clone())
-                    .focus_target(form.goal.read(cx).focus_handle())
-                    .hint("optional", form.goal_hint_focus.clone()),
             );
         let footer = div()
             .flex()
@@ -245,10 +208,6 @@ impl NativeRoot {
             vec![
                 form.close_focus.clone(),
                 form.name.read(cx).focus_handle(),
-                form.purpose_hint_focus.clone(),
-                form.purpose.read(cx).focus_handle(),
-                form.goal_hint_focus.clone(),
-                form.goal.read(cx).focus_handle(),
                 form.cancel_focus.clone(),
                 form.submit_focus.clone(),
             ]

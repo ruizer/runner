@@ -71,7 +71,7 @@ impl NativeRoot {
         match action {
             RoleMenuAction::Edit(role) => {
                 self.open_role_detail(role.handle.clone(), window, cx);
-                self.open_role_edit(*role, None, window, cx);
+                self.open_role_edit(*role, window, cx);
             }
             RoleMenuAction::Delete { id, handle } => {
                 self.role_surfaces.delete_confirm = Some(RoleDeleteConfirm { id, handle });

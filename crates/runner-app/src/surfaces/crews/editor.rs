@@ -1,22 +1,32 @@
-use super::logic::crew_name_refresh;
-use super::logic::crew_name_state;
+use super::logic::crew_picture;
+use super::logic::crew_summary;
 use super::logic::error_panel;
-use super::logic::section_label;
 use super::logic::selected_add_slot_role;
+use super::logic::short_date;
 use super::logic::slot_handle_error;
-use super::logic::slot_section_description;
 use super::logic::suggest_slot_handle;
-use super::logic::CrewNameRefresh;
+use super::logic::trimmed_option;
 use std::collections::HashSet;
+use std::rc::Rc;
 
 use gpui::prelude::*;
-use gpui::{div, px, rems, AnyElement, Context, FontWeight, KeyDownEvent, Window};
-use runner_app::ui::{Button, ButtonVariant, TextField, Tooltip};
+use gpui::{
+    div, px, rems, AnyElement, App, Context, FontWeight, KeyDownEvent, SharedString, Window,
+};
+use runner_app::ui::{Button, ButtonVariant, TextField};
+use runner_backend::model::{Crew, SlotWithRole};
 use runner_backend::ops::crew::UpdateCrewInput;
 
 use super::*;
+use crate::surfaces::profile_page::{
+    breadcrumb, column_text, dot_note, editing_tag, page_columns, page_container, profile_column,
+    section, short_id, ClickHandler, PROFILE_COLUMN_WIDTH,
+};
 use crate::surfaces::*;
 use crate::*;
+
+/// The crew picture on the page.
+const PICTURE_SIZE: f32 = 95.;
 
 impl NativeRoot {
     pub(crate) fn load_crew_editor(&mut self, crew_id: String, cx: &mut Context<Self>) {
@@ -45,501 +55,541 @@ impl NativeRoot {
         });
         cx.spawn(async move |weak, cx| {
             let result = task.await;
-            let _ = weak.update(cx, |this, cx| {
-                match result {
-                    Ok((crew_id, crew, slots))
-                        if matches!(
-                            &this.route,
-                            AppRoute::CrewEditor(active) if active == &crew_id
-                        ) =>
-                    {
-                        let active_crew_id = crew_id.clone();
-                        let crew_name = crew.name.clone();
-                        let existing_handles = slots
-                            .iter()
-                            .map(|slot| slot.slot.slot_handle.clone())
-                            .collect::<HashSet<_>>();
-                        if this.crew_surfaces.editor.name.is_none() {
-                            let name = cx.new(|input_cx| {
-                                TextField::new(
-                                    input_cx.focus_handle(),
-                                    crew.name.clone(),
-                                    "",
-                                    false,
-                                )
-                                .text_size(theme::text_title())
-                            });
-                            let subscription = cx.observe(&name, move |this, input, cx| {
-                                let value = input.read(cx).text().to_owned();
-                                let editor = &mut this.crew_surfaces.editor;
-                                let (changed, dirty, empty) =
-                                    crew_name_state(&value, &editor.original_name);
-                                if editor.name_changed != changed
-                                    || editor.name_dirty != dirty
-                                    || editor.name_empty != empty
-                                {
-                                    editor.name_changed = changed;
-                                    editor.name_dirty = dirty;
-                                    editor.name_empty = empty;
-                                    cx.notify();
-                                }
-                            });
-                            let editor = &mut this.crew_surfaces.editor;
-                            editor.name = Some(name);
-                            editor._name_subscription = Some(subscription);
-                        }
-                        let name = this
-                            .crew_surfaces
-                            .editor
-                            .name
-                            .as_ref()
-                            .cloned()
-                            .expect("crew editor name field");
-                        let current_name = name.read(cx).text().to_owned();
-                        match crew_name_refresh(&current_name, &crew.name, name.read(cx).edited()) {
-                            CrewNameRefresh::MarkClean => {
-                                name.update(cx, |input, _| input.mark_clean());
-                            }
-                            CrewNameRefresh::Reset => {
-                                name.update(cx, |input, input_cx| {
-                                    input.reset(crew.name.clone(), input_cx)
-                                });
-                            }
-                            CrewNameRefresh::Preserve => {}
-                        }
-                        let current_name = name.read(cx).text().to_owned();
-                        let (name_changed, name_dirty, name_empty) =
-                            crew_name_state(&current_name, &crew.name);
-                        let editor = &mut this.crew_surfaces.editor;
-                        editor.crew_id = crew_id;
-                        editor.original_name = crew.name.clone();
-                        editor.crew = Some(crew);
-                        editor.slots = slots;
-                        editor.loaded = true;
-                        editor.loading = false;
-                        editor.error = None;
-                        editor.name_changed = name_changed;
-                        editor.name_dirty = name_dirty;
-                        editor.name_empty = name_empty;
-                        if let Some(form) = this
-                            .crew_surfaces
-                            .add_slot
-                            .as_mut()
-                            .filter(|form| form.crew_id == active_crew_id)
+            let _ =
+                weak.update(cx, |this, cx| {
+                    match result {
+                        Ok((crew_id, crew, slots))
+                            if matches!(
+                                &this.route,
+                                AppRoute::CrewEditor(active) if active == &crew_id
+                            ) =>
                         {
-                            form.crew_name = crew_name;
-                            form.existing_handles = existing_handles;
-                            if !form.slot_handle.read(cx).edited() {
-                                let suggestion = selected_add_slot_role(form)
-                                    .map(|role| {
-                                        suggest_slot_handle(
-                                            &role.role.handle,
-                                            &form.existing_handles,
-                                        )
-                                    })
-                                    .unwrap_or_default();
-                                if form.slot_handle.read(cx).text() != suggestion {
-                                    form.slot_handle.update(cx, |input, input_cx| {
-                                        input.reset(suggestion, input_cx)
-                                    });
+                            let crew_name = crew.name.clone();
+                            let existing_handles = slots
+                                .iter()
+                                .map(|slot| slot.slot.slot_handle.clone())
+                                .collect::<HashSet<_>>();
+                            let editor = &mut this.crew_surfaces.editor;
+                            if editor.popup.as_ref().is_some_and(|popup| {
+                                !slots.iter().any(|s| s.slot.id == popup.slot_id)
+                            }) {
+                                editor.popup = None;
+                            }
+                            editor.crew = Some(crew);
+                            editor.slots = slots;
+                            editor.loaded = true;
+                            editor.loading = false;
+                            editor.error = None;
+                            if let Some(form) = this
+                                .crew_surfaces
+                                .add_slot
+                                .as_mut()
+                                .filter(|form| form.crew_id == crew_id)
+                            {
+                                form.crew_name = crew_name;
+                                form.existing_handles = existing_handles;
+                                if !form.slot_handle.read(cx).edited() {
+                                    let suggestion = selected_add_slot_role(form)
+                                        .map(|role| {
+                                            suggest_slot_handle(
+                                                &role.role.handle,
+                                                &form.existing_handles,
+                                            )
+                                        })
+                                        .unwrap_or_default();
+                                    if form.slot_handle.read(cx).text() != suggestion {
+                                        form.slot_handle.update(cx, |input, input_cx| {
+                                            input.reset(suggestion, input_cx)
+                                        });
+                                    }
+                                } else {
+                                    let handle = form.slot_handle.read(cx).text();
+                                    form.slot_handle_empty = handle.is_empty();
+                                    form.slot_handle_error =
+                                        slot_handle_error(handle, &form.existing_handles);
                                 }
-                            } else {
-                                let handle = form.slot_handle.read(cx).text();
-                                form.slot_handle_empty = handle.is_empty();
-                                form.slot_handle_error =
-                                    slot_handle_error(handle, &form.existing_handles);
                             }
                         }
-                    }
-                    Ok(_) => {}
-                    Err((crew_id, error))
-                        if matches!(
-                            &this.route,
-                            AppRoute::CrewEditor(active) if active == &crew_id
-                        ) =>
-                    {
-                        let editor = &mut this.crew_surfaces.editor;
-                        editor.loading = false;
-                        if error.to_lowercase().contains("not found") {
-                            editor.crew = None;
-                            editor.slots.clear();
-                            editor.name = None;
-                            editor._name_subscription = None;
-                            editor.original_name.clear();
-                            editor.goal_edit = None;
-                            editor.conventions_edit = None;
-                            editor.loaded = true;
+                        Ok(_) => {}
+                        Err((crew_id, error))
+                            if matches!(
+                                &this.route,
+                                AppRoute::CrewEditor(active) if active == &crew_id
+                            ) =>
+                        {
+                            let editor = &mut this.crew_surfaces.editor;
+                            editor.loading = false;
+                            if error.to_lowercase().contains("not found") {
+                                editor.crew = None;
+                                editor.slots.clear();
+                                editor.edit = None;
+                                editor.popup = None;
+                                editor.loaded = true;
+                            }
+                            editor.error = Some(error);
                         }
-                        editor.error = Some(error);
+                        Err(_) => {}
                     }
-                    Err(_) => {}
-                }
-                cx.notify();
-            });
+                    cx.notify();
+                });
         })
         .detach();
     }
 
+    /// The page's edit in place and slot popup live only on their own crew's
+    /// page, so a route that leaves it discards them, as Cancel does.
+    pub(crate) fn drop_crew_edit_for_route(&mut self, route: &AppRoute) {
+        let editor = &mut self.crew_surfaces.editor;
+        if matches!(route, AppRoute::Settings)
+            || matches!(route, AppRoute::CrewEditor(id) if id == &editor.crew_id)
+        {
+            return;
+        }
+        if !editor.edit.as_ref().is_some_and(|form| form.saving) {
+            editor.edit = None;
+        }
+        editor.popup = None;
+    }
+
     pub(super) fn render_crew_editor(
         &mut self,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let column = self.profile_page_column_width(window, cx);
         let editor = &self.crew_surfaces.editor;
+        let editing = editor.edit.is_some();
+        let (loading, loaded) = (editor.loading, editor.loaded);
         let crew = editor.crew.clone();
         let slots = editor.slots.clone();
-        let name = editor.name.clone();
-        let name_changed = editor.name_changed;
-        let name_dirty = editor.name_dirty;
-        let name_empty = editor.name_empty;
-        let root = cx.entity();
-        let back_root = root.clone();
-        let back_key_root = root.clone();
-        let save_name_root = root.clone();
-        let start_mission_root = root.clone();
-        let start_mission_crew_id = editor.crew_id.clone();
-        let add_slot_root = root.clone();
-        let header = div()
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_between()
-            .gap_4()
-            .border_b_1()
-            .border_color(theme::border())
-            .bg(theme::panel())
-            .px_8()
-            .pb_4()
-            .pt(rems(36. / 16.))
-            .on_key_down(cx.listener(Self::on_crew_name_key_down))
-            .child(
-                div()
-                    .min_w(px(0.))
-                    .flex_1()
-                    .flex()
-                    .items_center()
-                    .gap_3()
-                    .child(
-                        div()
-                            .id("crew-editor-back")
-                            .tab_index(0)
-                            .flex_none()
-                            .cursor_pointer()
-                            .text_size(theme::text_title())
-                            .text_color(theme::muted())
-                            .hover(|text| text.text_color(theme::text()))
-                            .focus_visible(|text| text.text_color(theme::text()).underline())
-                            .on_click(move |_, window, cx| {
-                                back_root.update(cx, |this, cx| this.open_crews(window, cx));
-                            })
-                            .on_key_down(move |event: &KeyDownEvent, window, cx| {
-                                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
-                                    cx.stop_propagation();
-                                    back_key_root
-                                        .update(cx, |this, cx| this.open_crews(window, cx));
-                                }
-                            })
-                            .child("‹ Crews"),
-                    )
-                    .child(div().text_color(theme::border_strong()).child("›"))
-                    .child(if let Some(name) = name.clone() {
-                        div()
-                            .w_full()
-                            .max_w(rems(384. / 16.))
-                            .font_weight(FontWeight::SEMIBOLD)
-                            .child(name)
-                            .into_any_element()
-                    } else {
-                        div()
-                            .text_size(theme::text_title())
-                            .text_color(theme::faint())
-                            .child("…")
-                            .into_any_element()
-                    }),
-            )
-            .child(
-                div()
-                    .flex_none()
-                    .flex()
-                    .items_center()
-                    .gap_2()
-                    .child(if name_changed || editor.saving_name {
-                        Button::new(
-                            "save-crew-name",
-                            if editor.saving_name {
-                                "Saving..."
-                            } else {
-                                "Save"
-                            },
-                        )
-                        .disabled(editor.saving_name || !name_dirty)
-                        .tooltip(if name_empty {
-                            "Crew name cannot be empty"
-                        } else if name_dirty {
-                            "Save crew name"
-                        } else {
-                            "No persisted change after trimming"
-                        })
-                        .on_press(move |_, cx| {
-                            save_name_root.update(cx, |this, cx| this.save_crew_name(cx));
-                        })
-                        .into_any_element()
-                    } else {
-                        Tooltip::new(
-                            "crew-name-saved-tooltip",
-                            "Crew name is saved. Slot changes save immediately.",
-                            div()
-                                .flex()
-                                .items_center()
-                                .justify_center()
-                                .rounded_sm()
-                                .border_1()
-                                .border_color(theme::border())
-                                .bg(theme::raised())
-                                .px_3()
-                                .py(rems(6. / 16.))
-                                .text_size(theme::text_title())
-                                .font_weight(FontWeight::MEDIUM)
-                                .text_color(theme::faint())
-                                .child("Saved"),
-                        )
-                        .into_any_element()
-                    })
-                    .child(
-                        Button::new("start-crew-mission", "Start mission")
-                            .variant(ButtonVariant::Primary)
-                            .tooltip(if slots.is_empty() {
-                                "Add at least one slot before starting a mission"
-                            } else {
-                                "Start a mission with this crew"
-                            })
-                            .disabled(slots.is_empty())
-                            .on_press(move |window, cx| {
-                                start_mission_root.update(cx, |this, cx| {
-                                    this.open_start_mission_modal(
-                                        Some(start_mission_crew_id.clone()),
-                                        runner_backend::ops::project::ProjectScope::Root,
-                                        window,
-                                        cx,
-                                    )
-                                });
-                            }),
-                    ),
-            );
-        let content = if editor.loading {
+        let editor_error = editor.error.clone();
+        let back_root = cx.entity();
+        let on_back: ClickHandler = Rc::new(move |window, cx| {
+            back_root.update(cx, |this, cx| this.open_crews(window, cx));
+        });
+        let current = crew
+            .as_ref()
+            .map(|crew| crew.name.clone())
+            .unwrap_or_else(|| "…".into());
+        let body = if loading && !loaded {
             div()
-                .p_8()
                 .text_size(theme::text_title())
                 .text_color(theme::muted())
                 .child("Loading…")
                 .into_any_element()
-        } else if !editor.loaded {
+        } else if !loaded {
+            error_panel(
+                editor_error
+                    .clone()
+                    .unwrap_or_else(|| "Failed to load crew.".into()),
+            )
+        } else if let Some(crew) = crew {
+            self.render_crew_page_body(crew, slots, column, cx)
+        } else {
             div()
-                .m_8()
-                .child(error_panel(
-                    editor
-                        .error
-                        .clone()
-                        .unwrap_or_else(|| "Failed to load crew.".into()),
-                ))
-                .into_any_element()
-        } else if crew.is_none() {
-            div()
-                .p_8()
                 .text_size(theme::text_title())
                 .text_color(theme::danger())
                 .child("Crew not found.")
                 .into_any_element()
-        } else {
-            let crew = match crew {
-                Some(crew) => crew,
-                None => unreachable!("crew presence checked above"),
-            };
-            let sections = div()
-                .when(cfg!(test), |sections| {
-                    sections.debug_selector(|| "CREW_EDITOR_SECTIONS".into())
-                })
-                .w_full()
-                .min_w(px(0.))
-                .flex()
-                .flex_col()
-                .gap_8()
-                .children(editor.error.clone().map(error_panel))
-                .child(
-                    div()
-                        .w_full()
-                        .min_w(px(0.))
-                        .flex()
-                        .flex_col()
-                        .gap(rems(6. / 16.))
-                        .child(section_label("Purpose"))
-                        .child(if let Some(purpose) = crew.purpose.clone() {
-                            div()
-                                .w_full()
-                                .min_w(px(0.))
-                                .whitespace_normal()
-                                .text_size(theme::text_title())
-                                .line_height(rems(20. / 16.))
-                                .text_color(theme::text())
-                                .child(purpose)
-                        } else {
-                            div()
-                                .text_size(theme::text_title())
-                                .text_color(theme::faint())
-                                .italic()
-                                .child("No purpose set.")
-                        }),
-                )
-                .child(self.render_crew_goal_section(&crew, cx))
-                .child(self.render_crew_conventions_section(&crew, cx))
-                .child(
-                    div()
-                        .w_full()
-                        .min_w(px(0.))
-                        .flex()
-                        .flex_col()
-                        .gap_4()
-                        .child(
-                            div()
-                                .w_full()
-                                .min_w(px(0.))
-                                .flex()
-                                .items_end()
-                                .justify_between()
-                                .gap_4()
-                                .child(
-                                    div()
-                                        .min_w(px(0.))
-                                        .flex_1()
-                                        .flex()
-                                        .flex_col()
-                                        .gap(rems(2. / 16.))
-                                        .child(
-                                            div()
-                                                .text_size(theme::text_display())
-                                                .font_weight(FontWeight::BOLD)
-                                                .child("Slots"),
-                                        )
-                                        .child(
-                                            div()
-                                                .w_full()
-                                                .min_w(px(0.))
-                                                .whitespace_normal()
-                                                .text_size(theme::text_ui())
-                                                .line_height(rems(1.))
-                                                .text_color(theme::muted())
-                                                .child(slot_section_description()),
-                                        ),
-                                )
-                                .child(
-                                    div().flex_none().child(
-                                        Button::new("add-crew-slot", "+ Add slot")
-                                            .variant(ButtonVariant::Primary)
-                                            .on_press(move |window, cx| {
-                                                add_slot_root.update(cx, |this, cx| {
-                                                    this.open_add_slot(window, cx)
-                                                });
-                                            }),
-                                    ),
-                                ),
-                        )
-                        .child(self.render_slot_list(slots, cx)),
-                );
-            div()
-                .when(cfg!(test), |container| {
-                    container.debug_selector(|| "CREW_EDITOR_CONTAINER".into())
-                })
-                .mx_auto()
-                .w_full()
-                .min_w(px(0.))
-                .max_w(rems(896. / 16.))
-                .px_8()
-                .py_8()
-                .child(sections)
-                .into_any_element()
         };
+        let error = editor_error.filter(|_| loaded);
         div()
+            .id("crew-editor-scroll")
+            .when(cfg!(test), |scroll| {
+                scroll.debug_selector(|| "CREW_EDITOR_SCROLL".into())
+            })
             .flex_1()
             .min_h(px(0.))
-            .flex()
-            .flex_col()
-            .child(header)
+            .overflow_y_scroll()
+            .when(editing, |page| {
+                page.on_key_down(cx.listener(Self::on_crew_page_key_down))
+            })
             .child(
-                div()
-                    .id("crew-editor-scroll")
-                    .when(cfg!(test), |scroll| {
-                        scroll.debug_selector(|| "CREW_EDITOR_SCROLL".into())
+                page_container()
+                    .when(cfg!(test), |container| {
+                        container.debug_selector(|| "CREW_EDITOR_CONTAINER".into())
                     })
-                    .min_h(px(0.))
-                    .flex_1()
-                    .overflow_y_scroll()
-                    .child(content),
+                    .child(
+                        breadcrumb(
+                            "crew-editor-back",
+                            "Crews",
+                            on_back,
+                            div()
+                                .min_w(px(0.))
+                                .truncate()
+                                .font_weight(FontWeight::MEDIUM)
+                                .text_color(theme::text())
+                                .child(current),
+                        )
+                        .when(cfg!(test), |header| {
+                            header.debug_selector(|| "CREW_EDITOR_HEADER".into())
+                        })
+                        .children(editing.then(|| {
+                            editing_tag().when(cfg!(test), |tag| {
+                                tag.debug_selector(|| "CREW_EDITING_TAG".into())
+                            })
+                        })),
+                    )
+                    .children(error.map(error_panel))
+                    .child(body),
             )
             .into_any_element()
     }
 
-    fn on_crew_name_key_down(
+    fn render_crew_page_body(
         &mut self,
-        event: &KeyDownEvent,
-        window: &mut Window,
+        crew: Crew,
+        slots: Vec<SlotWithRole>,
+        column: f32,
         cx: &mut Context<Self>,
-    ) {
-        let editor = &self.crew_surfaces.editor;
-        let Some(name) = editor.name.as_ref() else {
-            return;
-        };
-        if !name.read(cx).focus_handle().is_focused(window) {
-            return;
-        }
-        match event.keystroke.key.as_str() {
-            "enter" if !name.read(cx).is_composing() => {
-                cx.stop_propagation();
-                self.save_crew_name(cx);
+    ) -> AnyElement {
+        let editing = self.crew_surfaces.editor.edit.is_some();
+        let left = profile_column(column)
+            .when(cfg!(test), |column| {
+                column.debug_selector(|| "CREW_PAGE_PROFILE".into())
+            })
+            .child(self.render_crew_profile(&crew, &slots, column, cx))
+            .child(self.render_slot_section(slots, column, cx))
+            .child(crew_details(&crew, editing));
+        let right = self.render_crew_cards(&crew, cx);
+        page_columns(left, right, false)
+            .when(cfg!(test), |body| {
+                body.debug_selector(|| "CREW_PAGE_BODY".into())
+            })
+            .into_any_element()
+    }
+
+    /// The picture, name and actions. The actions keep the fixed column's
+    /// width when the column spans a stacked page.
+    fn render_crew_profile(
+        &self,
+        crew: &Crew,
+        slots: &[SlotWithRole],
+        column: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let actions = rems(column.min(PROFILE_COLUMN_WIDTH) / 16.);
+        let handles = slots
+            .iter()
+            .map(|slot| SharedString::from(slot.slot.slot_handle.clone()))
+            .collect::<Vec<_>>();
+        let lead = slots
+            .iter()
+            .find(|slot| slot.slot.lead)
+            .map(|slot| slot.slot.slot_handle.as_str());
+        let summary = column_text(crew_summary(slots.len(), lead), column)
+            .text_size(theme::text_body())
+            .text_color(theme::muted());
+        let root = cx.entity();
+        let profile = div().flex().flex_col().gap_4().child(
+            div()
+                .when(cfg!(test), |picture| {
+                    picture.debug_selector(|| "CREW_PICTURE".into())
+                })
+                .child(crew_picture(&handles, PICTURE_SIZE)),
+        );
+        match self.crew_surfaces.editor.edit.as_ref() {
+            None => {
+                let start_root = root.clone();
+                let start_crew_id = crew.id.clone();
+                let edit_root = root;
+                profile
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(
+                                column_text(crew.name.clone(), column)
+                                    .text_size(theme::text_display())
+                                    .font_weight(FontWeight::SEMIBOLD)
+                                    .text_color(theme::text()),
+                            )
+                            .child(summary),
+                    )
+                    .child(
+                        div()
+                            .when(cfg!(test), |actions| {
+                                actions.debug_selector(|| "CREW_PAGE_ACTIONS".into())
+                            })
+                            .w(actions)
+                            .flex()
+                            .items_center()
+                            .gap_2()
+                            .child(
+                                div().flex_1().min_w(px(0.)).child(
+                                    Button::new("start-crew-mission", "Start mission")
+                                        .icon("play.svg")
+                                        .variant(ButtonVariant::Primary)
+                                        .full_width(true)
+                                        .tooltip(if slots.is_empty() {
+                                            "Add at least one slot before starting a mission"
+                                        } else {
+                                            "Start a mission with this crew"
+                                        })
+                                        .disabled(slots.is_empty())
+                                        .on_press(move |window, cx| {
+                                            let crew_id = start_crew_id.clone();
+                                            start_root.update(cx, |this, cx| {
+                                                this.open_start_mission_modal(
+                                                    Some(crew_id),
+                                                    runner_backend::ops::project::ProjectScope::Root,
+                                                    window,
+                                                    cx,
+                                                )
+                                            });
+                                        }),
+                                ),
+                            )
+                            .child(
+                                div()
+                                    .when(cfg!(test), |edit| {
+                                        edit.debug_selector(|| "CREW_EDIT".into())
+                                    })
+                                    .child(
+                                        Button::new("edit-crew", "Edit")
+                                            .icon("pencil.svg")
+                                            .tooltip("Edit the name and conventions")
+                                            .on_press(move |window, cx| {
+                                                edit_root.update(cx, |this, cx| {
+                                                    this.start_crew_edit(window, cx)
+                                                });
+                                            }),
+                                    ),
+                            ),
+                    )
+                    .into_any_element()
             }
-            "escape" => {
-                cx.stop_propagation();
-                if let Some(value) = self
-                    .crew_surfaces
-                    .editor
-                    .crew
-                    .as_ref()
-                    .map(|crew| crew.name.clone())
-                {
-                    name.update(cx, |field, field_cx| field.reset(value, field_cx));
-                }
-                window.focus(&self.root_focus);
-                cx.notify();
+            Some(form) => {
+                let saving = form.saving;
+                let name_empty = form.name.read(cx).text().trim().is_empty();
+                let dirty = crew_edit_is_dirty(form, crew, cx);
+                let save_root = root.clone();
+                let cancel_root = root;
+                profile
+                    .when(cfg!(test), |profile| {
+                        profile.debug_selector(|| "CREW_EDIT_IN_PLACE".into())
+                    })
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap_1()
+                            .child(div().w(actions).child(form.name.clone()))
+                            .child(summary.mt_1()),
+                    )
+                    .child(
+                        div()
+                            .w(actions)
+                            .flex()
+                            .flex_col()
+                            .gap_3()
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .when(cfg!(test), |save| {
+                                                save.debug_selector(|| "CREW_EDIT_SAVE".into())
+                                            })
+                                            .flex_1()
+                                            .min_w(px(0.))
+                                            .child(
+                                                Button::new(
+                                                    "crew-page-save",
+                                                    if saving { "Saving…" } else { "Save" },
+                                                )
+                                                .icon("check.svg")
+                                                .variant(ButtonVariant::Primary)
+                                                .full_width(true)
+                                                .tooltip(if name_empty {
+                                                    "The crew needs a name"
+                                                } else {
+                                                    "Save the name and conventions"
+                                                })
+                                                .disabled(saving || name_empty)
+                                                .on_press(move |_, cx| {
+                                                    save_root.update(cx, |this, cx| {
+                                                        this.save_crew_edit(cx)
+                                                    });
+                                                }),
+                                            ),
+                                    )
+                                    .child(
+                                        div()
+                                            .when(cfg!(test), |cancel| {
+                                                cancel.debug_selector(|| "CREW_EDIT_CANCEL".into())
+                                            })
+                                            .child(
+                                                Button::new("crew-page-cancel", "Cancel")
+                                                    .disabled(saving)
+                                                    .on_press(move |window, cx| {
+                                                        cancel_root.update(cx, |this, cx| {
+                                                            this.cancel_crew_edit(window, cx)
+                                                        });
+                                                    }),
+                                            ),
+                                    ),
+                            )
+                            // Always laid out, so the slots below never jump.
+                            .child(
+                                dot_note("Unsaved changes. Slots save on their own.")
+                                    .when(!dirty, |line| line.opacity(0.))
+                                    .when(cfg!(test) && dirty, |line| {
+                                        line.debug_selector(|| "CREW_EDIT_DIRTY".into())
+                                    }),
+                            ),
+                    )
+                    .into_any_element()
             }
-            _ => {}
         }
     }
 
-    fn save_crew_name(&mut self, cx: &mut Context<Self>) {
+    pub(super) fn start_crew_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let editor = &mut self.crew_surfaces.editor;
-        let (Some(crew), Some(name)) = (editor.crew.as_ref(), editor.name.as_ref()) else {
+        let Some(crew) = editor.crew.as_ref() else {
             return;
         };
-        let next = name.read(cx).text().trim().to_owned();
-        if next.is_empty() || next == crew.name || editor.saving_name {
+        if editor.edit.is_some() {
             return;
         }
-        editor.saving_name = true;
+        let name_value = crew.name.clone();
+        let conventions_value = crew.system_prompt_addendum.clone().unwrap_or_default();
+        let name = cx.new(|input_cx| {
+            TextField::new(input_cx.focus_handle(), name_value, "Crew name", false)
+                .text_size(theme::text_display())
+        });
+        let conventions = cx.new(|input_cx| {
+            let mut input = TextField::textarea(
+                input_cx.focus_handle(),
+                conventions_value,
+                "How this crew works together: who leads, how work is handed off and reviewed. Every slot gets it when the crew runs a mission. Markdown works.",
+                6,
+                true,
+            )
+            .text_size(theme::text_body());
+            input.set_bare(true, input_cx);
+            input.fill_height().with_scrollbar(input_cx)
+        });
+        // The page redraws on every keystroke to keep "Unsaved changes" honest.
+        let subscriptions = [&name, &conventions]
+            .into_iter()
+            .map(|input| cx.observe(input, |_, _, cx| cx.notify()))
+            .collect();
+        let focus = name.read(cx).focus_handle();
+        let editor = &mut self.crew_surfaces.editor;
+        editor.conventions_preview = false;
+        editor.popup = None;
+        editor.edit = Some(CrewEditForm {
+            name,
+            conventions,
+            saving: false,
+            _subscriptions: subscriptions,
+        });
+        focus.focus(window);
+        cx.notify();
+    }
+
+    pub(super) fn cancel_crew_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let editor = &mut self.crew_surfaces.editor;
+        if editor.edit.as_ref().is_some_and(|form| form.saving) {
+            return;
+        }
+        editor.edit = None;
+        window.focus(&self.root_focus);
+        cx.notify();
+    }
+
+    pub(super) fn save_crew_edit(&mut self, cx: &mut Context<Self>) {
+        let editor = &mut self.crew_surfaces.editor;
+        let (Some(crew), Some(form)) = (editor.crew.as_ref(), editor.edit.as_mut()) else {
+            return;
+        };
+        let name = form.name.read(cx).text().trim().to_owned();
+        if form.saving || name.is_empty() {
+            return;
+        }
+        form.saving = true;
+        editor.error = None;
+        let input = UpdateCrewInput {
+            name: Some(name),
+            system_prompt_addendum: Some(trimmed_option(form.conventions.read(cx).text())),
+            ..Default::default()
+        };
         let crew_id = crew.id.clone();
         let core = self.core(cx).clone();
         let task = cx.background_spawn(async move {
-            let result = runner_backend::ops::crew::crew_update(
-                &core,
-                &crew_id,
-                UpdateCrewInput {
-                    name: Some(next),
-                    ..Default::default()
-                },
-            )
-            .map(|_| ())
-            .map_err(|error| error.to_string());
+            let result = runner_backend::ops::crew::crew_update(&core, &crew_id, input)
+                .map(|_| ())
+                .map_err(|error| error.to_string());
             (crew_id, result)
         });
         self.finish_crew_update(task, cx);
         cx.notify();
     }
+
+    fn on_crew_page_key_down(
+        &mut self,
+        event: &KeyDownEvent,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(form) = self.crew_surfaces.editor.edit.as_ref() else {
+            return;
+        };
+        let composing =
+            form.name.read(cx).is_composing() || form.conventions.read(cx).is_composing();
+        if composing || form.saving {
+            return;
+        }
+        match event.keystroke.key.as_str() {
+            "escape" => {
+                cx.stop_propagation();
+                self.cancel_crew_edit(window, cx);
+            }
+            "enter" if form.name.read(cx).focus_handle().is_focused(window) => {
+                cx.stop_propagation();
+                self.save_crew_edit(cx);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Whether the edit holds anything a save would write.
+pub(super) fn crew_edit_is_dirty(form: &CrewEditForm, crew: &Crew, cx: &App) -> bool {
+    form.name.read(cx).text().trim() != crew.name.trim()
+        || trimmed_option(form.conventions.read(cx).text())
+            != crew
+                .system_prompt_addendum
+                .as_deref()
+                .and_then(trimmed_option)
+}
+
+fn crew_details(crew: &Crew, editing: bool) -> AnyElement {
+    let now = chrono::Local::now();
+    let date = |timestamp: runner_backend::model::Timestamp| {
+        short_date(&timestamp.with_timezone(&chrono::Local), &now)
+    };
+    let (created, updated) = (date(crew.created_at), date(crew.updated_at));
+    let dates = if updated == created {
+        format!("Created {created}")
+    } else {
+        format!("Created {created} · updated {updated}")
+    };
+    section()
+        .gap(rems(6. / 16.))
+        .when(editing, |section| section.opacity(0.4))
+        .text_size(theme::text_ui())
+        .child(div().text_color(theme::faint()).child(dates))
+        .child(
+            div()
+                .font_family(theme::UI_MONOSPACE_FONT)
+                .text_size(theme::text_caption())
+                .text_color(theme::faint())
+                .child(short_id(&crew.id)),
+        )
+        .into_any_element()
 }

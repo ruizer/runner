@@ -132,9 +132,9 @@ The key insight: **a Role is config; a Session is its runtime instance** — sam
 │      │             │ composes        │    │     │  spawned & owned by               │
 │      │           Crew                │    │     │                                   │
 │      │             │                 │    │   Mission ─── events.ndjson             │
-│      │             ├── system_prompt │    │     │              │                    │
-│      │             │   addendum      │    │     │              ├─► Signal           │
-│      │             └── default goal  │    │     │              └─► Message          │
+│      │             └── system_prompt │    │     │              │                    │
+│      │                 addendum      │    │     │              ├─► Signal           │
+│      │                               │    │     │              └─► Message          │
 │      │                               │    │     │                                   │
 │      └─ direct chat session (off-bus, no mission, no router) ◄───────────────────── │
 │                                      │    │     │                                   │
@@ -161,7 +161,7 @@ Runtime argv is composed by the adapter in `router/runtime.rs` from the stored r
 
 ### 3.3 Crew — *a configured team, composed of slots*
 
-A named, persistent group of **slots**. Carries the default mission goal and the optional team-conventions addendum. It does not run. It is blueprint.
+A named, persistent group of **slots**. Carries the optional team-conventions addendum, its only prose. It does not run. It is blueprint. Every mission states its own goal; the crew's `purpose` and `goal` columns remain for the CLI's `--purpose` and `--goal` but reach neither the app nor a mission (#699).
 
 Crews are composed of **slots**, not roles directly. A slot is the indirection that lets the same role participate in many crews:
 
@@ -697,8 +697,8 @@ On Windows, release builds add exactly the sidecar directory to `HKCU\Environmen
 crews (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  purpose TEXT,
-  goal TEXT,                          -- default mission goal
+  purpose TEXT,                       -- CLI only; not shown or searched (#699)
+  goal TEXT,                          -- CLI only; never reaches a mission (#699)
   system_prompt_addendum TEXT,        -- Layer-2 team conventions; nullable
   created_at TEXT, updated_at TEXT
 );

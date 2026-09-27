@@ -4,8 +4,9 @@ use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, px, rems, rgb, svg, AlignSelf, App, Bounds, Context, ElementId, Entity,
-    FocusHandle, FontWeight, KeyDownEvent, Pixels, Render, ScrollHandle, SharedString, Window,
+    canvas, div, px, rems, rgb, svg, AlignSelf, AnyElement, App, Bounds, Context, ElementId,
+    Entity, FocusHandle, FontWeight, KeyDownEvent, Pixels, Render, ScrollHandle, SharedString,
+    Window,
 };
 use runner_backend::ops::runtime::RuntimeCatalogEntry;
 
@@ -14,7 +15,7 @@ use crate::ui::app_zoom;
 use crate::ui::menu::{
     popup_layer_sized, DismissHandler, MenuItem, MenuKey, MenuState, PopupWidth,
 };
-use crate::ui::scrollbar::Scrollbar;
+use crate::ui::scrollbar::{app_scrollbar_gutter, Scrollbar};
 
 pub type SelectHandler = Rc<dyn Fn(String, &mut Window, &mut App)>;
 
@@ -479,172 +480,250 @@ impl Render for StyledSelect {
 
         if let (true, Some(anchor)) = (open, self.anchor_bounds) {
             let select_entity = cx.entity();
-            let rows = self
-                .options
-                .iter()
-                .cloned()
-                .enumerate()
-                .map(|(index, option)| {
-                    let active = option.value == self.value;
-                    let highlighted = self.state.highlighted() == index;
-                    let stacked = self.detailed || option.description.is_some();
-                    let foreground = if option.disabled {
-                        theme::faint()
-                    } else if option.danger {
-                        theme::with_alpha(theme::danger(), if active { 1. } else { 0.8 })
-                    } else if active || self.detailed || self.runtime_style {
-                        theme::text()
-                    } else {
-                        theme::muted()
-                    };
-                    let click_entity = select_entity.clone();
-                    div()
-                        .id(("select-option", index))
-                        .debug_selector(|| format!("STYLED_SELECT_OPTION_{index}"))
-                        .w_full()
-                        .px(rems(if self.detailed { 10. / 16. } else { 12. / 16. }))
-                        .py_2()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .when(stacked, |row| row.items_start())
-                        .when(self.detailed, |row| row.rounded(rems(4. / 16.)))
-                        .opacity(if option.disabled { 0.5 } else { 1. })
-                        .when(active || highlighted, |row| {
-                            row.bg(if option.danger {
-                                theme::with_alpha(theme::danger(), 0.1)
-                            } else {
-                                theme::raised()
-                            })
-                        })
-                        .when(!option.disabled, |row| {
-                            row.cursor_pointer().hover(|row| {
-                                if option.danger {
-                                    row.bg(theme::with_alpha(theme::danger(), 0.1))
-                                } else {
-                                    row.bg(theme::raised())
-                                }
-                            })
-                        })
-                        .children(option.swatch.map(|color| {
-                            div()
-                                .size(rems(12. / 16.))
-                                .flex_none()
-                                .rounded(rems(2. / 16.))
-                                .bg(rgb(color))
-                                .when(stacked, |swatch| swatch.mt(rems(2. / 16.)))
-                        }))
-                        .child(
-                            div()
-                                .flex_1()
-                                .min_w(px(0.))
-                                .flex()
-                                .flex_col()
-                                .gap(rems(2. / 16.))
-                                .child(
-                                    div()
-                                        .truncate()
-                                        .text_size(if self.detailed {
-                                            theme::text_body()
-                                        } else {
-                                            theme::text_title()
-                                        })
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .text_color(foreground)
-                                        .when(self.monospace, |label| {
-                                            label.font_family(theme::UI_MONOSPACE_FONT)
-                                        })
-                                        .child(option.label),
-                                )
-                                .children(option.description.map(|description| {
-                                    div()
-                                        .text_size(theme::text_meta())
-                                        .text_color(if self.detailed {
-                                            theme::muted()
-                                        } else {
-                                            theme::faint()
-                                        })
-                                        .child(description)
-                                })),
-                        )
-                        .when(active && !self.detailed, |row| {
-                            row.child(
-                                svg()
-                                    .debug_selector(|| "STYLED_SELECT_CHECK".into())
-                                    .path("check.svg")
-                                    .size(rems(14. / 16.))
-                                    .flex_none()
-                                    .map(|mut check| {
-                                        // Stacked rows top-align their items; the check still
-                                        // sits on the row's centre line.
-                                        check.style().align_self = Some(AlignSelf::Center);
-                                        check
-                                    })
-                                    .text_color(if option.danger {
-                                        theme::danger()
-                                    } else {
-                                        theme::accent()
-                                    }),
-                            )
-                        })
-                        .when(!option.disabled, |row| {
-                            row.on_click(move |_, window, cx| {
-                                click_entity
-                                    .update(cx, |select, cx| select.choose(index, window, cx));
-                            })
-                        })
-                });
-            let menu = div()
-                .id("styled-select-options")
-                .debug_selector(|| "STYLED_SELECT_MENU".into())
-                .relative()
-                .max_h(rems(260. / 16.))
-                .overflow_hidden()
-                .rounded(rems(if self.detailed { 6. / 16. } else { 4. / 16. }))
-                .border_1()
-                .border_color(if self.detailed {
-                    theme::border()
-                } else {
-                    theme::border_strong()
-                })
-                .bg(theme::panel())
-                .shadow_xl()
-                .child(
-                    div()
-                        .id("styled-select-scroll")
-                        .debug_selector(|| "STYLED_SELECT_SCROLL".into())
-                        .max_h(rems(260. / 16.))
-                        .overflow_y_scroll()
-                        .scrollbar_width(px(0.))
-                        .track_scroll(&self.menu_scroll)
-                        .when(self.detailed, |menu| menu.p_1())
-                        .when(!self.detailed, |menu| menu.py_1())
-                        .children(rows),
-                )
-                .child(self.menu_scrollbar.clone())
-                .into_any_element();
+            let menu = option_menu(
+                &self.options,
+                &self.value,
+                self.state.highlighted(),
+                OptionMenuStyle {
+                    detailed: self.detailed,
+                    monospace: self.monospace,
+                    runtime_style: self.runtime_style,
+                },
+                &self.menu_scroll,
+                self.menu_scrollbar.clone(),
+                Rc::new(move |index, window, cx| {
+                    select_entity.update(cx, |select, cx| select.choose(index, window, cx));
+                }),
+            );
             let dismiss_entity: Entity<Self> = cx.entity();
             let dismiss: DismissHandler = Rc::new(move |_, cx| {
                 dismiss_entity.update(cx, |select, cx| select.close(cx));
             });
-            // Options with descriptions read best on one line each, so the menu grows to
-            // fit them instead of wrapping inside the trigger's width.
-            let min_width = anchor.size.width.max(self.min_menu_width * zoom);
-            let width = if self
-                .options
-                .iter()
-                .any(|option| option.description.is_some())
-            {
-                PopupWidth::Fit {
-                    min: min_width,
-                    max: px(480.) * zoom,
-                }
-            } else {
-                PopupWidth::Fixed(min_width)
-            };
+            let width = option_menu_width(
+                &self.options,
+                anchor.size.width.max(self.min_menu_width * zoom),
+                zoom,
+            );
             root = root.child(popup_layer_sized(anchor, window, width, menu, dismiss));
         }
         root
+    }
+}
+
+/// How an option menu draws its rows.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct OptionMenuStyle {
+    /// Roomier rows with inset corners and no check, for rich pickers.
+    pub detailed: bool,
+    pub monospace: bool,
+    /// Every row reads at full contrast, as a runtime list does.
+    pub runtime_style: bool,
+}
+
+pub(crate) type OptionHandler = Rc<dyn Fn(usize, &mut Window, &mut App)>;
+
+/// The option list a select or the model field opens: each row's label with
+/// its description under it and a check centred on the chosen row, in a
+/// scroll list whose bar sits inside the menu's padding.
+pub(crate) fn option_menu(
+    options: &[SelectOption],
+    value: &str,
+    highlighted: usize,
+    style: OptionMenuStyle,
+    scroll: &ScrollHandle,
+    scrollbar: Entity<Scrollbar>,
+    on_choose: OptionHandler,
+) -> AnyElement {
+    let rows = options.iter().cloned().enumerate().map(|(index, option)| {
+        let active = option.value == value;
+        let highlighted = highlighted == index;
+        let stacked = style.detailed || option.description.is_some();
+        let foreground = if option.disabled {
+            theme::faint()
+        } else if option.danger {
+            theme::with_alpha(theme::danger(), if active { 1. } else { 0.8 })
+        } else if active || style.detailed || style.runtime_style {
+            theme::text()
+        } else {
+            theme::muted()
+        };
+        let on_choose = Rc::clone(&on_choose);
+        div()
+            .id(("select-option", index))
+            .debug_selector(|| format!("STYLED_SELECT_OPTION_{index}"))
+            .w_full()
+            .px(rems(if style.detailed { 10. / 16. } else { 12. / 16. }))
+            .py_2()
+            .flex()
+            .items_center()
+            .gap_2()
+            .when(stacked, |row| row.items_start())
+            .when(style.detailed, |row| row.rounded(rems(4. / 16.)))
+            .opacity(if option.disabled { 0.5 } else { 1. })
+            .when(active || highlighted, |row| {
+                row.bg(if option.danger {
+                    theme::with_alpha(theme::danger(), 0.1)
+                } else {
+                    theme::raised()
+                })
+            })
+            .when(!option.disabled, |row| {
+                row.cursor_pointer().hover(|row| {
+                    if option.danger {
+                        row.bg(theme::with_alpha(theme::danger(), 0.1))
+                    } else {
+                        row.bg(theme::raised())
+                    }
+                })
+            })
+            .children(option.swatch.map(|color| {
+                div()
+                    .size(rems(12. / 16.))
+                    .flex_none()
+                    .rounded(rems(2. / 16.))
+                    .bg(rgb(color))
+                    .when(stacked, |swatch| swatch.mt(rems(2. / 16.)))
+            }))
+            .child(
+                div()
+                    .flex_1()
+                    .min_w(px(0.))
+                    .flex()
+                    .flex_col()
+                    .gap(rems(2. / 16.))
+                    .child(
+                        div()
+                            .truncate()
+                            .text_size(if style.detailed {
+                                theme::text_body()
+                            } else {
+                                theme::text_title()
+                            })
+                            .font_weight(FontWeight::MEDIUM)
+                            .text_color(foreground)
+                            .when(style.monospace, |label| {
+                                label.font_family(theme::UI_MONOSPACE_FONT)
+                            })
+                            .child(option.label),
+                    )
+                    .children(option.description.map(|description| {
+                        div()
+                            .text_size(theme::text_meta())
+                            .text_color(if style.detailed {
+                                theme::muted()
+                            } else {
+                                theme::faint()
+                            })
+                            .child(description)
+                    })),
+            )
+            .when(active && !style.detailed, |row| {
+                row.child(
+                    svg()
+                        .debug_selector(|| "STYLED_SELECT_CHECK".into())
+                        .path("check.svg")
+                        .size(rems(14. / 16.))
+                        .flex_none()
+                        .map(|mut check| {
+                            // Stacked rows top-align their items; the check still
+                            // sits on the row's centre line.
+                            check.style().align_self = Some(AlignSelf::Center);
+                            check
+                        })
+                        .text_color(if option.danger {
+                            theme::danger()
+                        } else {
+                            theme::accent()
+                        }),
+                )
+            })
+            .when(!option.disabled, |row| {
+                row.on_click(move |_, window, cx| on_choose(index, window, cx))
+            })
+    });
+    // A list that scrolls gives its scrollbar a lane of its own, so no row,
+    // highlight or check sits under the thumb. Whether it scrolls is known
+    // once it is laid out; the canvas below renders once more if that changed.
+    let scrolls = menu_scrolls(scroll);
+    let measured = scroll.clone();
+    div()
+        .id("styled-select-options")
+        .debug_selector(|| "STYLED_SELECT_MENU".into())
+        .relative()
+        .max_h(rems(260. / 16.))
+        .overflow_hidden()
+        .rounded(rems(if style.detailed { 6. / 16. } else { 4. / 16. }))
+        .border_1()
+        .border_color(if style.detailed {
+            theme::border()
+        } else {
+            theme::border_strong()
+        })
+        .bg(theme::panel())
+        .shadow_xl()
+        .child(
+            div()
+                .id("styled-select-scroll")
+                .debug_selector(|| "STYLED_SELECT_SCROLL".into())
+                .max_h(rems(260. / 16.))
+                .overflow_y_scroll()
+                .scrollbar_width(px(0.))
+                .track_scroll(scroll)
+                .when(style.detailed, |menu| menu.p_1())
+                .when(!style.detailed, |menu| menu.py_1())
+                .when(scrolls, |menu| menu.pr(app_scrollbar_gutter()))
+                .children(rows),
+        )
+        .child(
+            div()
+                .debug_selector(|| "STYLED_SELECT_SCROLLBAR".into())
+                .absolute()
+                // Inset by the list's padding, clear of the rounded top and
+                // bottom.
+                .top(rems(4. / 16.))
+                .bottom(rems(4. / 16.))
+                .right_0()
+                .w(app_scrollbar_gutter())
+                .child(scrollbar),
+        )
+        .child(
+            canvas(
+                move |_, window, cx| {
+                    if menu_scrolls(&measured) != scrolls {
+                        rerender_after_draw(window, cx);
+                    }
+                },
+                |_, _, _, _| {},
+            )
+            .absolute()
+            .size_0(),
+        )
+        .into_any_element()
+}
+
+/// Whether the list has anything to scroll, past sub-pixel rounding.
+fn menu_scrolls(scroll: &ScrollHandle) -> bool {
+    scroll.max_offset().height >= px(1.)
+}
+
+/// Renders the view being drawn once more, for an element whose look depends
+/// on its own layout. Mid-draw `Window::refresh` is ignored, so this notifies
+/// the view once the draw's effects flush.
+pub(crate) fn rerender_after_draw(window: &Window, cx: &mut App) {
+    let view = window.current_view();
+    cx.defer(move |cx| cx.notify(view));
+}
+
+/// Options with descriptions read best on one line each, so their menu grows
+/// to fit them instead of wrapping inside the trigger's width.
+pub(crate) fn option_menu_width(options: &[SelectOption], min: Pixels, zoom: f32) -> PopupWidth {
+    if options.iter().any(|option| option.description.is_some()) {
+        PopupWidth::Fit {
+            min,
+            max: px(480.) * zoom,
+        }
+    } else {
+        PopupWidth::Fixed(min)
     }
 }
 
@@ -774,6 +853,10 @@ mod tests {
                 max_offset.height,
                 px(0.),
                 "{rem}: three options never scroll"
+            );
+            assert!(
+                row.right() >= menu.right() - px(2.),
+                "{rem}: with nothing to scroll no scrollbar lane is kept: {row:?} in {menu:?}"
             );
 
             visual.simulate_click(trigger.center(), Modifiers::default());

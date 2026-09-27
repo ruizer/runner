@@ -149,12 +149,9 @@ pub fn get(conn: &Connection, id: &str) -> Result<Crew> {
     repo::crew::get(conn, id)?.ok_or_else(|| Error::msg(format!("crew not found: {id}")))
 }
 
-/// Reject `crew.goal` payloads that would push the composed lead
-/// launch prompt past `router::runtime::FIRST_TURN_ARGV_MAX_BYTES`
-/// once layered with `system_prompt` + roster + coordination block.
-/// `mission_start` uses the per-mission `goal_override` when set,
-/// else this default; capping at the same `MAX_MISSION_GOAL_BYTES`
-/// limit at both layers makes the invariant uniform.
+/// Cap `crew.goal` at `MAX_MISSION_GOAL_BYTES`. The column is kept for
+/// the CLI's `--goal` but no longer reaches a mission: every mission
+/// states its own goal (#699).
 fn validate_crew_goal(goal: Option<&str>) -> Result<()> {
     if let Some(g) = goal {
         if g.len() > crate::ops::mission::MAX_MISSION_GOAL_BYTES {
@@ -300,11 +297,8 @@ mod tests {
 
     #[test]
     fn create_rejects_goal_over_cap() {
-        // Plan 0007: validation at persist time keeps the composed
-        // launch prompt under the runtime argv ceiling. crew.goal
-        // feeds into the lead's launch prompt at mission_start (the
-        // mission_goal event uses goal_override || crew.goal), so
-        // the same cap applies here.
+        // Plan 0007: the CLI can still write crew.goal, and it keeps
+        // the mission goal's cap.
         let pool = ctx();
         let conn = pool.get().unwrap();
         let oversized = "Y".repeat(crate::ops::mission::MAX_MISSION_GOAL_BYTES + 1);
@@ -412,8 +406,6 @@ mod tests {
 
         for query in [
             "NAME NEEDLE",
-            "purpose needle",
-            "goal needle",
             "system prompt needle",
             "slot-needle",
             "role-needle",
@@ -423,6 +415,12 @@ mod tests {
             assert_eq!(page.filtered_count, 1, "query {query:?}");
             assert_eq!(page.items[0].crew.id, target.id, "query {query:?}");
             assert_eq!(page.items[0].members.len(), 1, "query {query:?}");
+        }
+        // Purpose and the default goal left the app (#699), so a search
+        // never matches text nobody can see.
+        for query in ["purpose needle", "goal needle"] {
+            let page = list_page(&conn, 1, 8, query).unwrap();
+            assert_eq!(page.filtered_count, 0, "query {query:?}");
         }
     }
 

@@ -4,7 +4,7 @@ mod detail;
 mod edit;
 mod forms;
 mod list;
-mod logic;
+pub(crate) mod logic;
 mod menu;
 #[cfg(test)]
 mod tests;
@@ -28,7 +28,7 @@ use crate::*;
 const FORM_WIDTH: f32 = 576.;
 const FIELD_WIDTH: f32 = 528.;
 /// The role page's left column, which holds the profile, setup and crews.
-const ROLE_COLUMN_WIDTH: f32 = 272.;
+const ROLE_COLUMN_WIDTH: f32 = crate::surfaces::profile_page::PROFILE_COLUMN_WIDTH;
 
 #[derive(Default)]
 struct RoleDetailState {
@@ -87,10 +87,8 @@ struct CreateRoleForm {
 
 struct RoleEditForm {
     role: Role,
-    slot: Option<runner_backend::model::SlotWithRole>,
     runtimes: Vec<RuntimeCatalogEntry>,
     runtime: String,
-    runtime_pinned: bool,
     permission_mode: PermissionMode,
     display_name: Entity<TextField>,
     command: Entity<TextField>,
@@ -103,15 +101,7 @@ struct RoleEditForm {
     runtime_select: Entity<RuntimeSelect>,
     working_dir: Entity<TextField>,
     system_prompt: Entity<TextField>,
-    scroll: ScrollHandle,
-    scrollbar: Entity<Scrollbar>,
     browse_focus: FocusHandle,
-    runtime_hint_focus: FocusHandle,
-    args_hint_focus: FocusHandle,
-    model_hint_focus: FocusHandle,
-    effort_hint_focus: FocusHandle,
-    permission_hint_focus: FocusHandle,
-    close_focus: FocusHandle,
     cancel_focus: FocusHandle,
     submit_focus: FocusHandle,
     display_name_valid: bool,
@@ -180,16 +170,7 @@ impl RoleSurfaces {
 
 struct RoleEditResolution {
     runtime: String,
-    runtime_pinned: bool,
     command: String,
     model: String,
     effort: String,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct RuntimeLayerResolution {
-    runtime: String,
-    runtime_pinned: bool,
-    model: Option<String>,
-    effort: Option<String>,
 }

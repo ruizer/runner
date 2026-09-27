@@ -5,15 +5,19 @@ mod editor_sections;
 mod list;
 mod logic;
 mod overlays;
+mod popup;
 mod slots;
 #[cfg(test)]
 mod tests;
 
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::rc::Rc;
 
 use gpui::prelude::*;
-use gpui::{div, rems, Context, Entity, FocusHandle, ScrollHandle, Subscription, Window};
+use gpui::{
+    div, rems, Bounds, Context, Entity, FocusHandle, Pixels, ScrollHandle, Subscription, Window,
+};
 use runner_app::ui::{ContextMenu, ModelField, Scrollbar, SearchInput, StyledSelect, TextField};
 use runner_backend::model::{Crew, SlotWithRole};
 use runner_backend::ops::crew::CrewListItem;
@@ -58,28 +62,58 @@ struct CrewEditorState {
     loaded: bool,
     loading: bool,
     error: Option<String>,
-    name: Option<Entity<TextField>>,
-    _name_subscription: Option<Subscription>,
-    original_name: String,
-    name_changed: bool,
-    name_dirty: bool,
-    name_empty: bool,
-    goal_edit: Option<Entity<TextField>>,
-    conventions_edit: Option<Entity<TextField>>,
-    saving_name: bool,
-    saving_goal: bool,
-    saving_conventions: bool,
+    /// Edit in place: the name and conventions, saved together.
+    edit: Option<CrewEditForm>,
+    /// The conventions card shows the whole text instead of its first lines.
+    conventions_expanded: bool,
+    /// The conventions editor shows the rendered draft.
+    conventions_preview: bool,
+    /// The missions card lists every mission instead of the latest four.
+    missions_expanded: bool,
+    popup: Option<SlotPopup>,
     reordering: bool,
     dragged_slot_id: Option<String>,
     drop_target: Option<usize>,
 }
 
+struct CrewEditForm {
+    name: Entity<TextField>,
+    conventions: Entity<TextField>,
+    saving: bool,
+    _subscriptions: Vec<Subscription>,
+}
+
+/// The popover beside a clicked slot row.
+struct SlotPopup {
+    slot_id: String,
+    /// The row's bounds, which its canvas refreshes every frame.
+    anchor: Rc<Cell<Bounds<Pixels>>>,
+    focus: FocusHandle,
+    open_role_focus: FocusHandle,
+    remove_focus: FocusHandle,
+    edit: Option<SlotOverrideForm>,
+}
+
+/// Edit overrides: the slot's runtime, model and effort, saved to the slot.
+struct SlotOverrideForm {
+    runtimes: Vec<RuntimeCatalogEntry>,
+    /// The runtime override; `None` runs the role's runtime.
+    runtime: Option<String>,
+    runtime_select: Entity<StyledSelect>,
+    model: Entity<TextField>,
+    model_field: Entity<ModelField>,
+    /// The effort override; empty inherits.
+    effort: String,
+    effort_select: Entity<StyledSelect>,
+    /// Reset for the runtime, the model and the effort.
+    reset_focus: [FocusHandle; 3],
+    saving: bool,
+    error: Option<String>,
+    _subscriptions: Vec<Subscription>,
+}
+
 struct CreateCrewForm {
     name: Entity<TextField>,
-    purpose: Entity<TextField>,
-    goal: Entity<TextField>,
-    purpose_hint_focus: FocusHandle,
-    goal_hint_focus: FocusHandle,
     close_focus: FocusHandle,
     cancel_focus: FocusHandle,
     submit_focus: FocusHandle,
@@ -123,13 +157,6 @@ enum CrewMenuAction {
     Delete { id: String, name: String },
 }
 
-#[derive(Clone)]
-enum SlotMenuAction {
-    SetLead(String),
-    Edit(SlotWithRole),
-    Remove(SlotWithRole),
-}
-
 struct CrewDeleteConfirm {
     id: String,
     name: String,
@@ -141,6 +168,8 @@ struct SlotRemoveConfirm {
 
 pub(crate) struct CrewSurfaces {
     list: ListControls<CrewListItem>,
+    /// The list row under the pointer, which trades its play icon for a button.
+    hovered_row: Option<String>,
     search: Entity<SearchInput>,
     scroll: ScrollHandle,
     scrollbar: Entity<Scrollbar>,
@@ -160,7 +189,7 @@ impl CrewSurfaces {
             SearchInput::new(
                 "",
                 "Search crews",
-                "Search crews…",
+                "Search crews, slots and roles",
                 Rc::new(move |query, cx| {
                     root.update(cx, |this, cx| this.set_crew_query(query, cx));
                 }),
@@ -172,6 +201,7 @@ impl CrewSurfaces {
         let scrollbar = cx.new(|_| Scrollbar::app(scroll.clone(), owner));
         Self {
             list: ListControls::default(),
+            hovered_row: None,
             search,
             scroll,
             scrollbar,

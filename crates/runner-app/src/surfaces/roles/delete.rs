@@ -1,14 +1,18 @@
 use std::rc::Rc;
 
 use gpui::prelude::*;
-use gpui::{AnyElement, Context};
+use gpui::{AnyElement, Context, Window};
 use runner_app::ui::ConfirmDialog;
 
 use crate::surfaces::*;
 use crate::*;
 
 impl NativeRoot {
-    pub(crate) fn render_entity_overlays(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_entity_overlays(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
         let mut overlays = Vec::new();
         if let Some(menu) = self.role_surfaces.context_menu.clone() {
             overlays.push(menu.into_any_element());
@@ -18,14 +22,6 @@ impl NativeRoot {
         }
         if self.role_surfaces.create.is_some() {
             overlays.push(self.render_create_role_modal(cx));
-        }
-        if self
-            .role_surfaces
-            .edit
-            .as_ref()
-            .is_some_and(|form| form.slot.is_some())
-        {
-            overlays.push(self.render_role_edit_drawer(cx));
         }
         if self.role_surfaces.delete_confirm.is_some() {
             overlays.push(self.render_role_delete_confirm(cx));
@@ -39,7 +35,7 @@ impl NativeRoot {
                 workspace.render_mission_overlays(workspace_cx)
             }));
         }
-        overlays.extend(self.render_crew_overlays(cx));
+        overlays.extend(self.render_crew_overlays(window, cx));
         overlays
     }
 

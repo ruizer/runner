@@ -17,7 +17,7 @@ use gpui::{
 use runner_app::ui::list::LIST_PAGE_PADDING_X;
 use runner_app::ui::{
     Button, ButtonSize, ButtonVariant, EmptyStateCard, IconButton, IconButtonSize,
-    PaginatedListPage, RoleAvatar, Tooltip,
+    PaginatedListPage, RoleAvatar,
 };
 use runner_backend::ops::role::RoleWithActivity;
 
@@ -211,7 +211,7 @@ impl NativeRoot {
         match route {
             AppRoute::Chat => self.render_active_tab(window, cx),
             AppRoute::Roles => self.render_roles_page(window, cx),
-            AppRoute::RoleDetail(_) => self.render_role_detail(cx),
+            AppRoute::RoleDetail(_) => self.render_role_detail(window, cx),
             AppRoute::Crews | AppRoute::CrewEditor(_) => self.render_crew_surface(window, cx),
             AppRoute::Mission(_) => self.mission_workspace.clone().into_any_element(),
             AppRoute::ArchivedChat => self.render_archived_chat(window, cx),
@@ -535,11 +535,7 @@ impl NativeRoot {
                     .items_center()
                     .justify_end()
                     .gap_1()
-                    .child(Tooltip::new(
-                        SharedString::from(format!("role-chat-tooltip-{id}")),
-                        "Start a new chat",
-                        chat,
-                    ))
+                    .child(chat)
                     .child(
                         IconButton::new(
                             SharedString::from(format!("role-actions-{id}")),

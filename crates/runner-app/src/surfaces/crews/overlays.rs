@@ -1,5 +1,5 @@
 use gpui::prelude::*;
-use gpui::{AnyElement, Context};
+use gpui::{AnyElement, Context, Window};
 
 use crate::surfaces::*;
 use crate::*;
@@ -93,8 +93,13 @@ impl NativeRoot {
         cx.notify();
     }
 
-    pub(crate) fn render_crew_overlays(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    pub(crate) fn render_crew_overlays(
+        &mut self,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
         let mut overlays = Vec::new();
+        overlays.extend(self.render_slot_popup(window, cx));
         if self.crew_surfaces.create.is_some() {
             overlays.push(self.render_create_crew_modal(cx));
         }
@@ -127,16 +132,7 @@ impl NativeRoot {
                 );
                 match result {
                     Ok(()) => {
-                        let editor = &mut this.crew_surfaces.editor;
-                        if editor.saving_goal {
-                            editor.goal_edit = None;
-                        }
-                        if editor.saving_conventions {
-                            editor.conventions_edit = None;
-                        }
-                        editor.saving_name = false;
-                        editor.saving_goal = false;
-                        editor.saving_conventions = false;
+                        this.crew_surfaces.editor.edit = None;
                         if reload_editor {
                             this.load_crew_editor(crew_id, cx);
                         }
@@ -144,9 +140,9 @@ impl NativeRoot {
                     }
                     Err(error) => {
                         let editor = &mut this.crew_surfaces.editor;
-                        editor.saving_name = false;
-                        editor.saving_goal = false;
-                        editor.saving_conventions = false;
+                        if let Some(form) = editor.edit.as_mut() {
+                            form.saving = false;
+                        }
                         editor.error = Some(error);
                     }
                 }

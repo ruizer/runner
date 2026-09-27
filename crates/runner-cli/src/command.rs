@@ -185,10 +185,11 @@ enum RoleCommand {
 
 #[derive(Args, Debug, Default)]
 struct CrewCreateFields {
-    /// Short description of the crew.
+    /// Stored for compatibility; Runner no longer shows or uses it.
     #[arg(long)]
     purpose: Option<String>,
-    /// Default mission goal.
+    /// Stored for compatibility; missions never read it. Give each mission
+    /// its goal with `mission start --goal`.
     #[arg(long)]
     goal: Option<String>,
     /// Read crew conventions from a file, or - for stdin.
@@ -201,10 +202,11 @@ struct CrewFields {
     /// New crew name.
     #[arg(long)]
     name: Option<String>,
-    /// Short description; pass an empty value to clear it.
+    /// Stored for compatibility and unused; pass an empty value to clear it.
     #[arg(long)]
     purpose: Option<String>,
-    /// Default mission goal; pass an empty value to clear it.
+    /// Stored for compatibility; missions never read it. Pass an empty
+    /// value to clear it.
     #[arg(long)]
     goal: Option<String>,
     /// Read crew conventions from a file, or - for stdin.
