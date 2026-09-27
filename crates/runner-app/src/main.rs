@@ -47,7 +47,7 @@ use runner_app::ui::{
     Scrollbar, SessionControl, SessionControlKind, Tooltip, WorkspaceHeader,
     WORKSPACE_HEADER_HEIGHT,
 };
-use runner_app::{theme, Copy, Cut, Paste, SelectAll};
+use runner_app::{theme, Copy, Cut, Paste, Redo, SelectAll, Undo};
 use runner_backend::model::SessionStatus;
 use runner_backend::ops::session::DirectSessionEntry;
 use runner_backend::session::manager::SessionActivityState;
@@ -1451,6 +1451,9 @@ pub(crate) fn app_menus() -> Vec<Menu> {
         Menu {
             name: "Edit".into(),
             items: vec![
+                MenuItem::os_action("Undo", Undo, OsAction::Undo),
+                MenuItem::os_action("Redo", Redo, OsAction::Redo),
+                MenuItem::separator(),
                 MenuItem::os_action("Cut", Cut, OsAction::Cut),
                 MenuItem::os_action("Copy", Copy, OsAction::Copy),
                 MenuItem::os_action("Paste", Paste, OsAction::Paste),
