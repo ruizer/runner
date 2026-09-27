@@ -173,12 +173,8 @@ fn render_crew_list(value: &Value) -> Vec<String> {
 }
 
 fn render_crew(value: &Value) -> Vec<String> {
-    key_values(&[
-        ("NAME", value.get("name")),
-        ("ID", value.get("id")),
-        ("PURPOSE", value.get("purpose")),
-        ("GOAL", value.get("goal")),
-    ])
+    // Purpose and the stored goal reach neither the app nor a mission (#699).
+    key_values(&[("NAME", value.get("name")), ("ID", value.get("id"))])
 }
 
 fn render_crew_show(value: &Value) -> Vec<String> {
@@ -877,12 +873,7 @@ mod tests {
         );
         assert_eq!(
             render_default(View::Crew, &crew),
-            [
-                "NAME     Peer",
-                "ID       crew-id",
-                "PURPOSE  Ship",
-                "GOAL     -"
-            ]
+            ["NAME  Peer", "ID    crew-id"]
         );
         let show = json!({
             "crew": crew,
@@ -895,10 +886,8 @@ mod tests {
         assert_eq!(
             render_default(View::CrewShow, &show),
             [
-                "NAME     Peer",
-                "ID       crew-id",
-                "PURPOSE  Ship",
-                "GOAL     -",
+                "NAME  Peer",
+                "ID    crew-id",
                 "",
                 "HANDLE  LEAD  ROLE   RUNTIME  MODEL  EFFORT",
                 "coder   yes   coder  codex    gpt    high",

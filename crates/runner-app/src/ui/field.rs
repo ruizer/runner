@@ -16,6 +16,7 @@ use crate::text_util;
 use crate::theme;
 use crate::ui::button::{Button, PressHandler};
 use crate::ui::scrollbar::Scrollbar;
+use crate::ui::select::rerender_after_draw;
 use crate::ui::tooltip::Tooltip;
 use crate::{Copy, Cut, Paste, SelectAll};
 
@@ -484,6 +485,10 @@ pub struct TextField {
     auto_grow_rows: Option<u8>,
     key_interceptor: Option<KeyDownInterceptor>,
     truncate_unfocused: bool,
+    /// Unfocused, show the path compacted to fit, keeping its last folder.
+    compact_path: bool,
+    /// The compacted path last chosen for this text: `(text, shown)`.
+    compact_shown: Rc<RefCell<Option<(String, String)>>>,
 }
 
 impl TextField {
@@ -517,6 +522,8 @@ impl TextField {
             auto_grow_rows: None,
             key_interceptor: None,
             truncate_unfocused: false,
+            compact_path: false,
+            compact_shown: Rc::new(RefCell::new(None)),
         }
     }
 
@@ -559,6 +566,14 @@ impl TextField {
 
     pub fn truncate_unfocused(mut self) -> Self {
         self.truncate_unfocused = true;
+        self
+    }
+
+    /// While unfocused, show the text as a path compacted to fit: home as
+    /// `~`, then middle folders folded into `…`, always keeping the last
+    /// folder. Focused, the field edits the full path.
+    pub fn compact_path(mut self) -> Self {
+        self.compact_path = true;
         self
     }
 
@@ -797,6 +812,28 @@ impl TextField {
         self.selecting = false;
     }
 
+    /// The compacted path to show, or `None` while the field edits it.
+    fn compact_path_shown(&self, focused: bool) -> Option<String> {
+        if !self.compact_path || focused || self.kind != TextFieldKind::Input {
+            return None;
+        }
+        let text = &self.buffer.text;
+        if text.is_empty() {
+            return None;
+        }
+        let chosen = self
+            .compact_shown
+            .borrow()
+            .as_ref()
+            .filter(|(source, _)| source == text)
+            .map(|(_, shown)| shown.clone());
+        chosen.or_else(|| {
+            compact_path_candidates(text, home_dir().as_deref())
+                .into_iter()
+                .next()
+        })
+    }
+
     fn render_text(&self, focused: bool) -> AnyElement {
         if self.buffer.text.is_empty() {
             return div()
@@ -804,6 +841,11 @@ impl TextField {
                 .items_center()
                 .min_h(rems(1.))
                 .min_w(px(0.))
+                // A one-line placeholder clips at the content edge, clear of
+                // a trailing control such as a suggestions chevron.
+                .when(self.kind == TextFieldKind::Input, |text| {
+                    text.flex_1().overflow_hidden().whitespace_nowrap()
+                })
                 .text_color(if self.placeholder_as_value {
                     theme::text()
                 } else {
@@ -811,6 +853,17 @@ impl TextField {
                 })
                 .when(focused, |text| text.child(input_caret()))
                 .child(self.placeholder.clone())
+                .into_any_element();
+        }
+
+        if let Some(shown) = self.compact_path_shown(focused) {
+            let rendered = shown.clone();
+            return div()
+                .debug_selector(move || format!("TEXT_FIELD_COMPACT {rendered}"))
+                .min_w(px(0.))
+                .w_full()
+                .truncate()
+                .child(shown)
                 .into_any_element();
         }
 
@@ -1004,6 +1057,9 @@ impl Focusable for TextField {
 impl Render for TextField {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let focused = self.focus_handle.is_focused(window);
+        let compact_shown = self
+            .compact_path_shown(focused)
+            .map(|shown| (self.buffer.text.clone(), shown));
         let input_entity = cx.entity();
         if self.kind != TextFieldKind::Input && self.scrollbar.is_none() {
             let owner = cx.entity_id();
@@ -1117,6 +1173,52 @@ impl Render for TextField {
                         .scrollbar_width(px(0.))
                         .track_scroll(&self.scroll_handle)
                         .child(self.render_text(focused)),
+                )
+            })
+            .when(compact_shown.is_some(), |input| {
+                let (text, rendered) = compact_shown.unwrap_or_default();
+                let cell = Rc::clone(&self.compact_shown);
+                let bare = self.bare;
+                let right_padding = self.right_padding;
+                input.child(
+                    canvas(
+                        move |bounds, window, cx| {
+                            let rem_size = window.rem_size();
+                            let padding = if bare {
+                                px(0.)
+                            } else {
+                                rem_size * ((10. + right_padding) / 16.)
+                            };
+                            let width = bounds.size.width - padding;
+                            let style = window.text_style();
+                            let font_size = style.font_size.to_pixels(rem_size);
+                            let shown = pick_compact_path(
+                                compact_path_candidates(&text, home_dir().as_deref()),
+                                |candidate| {
+                                    window
+                                        .text_system()
+                                        .shape_line(
+                                            candidate.to_owned().into(),
+                                            font_size,
+                                            &[style.to_run(candidate.len())],
+                                            None,
+                                        )
+                                        .width
+                                        <= width
+                                },
+                            );
+                            let changed = shown != rendered;
+                            cell.replace(Some((text.clone(), shown)));
+                            // The pick depends on this frame's width, so a new
+                            // pick renders once more with it.
+                            if changed {
+                                rerender_after_draw(window, cx);
+                            }
+                        },
+                        |_, _, _, _| {},
+                    )
+                    .absolute()
+                    .inset_0(),
                 )
             })
             .when(!self.disabled, |input| {
@@ -1391,7 +1493,7 @@ impl BrowseField {
             input,
             disabled,
             browse_id: "working-dir-browse".into(),
-            browse_label: "Browse…".into(),
+            browse_label: "Browse".into(),
             browse_focus: None,
             on_browse,
         }
@@ -1447,7 +1549,72 @@ pub fn working_dir_text_field(
     text: impl Into<String>,
     placeholder: impl Into<SharedString>,
 ) -> TextField {
-    TextField::new(focus_handle, text, placeholder, true)
+    TextField::new(focus_handle, text, placeholder, true).compact_path()
+}
+
+fn home_dir() -> Option<String> {
+    std::env::home_dir().map(|home| home.to_string_lossy().into_owned())
+}
+
+/// A path's displays, longest first: the path with home shown as `~`, then
+/// with more and more middle folders folded into `…`, down to the root or
+/// `~` and the last folder alone.
+pub(crate) fn compact_path_candidates(path: &str, home: Option<&str>) -> Vec<String> {
+    let separator = if path.contains('\\') && !path.contains('/') {
+        '\\'
+    } else {
+        '/'
+    };
+    let trimmed = path.trim_end_matches(separator);
+    // A bare drive (`C:`) is drive-relative on Windows; the root keeps its
+    // separator.
+    let path = if trimmed.is_empty() || trimmed.ends_with(':') {
+        path
+    } else {
+        trimmed
+    };
+    let home = home
+        .map(|home| home.trim_end_matches(['/', '\\']))
+        .filter(|home| !home.is_empty());
+    let abbreviated = match home {
+        Some(home) if path == home => "~".to_owned(),
+        Some(home)
+            if path
+                .strip_prefix(home)
+                .is_some_and(|rest| rest.starts_with(separator)) =>
+        {
+            format!("~{}", &path[home.len()..])
+        }
+        _ => path.to_owned(),
+    };
+    let mut parts = abbreviated.split(separator);
+    let head = parts.next().unwrap_or_default().to_owned();
+    let folders = parts.filter(|part| !part.is_empty()).collect::<Vec<_>>();
+    let mut candidates = vec![abbreviated.clone()];
+    for keep in (1..folders.len()).rev() {
+        let tail = folders[folders.len() - keep..].join(&separator.to_string());
+        candidates.push(format!("{head}{separator}…{separator}{tail}"));
+    }
+    // A relative path's head is a folder too, and can be long: fold it as
+    // well so the last folder still shows. A root, `~` or a drive stays.
+    if let Some(last) = folders.last() {
+        if !head.is_empty() && head != "~" && !head.ends_with(':') {
+            candidates.push(format!("…{separator}{last}"));
+        }
+    }
+    candidates
+}
+
+/// The longest display that fits, else the shortest.
+pub(crate) fn pick_compact_path(
+    candidates: Vec<String>,
+    mut fits: impl FnMut(&str) -> bool,
+) -> String {
+    let last = candidates.last().cloned().unwrap_or_default();
+    candidates
+        .into_iter()
+        .find(|candidate| fits(candidate))
+        .unwrap_or(last)
 }
 
 pub fn effective_working_dir(
@@ -1669,6 +1836,116 @@ fn is_word(segment: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_path_compacts_to_home_then_folds_its_middle_keeping_the_last_folder() {
+        let home = Some("/Users/jason");
+        assert_eq!(
+            compact_path_candidates("/Users/jason/repos/yicheng47", home),
+            ["~/repos/yicheng47", "~/…/yicheng47"]
+        );
+        assert_eq!(compact_path_candidates("/Users/jason/", home), ["~"]);
+        assert_eq!(
+            compact_path_candidates("/Users/jasonx/repo", home),
+            ["/Users/jasonx/repo", "/…/jasonx/repo", "/…/repo"],
+            "a sibling of home is not under it"
+        );
+        assert_eq!(
+            compact_path_candidates("/opt/work/projects/runner-app", None),
+            [
+                "/opt/work/projects/runner-app",
+                "/…/work/projects/runner-app",
+                "/…/projects/runner-app",
+                "/…/runner-app",
+            ]
+        );
+        assert_eq!(
+            compact_path_candidates(r"C:\Users\jason\repos\runner", Some(r"C:\Users\jason")),
+            [r"~\repos\runner", r"~\…\runner"]
+        );
+        assert_eq!(compact_path_candidates("/", home), ["/"]);
+        assert_eq!(
+            compact_path_candidates(r"C:\", None),
+            [r"C:\"],
+            "a drive root keeps its separator"
+        );
+        assert_eq!(compact_path_candidates(r"C:\Users", None), [r"C:\Users"]);
+        assert_eq!(compact_path_candidates("dir", home), ["dir"]);
+        assert_eq!(
+            compact_path_candidates("very-long-parent-name/final", home),
+            ["very-long-parent-name/final", "…/final"],
+            "a shallow relative path folds its head to keep the last folder"
+        );
+        assert_eq!(
+            compact_path_candidates("a/b/c", home),
+            ["a/b/c", "a/…/c", "…/c"]
+        );
+    }
+
+    #[test]
+    fn the_longest_fitting_display_wins_else_the_shortest() {
+        let candidates = || {
+            vec![
+                "~/repos/yicheng47/runner".to_owned(),
+                "~/…/yicheng47/runner".to_owned(),
+                "~/…/runner".to_owned(),
+            ]
+        };
+        assert_eq!(
+            pick_compact_path(candidates(), |candidate| candidate.chars().count() <= 20),
+            "~/…/yicheng47/runner"
+        );
+        assert_eq!(pick_compact_path(candidates(), |_| false), "~/…/runner");
+        assert_eq!(pick_compact_path(Vec::new(), |_| true), "");
+        let shallow = compact_path_candidates("very-long-parent-name/final", None);
+        assert_eq!(
+            pick_compact_path(shallow, |candidate| candidate.chars().count() <= 10),
+            "…/final",
+            "where only the folded form fits, the last folder shows"
+        );
+    }
+
+    #[test]
+    fn an_unfocused_path_field_shows_what_fits_and_keeps_the_last_folder() {
+        use gpui::{TestAppContext, VisualTestContext};
+
+        struct FieldHost {
+            input: Entity<TextField>,
+        }
+        impl Render for FieldHost {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().w(px(200.)).child(self.input.clone())
+            }
+        }
+
+        let path = "/opt/work/some-long-folder/another-long-folder/runner-app";
+        let mut cx = TestAppContext::single();
+        let window = cx.add_window(|_, cx| {
+            let input = cx.new(|cx| working_dir_text_field(cx.focus_handle(), path, ""));
+            FieldHost { input }
+        });
+        cx.run_until_parked();
+        let mut visual = VisualTestContext::from_window(window.into(), &cx);
+        visual.run_until_parked();
+        let input = window.read_with(&cx, |host, _| host.input.clone()).unwrap();
+        let shown = input.read_with(&visual, |field, _| field.compact_path_shown(false));
+        let shown = shown.expect("an unfocused path field compacts");
+        assert_ne!(shown, path, "the full path does not fit 200 px");
+        assert!(
+            shown.starts_with("/…/") && shown.ends_with("/runner-app"),
+            "{shown}"
+        );
+        let selector: &'static str = Box::leak(format!("TEXT_FIELD_COMPACT {shown}").into());
+        assert!(
+            visual.debug_bounds(selector).is_some(),
+            "the field re-rendered with its pick, not only stored it"
+        );
+        assert_eq!(
+            input.read_with(&visual, |field, _| field.compact_path_shown(true)),
+            None,
+            "focused, the field edits the full path"
+        );
+    }
 
     #[test]
     fn editing_shortcuts_use_command_on_macos_and_control_on_windows() {

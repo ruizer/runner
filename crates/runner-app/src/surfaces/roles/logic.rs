@@ -1,6 +1,6 @@
 use runner_backend::model::Runtime;
 
-use chrono::{DateTime, Datelike, TimeZone};
+use chrono::{DateTime, TimeZone};
 use gpui::prelude::*;
 use gpui::{div, AnyElement, Context, FocusHandle};
 use runner_app::ui::SelectOption;
@@ -11,6 +11,9 @@ use runner_backend::ops::slot::CrewMembership;
 use runner_backend::router::runtime::PermissionMode;
 
 use super::*;
+pub(super) use crate::surfaces::profile_page::{
+    local_short_timestamp, plural, prompt_meta, short_id, short_timestamp,
+};
 use crate::*;
 
 #[derive(Clone, Copy)]
@@ -19,59 +22,16 @@ pub(super) enum RoleFormKind {
     Edit,
 }
 
-pub(super) fn resolve_slot_runtime_layers(
-    role_runtime: &str,
-    runtime_override: Option<&str>,
-    model_override: Option<&str>,
-    effort_override: Option<&str>,
-) -> RuntimeLayerResolution {
-    let runtime = runtime_override.unwrap_or(role_runtime);
-    RuntimeLayerResolution {
-        runtime: runtime.to_owned(),
-        runtime_pinned: runtime_override.is_some(),
-        model: model_override.map(ToOwned::to_owned),
-        effort: effort_override.map(ToOwned::to_owned),
-    }
-}
-
-pub(super) fn resolve_role_edit(
-    role: &Role,
-    slot: Option<&runner_backend::model::SlotWithRole>,
-) -> RoleEditResolution {
-    let layers = if let Some(slot) = slot {
-        resolve_slot_runtime_layers(
-            &role.runtime,
-            slot.slot.runtime_override.as_deref(),
-            slot.slot.model_override.as_deref(),
-            slot.slot.effort_override.as_deref(),
-        )
-    } else {
-        RuntimeLayerResolution {
-            runtime: role.runtime.clone(),
-            runtime_pinned: true,
-            model: role.model.clone(),
-            effort: role.effort.clone(),
-        }
-    };
-    let command = if layers.runtime == role.runtime {
-        role.command.clone()
-    } else {
-        runner_backend::ops::runtime::runtime_list()
-            .into_iter()
-            .find(|runtime| runtime.name.key() == layers.runtime)
-            .map(|runtime| runtime.command)
-            .unwrap_or_else(|| role.command.clone())
-    };
+pub(super) fn resolve_role_edit(role: &Role) -> RoleEditResolution {
     RoleEditResolution {
-        runtime: layers.runtime,
-        runtime_pinned: slot.is_none() || layers.runtime_pinned,
-        command,
-        model: layers.model.unwrap_or_default(),
-        effort: layers.effort.unwrap_or_default(),
+        runtime: role.runtime.clone(),
+        command: role.command.clone(),
+        model: role.model.clone().unwrap_or_default(),
+        effort: role.effort.clone().unwrap_or_default(),
     }
 }
 
-pub(super) fn ensure_runtime_present(
+pub(crate) fn ensure_runtime_present(
     core: &AppCore,
     runtimes: &mut Vec<RuntimeCatalogEntry>,
     name: &str,
@@ -89,14 +49,14 @@ pub(super) fn ensure_runtime_present(
     }
 }
 
-pub(super) fn runtime_entry<'a>(
+pub(crate) fn runtime_entry<'a>(
     runtimes: &'a [RuntimeCatalogEntry],
     name: &str,
 ) -> Option<&'a RuntimeCatalogEntry> {
     runtimes.iter().find(|runtime| runtime.name.key() == name)
 }
 
-pub(super) fn runtime_models<'a>(
+pub(crate) fn runtime_models<'a>(
     runtimes: &'a [RuntimeCatalogEntry],
     name: &str,
 ) -> &'a [RuntimeCatalogOption] {
@@ -105,7 +65,7 @@ pub(super) fn runtime_models<'a>(
         .unwrap_or_default()
 }
 
-pub(super) fn runtime_model_placeholder(
+pub(crate) fn runtime_model_placeholder(
     runtimes: &[RuntimeCatalogEntry],
     runtime: &str,
     inherited_role: Option<&Role>,
@@ -118,7 +78,7 @@ pub(super) fn runtime_model_placeholder(
         .unwrap_or_else(|| "default".into())
 }
 
-pub(super) fn runtime_default_effort_label(
+pub(crate) fn runtime_default_effort_label(
     runtimes: &[RuntimeCatalogEntry],
     runtime: &str,
 ) -> String {
@@ -128,7 +88,7 @@ pub(super) fn runtime_default_effort_label(
         .unwrap_or_else(|| "Runtime default".into())
 }
 
-pub(super) fn runtime_efforts<'a>(
+pub(crate) fn runtime_efforts<'a>(
     runtimes: &'a [RuntimeCatalogEntry],
     name: &str,
 ) -> &'a [RuntimeCatalogOption] {
@@ -137,41 +97,34 @@ pub(super) fn runtime_efforts<'a>(
         .unwrap_or_default()
 }
 
-pub(super) fn role_edit_runtime_options(
+/// The agent runtimes a select offers: the available ones, plus the role's
+/// own and the current one even when they are not.
+pub(crate) fn role_edit_runtime_options(
     runtimes: &[RuntimeCatalogEntry],
     role: &Role,
     current_runtime: &str,
-    edits_slot: bool,
 ) -> Vec<SelectOption> {
-    let mut options = Vec::new();
-    if edits_slot {
-        let label = runtime_entry(runtimes, &role.runtime)
-            .map(|runtime| runtime.display_name.as_str())
-            .unwrap_or(&role.runtime);
-        options.push(SelectOption::new("", format!("Role default ({label})")));
-    }
-    options.extend(
-        runtimes
-            .iter()
-            .filter(|runtime| {
-                runtime.available
-                    || runtime.name.key() == role.runtime
-                    || runtime.name.key() == current_runtime
-            })
-            .map(|runtime| {
-                let option =
-                    SelectOption::new(runtime.name.to_string(), runtime.display_name.clone());
-                if runtime.description.is_empty() {
-                    option
-                } else {
-                    option.description(runtime.description.clone())
-                }
-            }),
-    );
-    options
+    runtimes
+        .iter()
+        .filter(|runtime| {
+            runtime.available
+                || runtime.name.key() == role.runtime
+                || runtime.name.key() == current_runtime
+        })
+        .map(|runtime| {
+            let option = SelectOption::new(runtime.name.to_string(), runtime.display_name.clone());
+            if runtime.description.is_empty() {
+                option
+            } else {
+                option.description(runtime.description.clone())
+            }
+        })
+        .collect()
 }
 
-pub(super) fn effort_options(
+/// The effort choices for a runtime and model. A slot's blank choice inherits
+/// the role's effort while it runs the role's own runtime.
+pub(crate) fn effort_options(
     runtimes: &[RuntimeCatalogEntry],
     runtime: &str,
     role: &Role,
@@ -376,53 +329,6 @@ pub(super) fn create_role_focus_order(
     order
 }
 
-pub(super) fn role_edit_focus_order(
-    form: &RoleEditForm,
-    cx: &Context<NativeRoot>,
-) -> Vec<FocusHandle> {
-    if form.submitting {
-        return Vec::new();
-    }
-    let mut order = vec![
-        form.close_focus.clone(),
-        form.display_name.read(cx).focus_handle(),
-    ];
-    if form.slot.is_some() {
-        order.push(form.runtime_hint_focus.clone());
-    }
-    order.push(form.runtime_select.read(cx).focus_handle());
-    if form.slot.is_none() {
-        order.extend([
-            form.args_hint_focus.clone(),
-            form.args.read(cx).focus_handle(),
-        ]);
-    }
-    order.extend([
-        form.model_hint_focus.clone(),
-        form.model.read(cx).focus_handle(),
-    ]);
-    if !runtime_efforts(&form.runtimes, &form.runtime).is_empty() {
-        order.extend([
-            form.effort_hint_focus.clone(),
-            form.effort_select.read(cx).focus_handle(),
-        ]);
-    }
-    if form.slot.is_none() && !permission_modes(&form.runtime).is_empty() {
-        order.extend([
-            form.permission_hint_focus.clone(),
-            form.permission_select.read(cx).focus_handle(),
-        ]);
-    }
-    order.extend([
-        form.working_dir.read(cx).focus_handle(),
-        form.browse_focus.clone(),
-        form.system_prompt.read(cx).focus_handle(),
-        form.cancel_focus.clone(),
-        form.submit_focus.clone(),
-    ]);
-    order
-}
-
 /// Whether the in-place editor holds anything a save would write.
 pub(super) fn role_edit_is_dirty(form: &RoleEditForm, cx: &Context<NativeRoot>) -> bool {
     let role = &form.role;
@@ -490,14 +396,6 @@ pub(super) fn role_edit_form_is_composing(form: &RoleEditForm, cx: &Context<Nati
         || form.system_prompt.read(cx).is_composing()
 }
 
-pub(super) fn plural(count: i64, singular: &str, plural: &str) -> String {
-    if count == 1 {
-        format!("1 {singular}")
-    } else {
-        format!("{count} {plural}")
-    }
-}
-
 pub(super) fn error_banner(error: String) -> AnyElement {
     div()
         .rounded_sm()
@@ -512,34 +410,8 @@ pub(super) fn error_banner(error: String) -> AnyElement {
         .into_any_element()
 }
 
-/// Source lines the role page's collapsed prompt card renders.
-pub(super) const PROMPT_PREVIEW_LINES: usize = 24;
-
-/// The prompt card's header: `48 lines · 2.9 KB`.
-pub(super) fn prompt_meta(prompt: &str) -> String {
-    let lines = plural(prompt.lines().count() as i64, "line", "lines");
-    let bytes = prompt.len();
-    if bytes < 1024 {
-        format!("{lines} · {bytes} B")
-    } else {
-        format!("{lines} · {:.1} KB", bytes as f64 / 1024.)
-    }
-}
-
-/// The first lines of a prompt too long to show whole, or `None` when it fits.
-pub(super) fn prompt_preview(prompt: &str) -> Option<&str> {
-    if prompt.lines().count() <= PROMPT_PREVIEW_LINES {
-        return None;
-    }
-    let end = prompt
-        .match_indices('\n')
-        .nth(PROMPT_PREVIEW_LINES - 1)
-        .map_or(prompt.len(), |(index, _)| index);
-    Some(&prompt[..end])
-}
-
 /// A model or effort cell: the value, or `default` (dimmed) when unset.
-pub(super) fn role_setting_label(value: Option<&str>) -> (String, bool) {
+pub(crate) fn role_setting_label(value: Option<&str>) -> (String, bool) {
     match value.map(str::trim).filter(|value| !value.is_empty()) {
         Some(value) => (value.to_owned(), false),
         None => ("default".to_owned(), true),
@@ -595,34 +467,7 @@ where
     (last, false)
 }
 
-/// `Sep 23, 17:41` this year, `Sep 23, 2025` before it.
-pub(super) fn short_timestamp<Tz: TimeZone>(timestamp: &DateTime<Tz>, now: &DateTime<Tz>) -> String
-where
-    Tz::Offset: std::fmt::Display,
-{
-    if timestamp.year() == now.year() {
-        timestamp.format("%b %-d, %H:%M").to_string()
-    } else {
-        timestamp.format("%b %-d, %Y").to_string()
-    }
-}
-
-pub(super) fn local_short_timestamp(timestamp: runner_backend::model::Timestamp) -> String {
-    short_timestamp(
-        &timestamp.with_timezone(&chrono::Local),
-        &chrono::Local::now(),
-    )
-}
-
-/// `01K0…RCODER01`: enough of an id to tell rows apart.
-pub(super) fn short_id(id: &str) -> String {
-    if id.len() <= 12 || !id.is_ascii() {
-        return id.to_owned();
-    }
-    format!("{}…{}", &id[..4], &id[id.len() - 8..])
-}
-
-pub(super) fn runtime_display_name(runtime: &str) -> String {
+pub(crate) fn runtime_display_name(runtime: &str) -> String {
     runner_backend::ops::runtime::runtime_list()
         .into_iter()
         .find(|definition| definition.name.key() == runtime)

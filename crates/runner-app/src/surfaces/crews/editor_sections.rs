@@ -1,345 +1,352 @@
-use super::logic::section_label;
-use super::logic::text_action;
-use super::logic::trimmed_option;
+use super::logic::crew_missions;
+use super::logic::mission_duration;
+use super::logic::missions_footer;
+use super::logic::missions_header;
+use super::logic::short_date;
+use super::logic::MISSIONS_SHOWN;
+use std::rc::Rc;
 
 use gpui::prelude::*;
-use gpui::{div, px, rems, AnyElement, Context, Window};
-use runner_app::ui::{Button, TextField};
-use runner_backend::model::Crew;
-use runner_backend::ops::crew::UpdateCrewInput;
+use gpui::{
+    div, px, rems, svg, AnyElement, Context, Div, Entity, FontWeight, KeyDownEvent, SharedString,
+};
+use runner_app::ui::focus_ring;
+use runner_backend::model::{Crew, Mission, MissionStatus};
 
+use crate::surfaces::profile_page::{
+    caption, card, card_column, card_meta, clamped_markdown, markdown_editor_body,
+    markdown_mode_switch, prompt_meta,
+};
 use crate::*;
 
+const CONVENTIONS_CAPTION: &str =
+    "Added to every slot's prompt when this crew runs a mission. Direct chats ignore it.";
+
 impl NativeRoot {
-    pub(super) fn render_crew_goal_section(
-        &self,
-        crew: &Crew,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        let editor = &self.crew_surfaces.editor;
-        let root = cx.entity();
-        let existing_edit_root = root.clone();
-        let add_edit_root = root.clone();
-        let save_root = root.clone();
-        let cancel_root = root;
-        div()
-            .w_full()
-            .min_w(px(0.))
-            .flex()
-            .flex_col()
-            .gap(rems(6. / 16.))
+    /// The right column: the team conventions, their caption, and the crew's
+    /// missions.
+    pub(super) fn render_crew_cards(&self, crew: &Crew, cx: &mut Context<Self>) -> Div {
+        let editing = self.crew_surfaces.editor.edit.is_some();
+        card_column()
+            .when(cfg!(test), |column| {
+                column.debug_selector(|| "CREW_PAGE_CARDS".into())
+            })
+            .child(if editing {
+                self.render_conventions_editor(cx)
+            } else {
+                self.render_conventions_card(crew, cx)
+            })
+            .child(caption(CONVENTIONS_CAPTION))
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_3()
-                    .child(section_label("Default goal"))
-                    .children(
-                        (editor.goal_edit.is_none() && crew.goal.is_some()).then(|| {
-                            text_action("edit-crew-goal", "Edit", move |window, cx| {
-                                existing_edit_root
-                                    .update(cx, |this, cx| this.start_crew_goal_edit(window, cx));
-                            })
-                        }),
-                    ),
+                    .mt(rems(20. / 16.))
+                    .when(editing, |missions| missions.opacity(0.4))
+                    .child(self.render_missions_card(&crew.id, !editing, cx)),
             )
-            .child(if let Some(input) = editor.goal_edit.clone() {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(input)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Button::new(
-                                    "save-crew-goal",
-                                    if editor.saving_goal {
-                                        "Saving..."
-                                    } else {
-                                        "Save"
-                                    },
-                                )
-                                .disabled(editor.saving_goal)
-                                .on_press(move |_, cx| {
-                                    save_root.update(cx, |this, cx| this.save_crew_goal(cx));
-                                }),
-                            )
-                            .child(
-                                Button::new("cancel-crew-goal", "Cancel")
-                                    .disabled(editor.saving_goal)
-                                    .on_press(move |_, cx| {
-                                        cancel_root
-                                            .update(cx, |this, cx| this.cancel_crew_goal_edit(cx));
-                                    }),
-                            ),
-                    )
-                    .into_any_element()
-            } else if let Some(goal) = crew.goal.clone() {
-                div()
-                    .w_full()
-                    .min_w(px(0.))
-                    .whitespace_normal()
-                    .text_size(theme::text_title())
-                    .line_height(rems(20. / 16.))
-                    .text_color(theme::text())
-                    .child(goal)
-                    .into_any_element()
-            } else {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(text_action(
-                        "add-crew-goal",
-                        "+ Add default goal",
-                        move |window, cx| {
-                            add_edit_root
-                                .update(cx, |this, cx| this.start_crew_goal_edit(window, cx));
-                        },
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_ui())
-                            .text_color(theme::faint())
-                            .child("Pre-fills the Start Mission goal. Optional."),
-                    )
-                    .into_any_element()
-            })
+    }
+
+    fn render_conventions_card(&self, crew: &Crew, cx: &mut Context<Self>) -> AnyElement {
+        let root = cx.entity();
+        let conventions = crew
+            .system_prompt_addendum
+            .as_deref()
+            .filter(|text| !text.trim().is_empty());
+        let body = match conventions {
+            None => div()
+                .text_size(theme::text_body())
+                .italic()
+                .text_color(theme::faint())
+                .child("No team conventions yet. Edit the crew to add them.")
+                .into_any_element(),
+            Some(text) => clamped_markdown(
+                &format!("crew-conventions-{}", crew.id),
+                text,
+                self.crew_surfaces.editor.conventions_expanded,
+                "CREW_CONVENTIONS",
+                Rc::new(move |_, cx| {
+                    root.update(cx, |this, cx| {
+                        let editor = &mut this.crew_surfaces.editor;
+                        editor.conventions_expanded = !editor.conventions_expanded;
+                        cx.notify();
+                    });
+                }),
+                cx.entity_id(),
+                cx,
+            ),
+        };
+        conventions_card(card_meta(conventions.map(prompt_meta)))
+            .child(div().px_5().py_4().child(body))
             .into_any_element()
     }
 
-    pub(super) fn render_crew_conventions_section(
+    fn render_conventions_editor(&self, cx: &mut Context<Self>) -> AnyElement {
+        let editor = &self.crew_surfaces.editor;
+        let form = editor.edit.as_ref().expect("crew edit form");
+        let preview = editor.conventions_preview;
+        let draft = form.conventions.read(cx).text();
+        let meta = (!draft.trim().is_empty()).then(|| prompt_meta(draft));
+        let root = cx.entity();
+        conventions_card(
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap_3()
+                .child(markdown_mode_switch(
+                    "crew-conventions-mode",
+                    preview,
+                    Rc::new(move |preview, cx| {
+                        root.update(cx, |this, cx| {
+                            if this.crew_surfaces.editor.conventions_preview != preview {
+                                this.crew_surfaces.editor.conventions_preview = preview;
+                                cx.notify();
+                            }
+                        });
+                    }),
+                ))
+                .child(card_meta(meta))
+                .into_any_element(),
+        )
+        .h(rems(496. / 16.))
+        .child(markdown_editor_body(
+            "crew-conventions-draft",
+            form.conventions.clone(),
+            preview,
+            "CREW_CONVENTIONS",
+            cx.entity_id(),
+            cx,
+        ))
+        .into_any_element()
+    }
+
+    fn render_missions_card(
         &self,
-        crew: &Crew,
+        crew_id: &str,
+        interactive: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let editor = &self.crew_surfaces.editor;
+        let store = self.app_store.read(cx);
+        let missions = crew_missions(&store.missions, crew_id);
+        let expanded = self.crew_surfaces.editor.missions_expanded;
+        let footer = missions_footer(missions.len(), expanded);
+        let shown = if expanded {
+            missions.len()
+        } else {
+            missions.len().min(MISSIONS_SHOWN)
+        };
+        let now = chrono::Utc::now();
+        let local_now = chrono::Local::now();
         let root = cx.entity();
-        let existing_edit_root = root.clone();
-        let add_edit_root = root.clone();
-        let save_root = root.clone();
-        let cancel_root = root;
-        div()
-            .w_full()
-            .min_w(px(0.))
+        let rows = missions[..shown]
+            .iter()
+            .map(|mission| mission_row(mission, now, &local_now, interactive, root.clone()))
+            .collect::<Vec<_>>();
+        let body = if missions.is_empty() {
+            div()
+                .px_4()
+                .py_3()
+                .text_size(theme::text_ui())
+                .text_color(theme::faint())
+                .child("No missions yet. Start one to see it here.")
+                .into_any_element()
+        } else {
+            div()
+                .when(cfg!(test), |rows| {
+                    rows.debug_selector(|| "CREW_MISSION_ROWS".into())
+                })
+                .flex()
+                .flex_col()
+                .children(rows)
+                .into_any_element()
+        };
+        let toggle_root = root;
+        card(
+            "flag.svg",
+            "Missions",
+            Some(missions_header(&missions)),
+            div().into_any_element(),
+        )
+        .when(cfg!(test), |card| {
+            card.debug_selector(|| "CREW_MISSIONS_CARD".into())
+        })
+        .child(body)
+        .children(footer.map(|label| {
+            let toggle = move |cx: &mut gpui::App| {
+                toggle_root.update(cx, |this, cx| {
+                    let editor = &mut this.crew_surfaces.editor;
+                    editor.missions_expanded = !editor.missions_expanded;
+                    cx.notify();
+                });
+            };
+            let key_toggle = toggle.clone();
+            div()
+                .id("crew-missions-toggle")
+                .when(cfg!(test), |footer| {
+                    footer.debug_selector(|| "CREW_MISSIONS_TOGGLE".into())
+                })
+                .flex()
+                .items_center()
+                .gap_1()
+                .px_4()
+                .py(rems(8. / 16.))
+                .border_t_1()
+                .border_color(theme::border())
+                .text_size(theme::text_ui())
+                .text_color(theme::muted())
+                .when(interactive, |footer| {
+                    footer
+                        .tab_index(0)
+                        .cursor_pointer()
+                        .hover(|footer| footer.text_color(theme::text()))
+                        .focus_visible(|footer| {
+                            footer
+                                .text_color(theme::text())
+                                .shadow(focus_ring(theme::border_strong()))
+                        })
+                        .on_click(move |_, _, cx| toggle(cx))
+                        .on_key_down(move |event: &KeyDownEvent, _, cx| {
+                            if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                                cx.stop_propagation();
+                                key_toggle(cx);
+                            }
+                        })
+                })
+                .child(label)
+                .child(
+                    svg()
+                        .flex_none()
+                        .path(if expanded {
+                            "chevron-up.svg"
+                        } else {
+                            "chevron-down.svg"
+                        })
+                        .size(rems(12. / 16.))
+                        .text_color(theme::faint()),
+                )
+        }))
+        .into_any_element()
+    }
+}
+
+fn conventions_card(header_right: AnyElement) -> Div {
+    card("file-text.svg", "Team conventions", None, header_right).when(cfg!(test), |card| {
+        card.debug_selector(|| "CREW_CONVENTIONS_CARD".into())
+    })
+}
+
+fn mission_row(
+    mission: &Mission,
+    now: runner_backend::model::Timestamp,
+    local_now: &chrono::DateTime<chrono::Local>,
+    interactive: bool,
+    root: Entity<NativeRoot>,
+) -> AnyElement {
+    let id = mission.id.clone();
+    let key_id = id.clone();
+    let key_root = root.clone();
+    let status = match mission.status {
+        MissionStatus::Completed => svg()
+            .flex_none()
+            .path("circle-check.svg")
+            .size(rems(14. / 16.))
+            .text_color(theme::faint())
+            .into_any_element(),
+        MissionStatus::Aborted => svg()
+            .flex_none()
+            .path("circle-x.svg")
+            .size(rems(14. / 16.))
+            .text_color(theme::danger())
+            .into_any_element(),
+        MissionStatus::Running => div()
+            .flex_none()
+            .size(rems(14. / 16.))
             .flex()
-            .flex_col()
-            .gap(rems(6. / 16.))
+            .items_center()
+            .justify_center()
             .child(
                 div()
-                    .flex()
-                    .items_center()
-                    .justify_between()
-                    .gap_3()
-                    .child(section_label("Team conventions"))
-                    .children(
-                        (editor.conventions_edit.is_none()
-                            && crew.system_prompt_addendum.is_some())
-                        .then(|| {
-                            text_action("edit-crew-conventions", "Edit", move |window, cx| {
-                                existing_edit_root.update(cx, |this, cx| {
-                                    this.start_crew_conventions_edit(window, cx)
-                                });
-                            })
-                        }),
-                    ),
+                    .size(rems(7. / 16.))
+                    .rounded_full()
+                    .bg(theme::accent()),
             )
-            .child(if let Some(input) = editor.conventions_edit.clone() {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_2()
-                    .child(input)
-                    .child(
-                        div()
-                            .flex()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                Button::new(
-                                    "save-crew-conventions",
-                                    if editor.saving_conventions {
-                                        "Saving..."
-                                    } else {
-                                        "Save"
-                                    },
-                                )
-                                .disabled(editor.saving_conventions)
-                                .on_press(move |_, cx| {
-                                    save_root.update(cx, |this, cx| {
-                                        this.save_crew_conventions(cx)
-                                    });
-                                }),
-                            )
-                            .child(
-                                Button::new("cancel-crew-conventions", "Cancel")
-                                    .disabled(editor.saving_conventions)
-                                    .on_press(move |_, cx| {
-                                        cancel_root.update(cx, |this, cx| {
-                                            this.cancel_crew_conventions_edit(cx)
-                                        });
-                                    }),
-                            ),
-                    )
-                    .into_any_element()
-            } else if let Some(conventions) = crew.system_prompt_addendum.clone() {
-                div()
-                    .w_full()
-                    .min_w(px(0.))
-                    .whitespace_normal()
-                    .text_size(theme::text_title())
-                    .line_height(rems(20. / 16.))
-                    .text_color(theme::text())
-                    .child(conventions)
-                    .into_any_element()
-            } else {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .child(text_action(
-                        "add-crew-conventions",
-                        "+ Add team conventions",
-                        move |window, cx| {
-                            add_edit_root.update(cx, |this, cx| {
-                                this.start_crew_conventions_edit(window, cx)
-                            });
-                        },
-                    ))
-                    .child(
-                        div()
-                            .text_size(theme::text_ui())
-                            .text_color(theme::faint())
-                            .child("Optional team-level guidance applied to all mission spawns. Leave blank for crews that need no team-level layer."),
-                    )
-                    .into_any_element()
-            })
-            .into_any_element()
-    }
-
-    fn start_crew_goal_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let value = self
-            .crew_surfaces
-            .editor
-            .crew
-            .as_ref()
-            .and_then(|crew| crew.goal.clone())
-            .unwrap_or_default();
-        let input = cx.new(|input_cx| {
-            TextField::textarea(
-                input_cx.focus_handle(),
-                value,
-                "Pre-fills the Start Mission goal.",
-                4,
-                false,
-            )
-            .auto_grow(12)
-        });
-        let focus = input.read(cx).focus_handle();
-        self.crew_surfaces.editor.goal_edit = Some(input);
-        focus.focus(window);
-        cx.notify();
-    }
-
-    fn cancel_crew_goal_edit(&mut self, cx: &mut Context<Self>) {
-        if !self.crew_surfaces.editor.saving_goal {
-            self.crew_surfaces.editor.goal_edit = None;
-            cx.notify();
-        }
-    }
-
-    fn save_crew_goal(&mut self, cx: &mut Context<Self>) {
-        let editor = &mut self.crew_surfaces.editor;
-        let (Some(crew), Some(input)) = (editor.crew.as_ref(), editor.goal_edit.as_ref()) else {
-            return;
-        };
-        if editor.saving_goal {
-            return;
-        }
-        editor.saving_goal = true;
-        let crew_id = crew.id.clone();
-        let value = trimmed_option(input.read(cx).text());
-        let core = self.core(cx).clone();
-        let task = cx.background_spawn(async move {
-            let result = runner_backend::ops::crew::crew_update(
-                &core,
-                &crew_id,
-                UpdateCrewInput {
-                    goal: Some(value),
-                    ..Default::default()
-                },
-            )
-            .map(|_| ())
-            .map_err(|error| error.to_string());
-            (crew_id, result)
-        });
-        self.finish_crew_update(task, cx);
-        cx.notify();
-    }
-
-    fn start_crew_conventions_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        let value = self
-            .crew_surfaces
-            .editor
-            .crew
-            .as_ref()
-            .and_then(|crew| crew.system_prompt_addendum.clone())
-            .unwrap_or_default();
-        let input = cx.new(|input_cx| {
-            TextField::textarea(
-                input_cx.focus_handle(),
-                value,
-                "Optional team-level guidance applied to all mission spawns.",
-                6,
-                true,
-            )
-            .auto_grow(24)
-        });
-        let focus = input.read(cx).focus_handle();
-        self.crew_surfaces.editor.conventions_edit = Some(input);
-        focus.focus(window);
-        cx.notify();
-    }
-
-    fn cancel_crew_conventions_edit(&mut self, cx: &mut Context<Self>) {
-        if !self.crew_surfaces.editor.saving_conventions {
-            self.crew_surfaces.editor.conventions_edit = None;
-            cx.notify();
-        }
-    }
-
-    fn save_crew_conventions(&mut self, cx: &mut Context<Self>) {
-        let editor = &mut self.crew_surfaces.editor;
-        let (Some(crew), Some(input)) = (editor.crew.as_ref(), editor.conventions_edit.as_ref())
-        else {
-            return;
-        };
-        if editor.saving_conventions {
-            return;
-        }
-        editor.saving_conventions = true;
-        let crew_id = crew.id.clone();
-        let value = trimmed_option(input.read(cx).text());
-        let core = self.core(cx).clone();
-        let task = cx.background_spawn(async move {
-            let result = runner_backend::ops::crew::crew_update(
-                &core,
-                &crew_id,
-                UpdateCrewInput {
-                    system_prompt_addendum: Some(value),
-                    ..Default::default()
-                },
-            )
-            .map(|_| ())
-            .map_err(|error| error.to_string());
-            (crew_id, result)
-        });
-        self.finish_crew_update(task, cx);
-        cx.notify();
-    }
+            .into_any_element(),
+    };
+    let tag = match mission.status {
+        MissionStatus::Aborted => Some(("aborted", theme::danger())),
+        MissionStatus::Running => Some(("live", theme::accent())),
+        MissionStatus::Completed => None,
+    };
+    div()
+        .id(SharedString::from(format!("crew-mission-{id}")))
+        .flex()
+        .items_center()
+        .gap(rems(10. / 16.))
+        .px_4()
+        .py(rems(9. / 16.))
+        .border_t_1()
+        .border_color(theme::border())
+        .text_size(theme::text_body())
+        .child(status)
+        .child(
+            div()
+                .min_w(px(0.))
+                .flex_1()
+                .flex()
+                .items_center()
+                .gap_2()
+                .child(
+                    div()
+                        .min_w(px(0.))
+                        .truncate()
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(theme::text())
+                        .child(mission.title.clone()),
+                )
+                .children(tag.map(|(tag, color)| {
+                    div()
+                        .flex_none()
+                        .text_size(theme::text_ui())
+                        .text_color(color)
+                        .child(tag)
+                })),
+        )
+        .child(
+            div()
+                .flex_none()
+                .font_family(theme::UI_MONOSPACE_FONT)
+                .text_size(theme::text_caption())
+                .text_color(theme::faint())
+                .child(mission_duration(mission, now)),
+        )
+        .child(
+            div()
+                .flex_none()
+                .w(rems(56. / 16.))
+                .flex()
+                .justify_end()
+                .text_size(theme::text_ui())
+                .text_color(theme::muted())
+                .child(short_date(
+                    &mission.started_at.with_timezone(&chrono::Local),
+                    local_now,
+                )),
+        )
+        .when(interactive, |row| {
+            row.tab_index(0)
+                .cursor_pointer()
+                .hover(|row| row.bg(theme::raised()))
+                .focus_visible(|row| row.bg(theme::raised()))
+                .on_click(move |_, window, cx| {
+                    let id = id.clone();
+                    root.update(cx, |this, cx| this.open_mission(id, window, cx));
+                })
+                .on_key_down(move |event: &KeyDownEvent, window, cx| {
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                        cx.stop_propagation();
+                        let id = key_id.clone();
+                        key_root.update(cx, |this, cx| this.open_mission(id, window, cx));
+                    }
+                })
+        })
+        .into_any_element()
 }

@@ -1,26 +1,72 @@
 use super::logic::move_item;
-use super::logic::slot_command_summary;
+use super::logic::slot_setup;
+use super::logic::text_action;
+use super::logic::SlotSetup;
+use std::cell::Cell;
 use std::rc::Rc;
 
 use gpui::prelude::*;
 use gpui::{
-    div, px, rems, AnyElement, Context, CursorStyle, DragMoveEvent, FontWeight, SharedString,
-    Window,
+    canvas, div, px, rems, svg, AnyElement, Bounds, Context, DragMoveEvent, FontWeight,
+    KeyDownEvent, Pixels, SharedString,
 };
-use runner_app::ui::{
-    ConfirmDialog, ContextMenu, IconButton, IconButtonSize, MenuItem as UiMenuItem, RuntimeBadge,
-    Tooltip,
-};
+use runner_app::ui::{ConfirmDialog, RoleAvatar};
 use runner_backend::model::SlotWithRole;
 
 use super::*;
+use crate::chat_icon::ChatIcon;
+use crate::surfaces::profile_page::{column_text, dot_note, override_dot, section, section_label};
+use crate::surfaces::roles::logic::runtime_display_name;
 use crate::surfaces::*;
 use crate::*;
 
+/// A slot row's inner padding, avatar and gap.
+const SLOT_PADDING: f32 = 6.;
+const SLOT_AVATAR: f32 = 26.;
+/// A slot row's text beside its padding, avatar and gap.
+fn slot_text_width(column: f32) -> f32 {
+    column - 2. * SLOT_PADDING - SLOT_AVATAR - 10.
+}
+
 impl NativeRoot {
-    pub(super) fn render_slot_list(
+    pub(super) fn render_slot_section(
         &mut self,
         slots: Vec<SlotWithRole>,
+        column: f32,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let add_root = cx.entity();
+        let any_override = slots.iter().any(|slot| slot_setup(slot).overrides_any());
+        section()
+            .gap_3()
+            .child(
+                div()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(section_label(format!("Slots · {}", slots.len())))
+                    .child(text_action(
+                        "add-crew-slot",
+                        "+ Add slot",
+                        move |window, cx| {
+                            add_root.update(cx, |this, cx| this.open_add_slot(window, cx));
+                        },
+                    )),
+            )
+            .child(self.render_slot_list(slots, slot_text_width(column), cx))
+            .children(any_override.then(|| {
+                dot_note("overridden for this slot").when(cfg!(test), |legend| {
+                    legend.debug_selector(|| "CREW_SLOT_LEGEND".into())
+                })
+            }))
+            .into_any_element()
+    }
+
+    fn render_slot_list(
+        &mut self,
+        slots: Vec<SlotWithRole>,
+        text_width: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         if slots.is_empty() {
@@ -29,37 +75,24 @@ impl NativeRoot {
                 .border_1()
                 .border_dashed()
                 .border_color(theme::border_strong())
-                .bg(theme::with_alpha(theme::panel(), 0.4))
-                .px_5()
-                .py_8()
-                .text_center()
-                .child(
-                    div()
-                        .text_size(theme::text_title())
-                        .text_color(theme::text())
-                        .child("No slots yet."),
-                )
-                .child(
-                    div()
-                        .mt_1()
-                        .text_size(theme::text_ui())
-                        .text_color(theme::faint())
-                        .child("Use + Add slot above — the first slot auto-assigns as LEAD."),
-                )
+                .px_4()
+                .py_5()
+                .text_size(theme::text_ui())
+                .text_color(theme::faint())
+                .child("No slots yet. The first slot you add leads the crew.")
                 .into_any_element();
         }
         let total = slots.len();
         div()
             .w_full()
-            .min_w(px(0.))
             .flex()
             .flex_col()
-            .gap_2()
+            .gap_1()
             .children(
                 slots
                     .into_iter()
                     .enumerate()
-                    .map(|(index, slot)| self.render_slot_row(slot, index, total, cx)),
+                    .map(|(index, slot)| self.render_slot_row(slot, index, total, text_width, cx)),
             )
             .into_any_element()
     }
@@ -69,176 +102,114 @@ impl NativeRoot {
         slot: SlotWithRole,
         index: usize,
         total: usize,
+        text_width: f32,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let effective_runtime = slot
-            .slot
-            .runtime_override
-            .as_deref()
-            .unwrap_or(&slot.role.runtime)
-            .to_owned();
-        let runtime_overridden =
-            slot.slot.runtime_override.is_some() && effective_runtime != slot.role.runtime;
-        let summary = slot_command_summary(&slot);
-        let draggable = total > 1 && !self.crew_surfaces.editor.reordering;
-        let active_drop = self.crew_surfaces.editor.drop_target == Some(index)
-            && self.crew_surfaces.editor.dragged_slot_id.as_deref() != Some(slot.slot.id.as_str());
-        let drag_handle = div()
-            .flex_none()
-            .text_size(theme::text_title())
-            .text_color(theme::faint())
-            .opacity(if draggable { 1. } else { 0.4 })
-            .cursor(if draggable {
-                CursorStyle::OpenHand
-            } else {
-                CursorStyle::Arrow
-            })
-            .child("⋮⋮");
-        let drag_handle = if draggable {
-            Tooltip::new(
-                SharedString::from(format!("crew-slot-drag-tooltip-{}", slot.slot.id)),
-                "Drag to reorder",
-                drag_handle,
-            )
-            .into_any_element()
-        } else {
-            drag_handle.into_any_element()
-        };
-        let menu_slot = slot.clone();
-        let menu_root = cx.entity();
+        let editor = &self.crew_surfaces.editor;
+        let setup = slot_setup(&slot);
+        let slot_id = slot.slot.id.clone();
+        let popup = editor
+            .popup
+            .as_ref()
+            .filter(|popup| popup.slot_id == slot_id);
+        let selected = popup.is_some();
+        // The open popup follows its row's bounds; any other row measures
+        // itself for the click that would open one.
+        let anchor = popup
+            .map(|popup| popup.anchor.clone())
+            .unwrap_or_else(|| Rc::new(Cell::new(Bounds::default())));
+        let draggable = total > 1 && !editor.reordering;
+        let active_drop = editor.drop_target == Some(index)
+            && editor.dragged_slot_id.as_deref() != Some(slot_id.as_str());
+        let group = SharedString::from(format!("crew-slot-{slot_id}"));
+        let root = cx.entity();
+        let click_root = root.clone();
+        let key_root = root;
+        let click_anchor = anchor.clone();
+        let key_anchor = anchor.clone();
+        let click_id = slot_id.clone();
+        let key_id = slot_id.clone();
         let mut row = div()
-            .id(SharedString::from(format!("crew-slot-{}", slot.slot.id)))
-            .group("slot-row")
+            .id(group.clone())
+            .group(group.clone())
+            .when(cfg!(test) && index == 0, |row| {
+                row.debug_selector(|| "CREW_SLOT_ROW".into())
+            })
+            .relative()
             .w_full()
-            .min_w(px(0.))
-            .overflow_hidden()
             .flex()
-            .items_center()
-            .gap_4()
-            .rounded_lg()
-            .border_1()
-            .border_color(if active_drop {
-                theme::with_alpha(theme::accent(), 0.5)
-            } else {
-                theme::border()
+            .items_start()
+            .gap(rems(10. / 16.))
+            .rounded(rems(6. / 16.))
+            .p(rems(SLOT_PADDING / 16.))
+            .tab_index(0)
+            .cursor_pointer()
+            .when(selected, |row| row.bg(theme::raised()))
+            .when(active_drop, |row| {
+                row.bg(theme::with_alpha(theme::accent(), 0.08))
             })
-            .bg(if active_drop {
-                theme::with_alpha(theme::accent(), 0.05)
-            } else {
-                theme::panel()
+            .when(!selected && !active_drop, |row| {
+                row.hover(|row| row.bg(theme::with_alpha(theme::raised(), 0.5)))
             })
-            .p_4()
-            .hover(|row| row.border_color(theme::border_strong()))
-            .child(drag_handle)
+            .focus_visible(|row| row.bg(theme::raised()))
+            .on_click(move |_, window, cx| {
+                let anchor = click_anchor.get();
+                let slot_id = click_id.clone();
+                click_root.update(cx, |this, cx| {
+                    this.toggle_slot_popup(slot_id, anchor, window, cx)
+                });
+            })
+            .on_key_down(move |event: &KeyDownEvent, window, cx| {
+                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                    cx.stop_propagation();
+                    let anchor = key_anchor.get();
+                    let slot_id = key_id.clone();
+                    key_root.update(cx, |this, cx| {
+                        this.toggle_slot_popup(slot_id, anchor, window, cx)
+                    });
+                }
+            })
             .child(
-                div()
-                    .min_w(px(0.))
-                    .flex_1()
-                    .overflow_hidden()
-                    .child(
-                        div()
-                            .flex()
-                            .flex_wrap()
-                            .items_center()
-                            .gap_2()
-                            .child(
-                                div()
-                                    .font_family(theme::UI_MONOSPACE_FONT)
-                                    .text_size(theme::text_body())
-                                    .font_weight(FontWeight::MEDIUM)
-                                    .child(format!("@{}", slot.slot.slot_handle)),
-                            )
-                            .children(slot.slot.lead.then(|| {
-                                div()
-                                    .rounded_sm()
-                                    .bg(theme::with_alpha(theme::accent(), 0.1))
-                                    .px(rems(6. / 16.))
-                                    .py(rems(2. / 16.))
-                                    .text_size(theme::text_caption())
-                                    .font_weight(FontWeight::SEMIBOLD)
-                                    .text_color(theme::accent())
-                                    .child("LEAD")
-                            }))
-                            .child(Tooltip::new(
-                                SharedString::from(format!(
-                                    "slot-runtime-tooltip-{}",
-                                    slot.slot.id
-                                )),
-                                if runtime_overridden {
-                                    format!(
-                                        "Runtime override — role default is {}",
-                                        slot.role.runtime
-                                    )
-                                } else {
-                                    "Runtime (role default)".to_owned()
-                                },
-                                RuntimeBadge::new(effective_runtime).overridden(runtime_overridden),
-                            ))
-                            .child(
-                                div()
-                                    .font_family(theme::UI_MONOSPACE_FONT)
-                                    .text_size(theme::text_meta())
-                                    .text_color(theme::faint())
-                                    .child(format!("from @{}", slot.role.handle)),
-                            ),
-                    )
-                    .children(slot.role.system_prompt.clone().map(|prompt| {
-                        let prompt = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
-                        div()
-                            .w_full()
-                            .min_w(px(0.))
-                            .mt_1()
-                            .truncate()
-                            .text_size(theme::text_ui())
-                            .line_height(rems(1.))
-                            .text_color(theme::muted())
-                            .child(prompt)
-                    }))
-                    .children((!summary.is_empty()).then(|| {
-                        div()
-                            .mt_1()
-                            .truncate()
-                            .font_family(theme::UI_MONOSPACE_FONT)
-                            .text_size(theme::text_meta())
-                            .text_color(theme::faint())
-                            .child(format!("$ {summary}"))
-                    })),
+                canvas(move |bounds, _, _| anchor.set(bounds), |_, _, _, _| {})
+                    .absolute()
+                    .inset_0(),
             )
-            .child(
-                div().flex_none().child(
-                    IconButton::new(
-                        SharedString::from(format!("slot-actions-{}", slot.slot.id)),
-                        "more-horizontal.svg",
+            .children(draggable.then(|| {
+                div()
+                    .absolute()
+                    .left(rems(-20. / 16.))
+                    .top(rems(12. / 16.))
+                    .child(
+                        svg()
+                            .path("grip-vertical.svg")
+                            .size(rems(14. / 16.))
+                            .text_color(gpui::transparent_black())
+                            .group_hover(group.clone(), |grip| grip.text_color(theme::faint())),
                     )
-                    .size(IconButtonSize::Md)
-                    .tooltip("Slot actions")
-                    .on_press(move |window, cx| {
-                        let position = window.mouse_position();
-                        let slot = menu_slot.clone();
-                        menu_root.update(cx, |this, cx| {
-                            this.open_slot_menu(slot, position, window, cx)
-                        });
-                    }),
-                ),
-            );
+            }))
+            .child(RoleAvatar::new(slot.slot.slot_handle.clone(), SLOT_AVATAR))
+            .child(slot_text(&slot, &setup, text_width));
         if draggable {
             let drag = SlotDrag {
-                slot_id: slot.slot.id.clone(),
+                slot_id: slot_id.clone(),
                 label: format!("@{}", slot.slot.slot_handle),
             };
             let drag_root = cx.entity();
             row = row
-                .cursor_move()
                 .on_drag(drag, move |drag: &SlotDrag, _, _, cx| {
                     drag_root.update(cx, |this, cx| {
-                        this.crew_surfaces.editor.dragged_slot_id = Some(drag.slot_id.clone());
+                        let editor = &mut this.crew_surfaces.editor;
+                        editor.dragged_slot_id = Some(drag.slot_id.clone());
+                        editor.popup = None;
                         cx.notify();
                     });
                     cx.new(|_| drag.clone())
                 })
                 .on_drag_move::<SlotDrag>(cx.listener(
                     move |this, event: &DragMoveEvent<SlotDrag>, _, cx| {
-                        if event.bounds.contains(&event.event.position) {
+                        if event.bounds.contains(&event.event.position)
+                            && this.crew_surfaces.editor.drop_target != Some(index)
+                        {
                             this.crew_surfaces.editor.drop_target = Some(index);
                             cx.notify();
                         }
@@ -251,82 +222,52 @@ impl NativeRoot {
         row.into_any_element()
     }
 
-    fn open_slot_menu(
+    pub(super) fn toggle_slot_popup(
         &mut self,
-        slot: SlotWithRole,
-        position: gpui::Point<gpui::Pixels>,
+        slot_id: String,
+        anchor: Bounds<Pixels>,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let actions = [
-            SlotMenuAction::SetLead(slot.slot.id.clone()),
-            SlotMenuAction::Edit(slot.clone()),
-            SlotMenuAction::Remove(slot.clone()),
-        ];
-        let items = vec![
-            UiMenuItem::new(if slot.slot.lead {
-                "Current lead"
-            } else {
-                "Set as lead"
-            })
-            .icon("star.svg")
-            .disabled(slot.slot.lead),
-            UiMenuItem::new("Edit role").icon("square-pen.svg"),
-            UiMenuItem::new("Remove from crew")
-                .icon("trash.svg")
-                .separator_before(true)
-                .destructive(true),
-        ];
-        let root = cx.entity();
-        let dismiss_root = root.clone();
-        let menu = cx.new(move |menu_cx| {
-            let action_root = root;
-            ContextMenu::new(
-                "slot-context-menu",
-                menu_cx.focus_handle(),
-                position,
-                items,
-                Rc::new(move |index, window, cx| {
-                    if let Some(action) = actions.get(index).cloned() {
-                        action_root.update(cx, |this, cx| {
-                            this.handle_slot_menu_action(action, window, cx)
-                        });
-                    }
-                }),
-                Rc::new(move |_, cx| {
-                    dismiss_root.update(cx, |this, cx| {
-                        this.crew_surfaces.context_menu = None;
-                        cx.notify();
-                    });
-                }),
-            )
-            .width(px(208.))
+        let editor = &mut self.crew_surfaces.editor;
+        if editor
+            .popup
+            .as_ref()
+            .is_some_and(|popup| popup.slot_id == slot_id)
+        {
+            self.close_slot_popup(window, cx);
+            return;
+        }
+        let focus = cx.focus_handle();
+        editor.popup = Some(SlotPopup {
+            slot_id,
+            anchor: Rc::new(Cell::new(anchor)),
+            focus: focus.clone(),
+            open_role_focus: cx.focus_handle(),
+            remove_focus: cx.focus_handle(),
+            edit: None,
         });
-        let focus = menu.read(cx).focus_handle();
-        self.crew_surfaces.context_menu = Some(menu);
         focus.focus(window);
         cx.notify();
     }
 
-    fn handle_slot_menu_action(
-        &mut self,
-        action: SlotMenuAction,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        match action {
-            SlotMenuAction::SetLead(slot_id) => self.set_crew_lead(slot_id, cx),
-            SlotMenuAction::Edit(slot) => {
-                self.open_role_edit(slot.role.clone(), Some(slot), window, cx)
-            }
-            SlotMenuAction::Remove(slot) => {
-                self.crew_surfaces.slot_remove_confirm = Some(SlotRemoveConfirm { slot });
-                cx.notify();
-            }
+    pub(super) fn close_slot_popup(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let editor = &mut self.crew_surfaces.editor;
+        if editor
+            .popup
+            .as_ref()
+            .and_then(|popup| popup.edit.as_ref())
+            .is_some_and(|form| form.saving)
+        {
+            return;
+        }
+        if editor.popup.take().is_some() {
+            window.focus(&self.root_focus);
+            cx.notify();
         }
     }
 
-    fn set_crew_lead(&mut self, slot_id: String, cx: &mut Context<Self>) {
+    pub(super) fn set_crew_lead(&mut self, slot_id: String, cx: &mut Context<Self>) {
         let crew_id = self.crew_surfaces.editor.crew_id.clone();
         let core = self.core(cx).clone();
         let task = cx.background_spawn(async move {
@@ -344,7 +285,10 @@ impl NativeRoot {
                     return;
                 }
                 match result {
-                    Ok(_) => this.load_crew_editor(crew_id, cx),
+                    Ok(_) => {
+                        this.load_crew_editor(crew_id, cx);
+                        this.load_crew_page(cx);
+                    }
                     Err(error) => this.crew_surfaces.editor.error = Some(error),
                 }
                 cx.notify();
@@ -363,7 +307,7 @@ impl NativeRoot {
         cx.notify();
     }
 
-    fn commit_slot_reorder(&mut self, slot_id: &str, to: usize, cx: &mut Context<Self>) {
+    pub(super) fn commit_slot_reorder(&mut self, slot_id: &str, to: usize, cx: &mut Context<Self>) {
         if self.crew_surfaces.editor.reordering {
             return;
         }
@@ -467,4 +411,113 @@ impl NativeRoot {
         )
         .into_any_element()
     }
+}
+
+/// The LEAD badge beside a slot handle.
+pub(super) fn lead_badge() -> AnyElement {
+    div()
+        .flex_none()
+        .rounded(rems(3. / 16.))
+        .border_1()
+        .border_color(theme::border_strong())
+        .px(rems(4. / 16.))
+        .font_family(theme::UI_MONOSPACE_FONT)
+        .text_size(theme::text_micro())
+        .font_weight(FontWeight::SEMIBOLD)
+        .text_color(theme::faint())
+        .child("LEAD")
+        .into_any_element()
+}
+
+/// A slot's effective runtime with its mark, then its model and effort, each
+/// with a dot when the slot overrides it.
+pub(super) fn slot_setup_line(setup: &SlotSetup) -> gpui::Div {
+    let icon = ChatIcon::for_runtime(&setup.runtime);
+    let separator = || div().flex_none().text_color(theme::faint()).child("·");
+    let value = |text: String, overridden: bool| {
+        div()
+            .flex_none()
+            .flex()
+            .items_center()
+            .gap_1()
+            .font_family(theme::UI_MONOSPACE_FONT)
+            .text_color(theme::muted())
+            .child(text)
+            .children(overridden.then(override_dot))
+    };
+    let mut line = div()
+        .flex()
+        .items_center()
+        .gap(rems(5. / 16.))
+        .overflow_hidden()
+        .whitespace_nowrap()
+        .text_size(theme::text_ui())
+        .child(
+            svg()
+                .flex_none()
+                .path(icon.path)
+                .size(rems(12. / 16.))
+                .text_color(icon.color(theme::muted(), true)),
+        )
+        .child(
+            div()
+                .flex_none()
+                .flex()
+                .items_center()
+                .gap_1()
+                .text_color(theme::muted())
+                .child(runtime_display_name(&setup.runtime))
+                .children(setup.runtime_overridden.then(override_dot)),
+        );
+    if setup.model.is_none() && setup.effort.is_none() {
+        return line.child(separator()).child(
+            div()
+                .flex_none()
+                .text_color(theme::faint())
+                .child("defaults"),
+        );
+    }
+    for (text, overridden) in [
+        (setup.model.clone(), setup.model_overridden),
+        (setup.effort.clone(), setup.effort_overridden),
+    ] {
+        if let Some(text) = text {
+            line = line.child(separator()).child(value(text, overridden));
+        }
+    }
+    line
+}
+
+fn slot_text(slot: &SlotWithRole, setup: &SlotSetup, width: f32) -> AnyElement {
+    div()
+        .w(rems(width / 16.))
+        .flex_none()
+        .flex()
+        .flex_col()
+        .gap(rems(2. / 16.))
+        .child(
+            div()
+                .flex()
+                .items_center()
+                .gap(rems(6. / 16.))
+                .child(
+                    div()
+                        .min_w(px(0.))
+                        .truncate()
+                        .font_family(theme::UI_MONOSPACE_FONT)
+                        .text_size(theme::text_body())
+                        .font_weight(FontWeight::MEDIUM)
+                        .text_color(theme::text())
+                        .child(format!("@{}", slot.slot.slot_handle)),
+                )
+                .children(slot.slot.lead.then(lead_badge)),
+        )
+        .child(slot_setup_line(setup))
+        .child(
+            column_text(format!("role @{}", slot.role.handle), width)
+                .font_family(theme::UI_MONOSPACE_FONT)
+                .text_size(theme::text_caption())
+                .text_color(theme::faint()),
+        )
+        .into_any_element()
 }

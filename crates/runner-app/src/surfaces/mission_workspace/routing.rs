@@ -13,6 +13,7 @@ impl NativeRoot {
             self.archived_chat_detail = None;
         }
         self.drop_role_edit_for_route(&route);
+        self.drop_crew_edit_for_route(&route);
         self.route = route;
         if route_changed {
             self.dismissed_duplicate_chats.clear();

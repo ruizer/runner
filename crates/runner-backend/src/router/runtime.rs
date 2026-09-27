@@ -898,10 +898,9 @@ pub fn system_prompt_args(runtime: Option<Runtime>, system_prompt: Option<&str>)
 }
 
 /// Defense-in-depth ceiling on the positional `[PROMPT]` argv payload.
-/// Persistence-layer validation in `ops::role` /
-/// `ops::mission` / `ops::crew` caps the individual fields
-/// (`system_prompt`, `mission_goal`, `crew.goal`) so the composed
-/// body never approaches this number. Set well below macOS `ARG_MAX`
+/// Persistence-layer validation in `ops::role` / `ops::mission`
+/// caps the individual fields (`system_prompt`, `mission_goal`) so
+/// the composed body never approaches this number. Set well below macOS `ARG_MAX`
 /// (~256 KB) but high enough that no realistic user input can hit it
 /// once the persist-time caps are honored. `debug_assert!`-trips on
 /// overshoot — surfaces a logic bug, not a user error.

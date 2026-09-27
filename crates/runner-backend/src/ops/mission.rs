@@ -41,10 +41,10 @@ pub struct StartMissionInput {
     #[serde(default)]
     pub project_id: Option<String>,
     pub title: String,
-    /// Optional override of the crew's default goal. When `None`, the crew's
-    /// `goal` column is used; if that is also unset the mission starts with
-    /// an empty-goal event (valid — the human may post a `human_said` signal
-    /// later instead of setting a goal up front).
+    /// The mission's goal. When `None` the mission starts with an empty-goal
+    /// event (valid — the human may post a `human_said` signal later instead
+    /// of setting a goal up front). The crew's stored `goal` column is never
+    /// read (#699).
     #[serde(default)]
     pub goal_override: Option<String>,
     /// Working directory exposed to every session as `$MISSION_CWD`.
@@ -80,7 +80,7 @@ impl From<StartMissionInput> for MissionStart {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StartMissionOutput {
     pub mission: Mission,
-    /// Effective goal (override if present, else crew default, else empty).
+    /// Effective goal: the override, else empty.
     /// The frontend uses this to render the first event in the workspace
     /// without making a second round-trip.
     pub goal: String,
@@ -187,7 +187,7 @@ fn validate_mission_goal(goal: &str) -> Result<()> {
 /// Guard one composed first-turn body against the positional `[PROMPT]`
 /// argv ceiling (`router::runtime::FIRST_TURN_ARGV_MAX_BYTES`) before a
 /// PTY is spawned. The individual persist-time caps
-/// (`system_prompt` 16 KB, `crew.goal` / `mission_goal` 8 KB) do NOT
+/// (`system_prompt` 16 KB, `mission_goal` 8 KB) do NOT
 /// compose to this bound — brief + goal alone can reach 24 KB, and
 /// `crew.system_prompt_addendum` (team conventions) is uncapped on top —
 /// so the real invariant has to be enforced on the assembled body, at
@@ -291,13 +291,9 @@ pub fn start(
     let roster_for_sidecar = slot::list(&tx, &crew.id)?;
     write_roster_sidecar(&mission_dir, &roster_for_sidecar)?;
 
-    // Effective goal = override || crew default || "".
-    let goal_text = input
-        .goal_override
-        .as_deref()
-        .or(crew.goal.as_deref())
-        .unwrap_or("")
-        .to_string();
+    // The mission states its own goal; a crew's stored default never
+    // reaches the lead (#699).
+    let goal_text = input.goal_override.clone().unwrap_or_default();
 
     // Open the event log and emit the two opening events.
     let log = EventLog::open(&mission_dir)?;
@@ -684,10 +680,10 @@ pub async fn mission_start_impl_with_size(
     // each slot references. Mission spawn iterates per slot — two
     // slots referencing the same role template both produce
     // distinct PTYs identifying as their respective slot_handles.
-    let (crew_name, crew_default_goal, crew_addendum) = {
+    let (crew_name, crew_addendum) = {
         let conn = state.db.get()?;
         let crew = crew::get(&conn, &out.mission.crew_id)?;
-        (crew.name, crew.goal, crew.system_prompt_addendum)
+        (crew.name, crew.system_prompt_addendum)
     };
     let allowed_signals = all_known_signals();
     let roster = {
@@ -697,19 +693,13 @@ pub async fn mission_start_impl_with_size(
     let events_log_path =
         event_log::events_path(&state.app_data_dir, &out.mission.crew_id, &out.mission.id);
 
-    // Effective mission goal — same precedence as the `mission_goal`
-    // event opened by `start()` above (override > crew default > "").
+    // Effective mission goal — the same text as the `mission_goal`
+    // event opened by `start()` above (the override, else "").
     // Used here to compose the lead's launch prompt before the spawn
     // loop, so the body can land via the positional `[PROMPT]` argv
     // at process boot rather than racing the post-spawn paste path.
     // See `docs/impls/archive/0007-spawn-time-prompt-delivery.md`.
-    let goal_text: String = out
-        .mission
-        .goal_override
-        .as_deref()
-        .or(crew_default_goal.as_deref())
-        .unwrap_or("")
-        .to_string();
+    let goal_text: String = out.mission.goal_override.clone().unwrap_or_default();
 
     // Pre-compose each slot's prompt channels. The established runtimes
     // keep the complete body as their first turn. Pi puts the durable
@@ -2257,7 +2247,8 @@ mod tests {
         assert_eq!(out.mission.project_id.as_deref(), Some(project.id.as_str()));
         assert_eq!(out.mission.cwd.as_deref(), Some("/tmp/work"));
         assert_eq!(out.mission.status, MissionStatus::Running);
-        assert_eq!(out.goal, "Ship v0");
+        // The crew's stored default goal no longer reaches a mission (#699).
+        assert_eq!(out.goal, "");
 
         // Event log has mission_start + mission_goal.
         let mission_dir = event_log::mission_dir(tmp.path(), &crew_id, &out.mission.id);
@@ -2283,7 +2274,7 @@ mod tests {
             second.signal_type.as_ref().unwrap().as_str(),
             "mission_goal"
         );
-        assert_eq!(second.payload["text"], "Ship v0");
+        assert_eq!(second.payload["text"], "");
         // mission_goal must sort strictly after mission_start.
         assert!(second.id > first.id);
 
@@ -2494,6 +2485,55 @@ mod tests {
         .unwrap();
 
         assert_eq!(out.goal, "override goal");
+    }
+
+    #[test]
+    fn a_resumed_lead_never_reads_the_crew_default_goal() {
+        let pool = pool();
+        let mut conn = pool.get().unwrap();
+        let crew_id = seed_crew(&conn, "A", Some("crew default goal"));
+        add_role(&mut conn, &crew_id, "lead");
+        let tmp = tempfile::tempdir().unwrap();
+
+        let out = start(
+            &mut conn,
+            tmp.path(),
+            StartMissionInput {
+                project_id: None,
+                crew_id: crew_id.clone(),
+                title: "m".into(),
+                goal_override: None,
+                cwd: None,
+            },
+            MissionPermissionMode::Bypass,
+        )
+        .unwrap();
+
+        // A resume recomposes the lead's prompt from the log, the path
+        // `spawn` takes for a respawned lead.
+        let crew = crew::get(&conn, &crew_id).unwrap();
+        let roster = slot::list(&conn, &crew_id).unwrap();
+        let launch = crate::router::LaunchInputs::new(
+            crew.name,
+            &roster,
+            all_known_signals(),
+            crew.system_prompt_addendum,
+        )
+        .unwrap();
+        let log = EventLog::open(&event_log::mission_dir(
+            tmp.path(),
+            &crew_id,
+            &out.mission.id,
+        ))
+        .unwrap();
+        let (system_prompt, first_turn) = launch.prompt_channels(&log, Some(Runtime::ClaudeCode));
+        let prompt = format!(
+            "{}{}",
+            system_prompt.unwrap_or_default(),
+            first_turn.unwrap_or_default()
+        );
+        assert!(!prompt.contains("crew default goal"), "{prompt}");
+        assert!(prompt.contains("no goal set"), "{prompt}");
     }
 
     #[test]

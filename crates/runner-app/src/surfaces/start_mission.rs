@@ -3,8 +3,8 @@ use std::rc::Rc;
 use gpui::prelude::*;
 use gpui::{div, px, rems, svg, AnyElement, Entity, FontWeight, PathPromptOptions, Window};
 use runner_app::ui::{
-    Button, ButtonVariant, Field, IconButton, Modal, OverlayWidth, SelectOption, StyledSelect,
-    TextField,
+    working_dir_text_field, Button, ButtonVariant, Field, IconButton, Modal, OverlayWidth,
+    SelectOption, StyledSelect, TextField, WorkingDirField,
 };
 use runner_backend::model::SlotWithRole;
 use runner_backend::ops::crew::CrewListItem;
@@ -71,11 +71,10 @@ impl NativeRoot {
                 .text_size(theme::text_body())
         });
         let cwd_input = cx.new(|input_cx| {
-            TextField::new(
+            working_dir_text_field(
                 input_cx.focus_handle(),
                 cwd,
                 "Role default or home directory",
-                true,
             )
             .text_size(theme::text_ui())
         });
@@ -181,15 +180,6 @@ impl NativeRoot {
         modal.roster.clear();
         modal.error = None;
         modal.loading = true;
-        let placeholder = modal
-            .crews
-            .iter()
-            .find(|crew| crew.crew.id == crew_id)
-            .and_then(|crew| crew.crew.goal.clone())
-            .unwrap_or_else(|| "Describe what to do…".into());
-        modal.goal.update(cx, |goal, goal_cx| {
-            goal.set_placeholder(placeholder, goal_cx)
-        });
         self.load_start_mission_roster(crew_id, cx);
         cx.notify();
     }
@@ -218,15 +208,6 @@ impl NativeRoot {
                             start_mission_crew_options(&modal.crews, &modal.crew_id, &modal.roster);
                         modal.crew_select.update(cx, |select, select_cx| {
                             select.set_options(options, select_cx)
-                        });
-                        let placeholder = modal
-                            .crews
-                            .iter()
-                            .find(|crew| crew.crew.id == crew_id)
-                            .and_then(|crew| crew.crew.goal.clone())
-                            .unwrap_or_else(|| "Describe what to do…".into());
-                        modal.goal.update(cx, |goal, goal_cx| {
-                            goal.set_placeholder(placeholder, goal_cx)
                         });
                     }
                     Err(error) => modal.error = Some(error),
@@ -460,20 +441,15 @@ impl NativeRoot {
                 Field::new(
                     "start-mission-cwd-field",
                     "Working directory",
-                    div()
-                        .flex()
-                        .items_center()
-                        .gap_2()
-                        .child(div().min_w(px(0.)).flex_1().child(modal.cwd.clone()))
-                        .child(
-                            Button::new("browse-start-mission", "Browse…")
-                                .focus_handle(modal.browse_focus.clone())
-                                .disabled(modal.submitting)
-                                .on_press(move |_, cx| {
-                                    browse_root
-                                        .update(cx, |this, cx| this.browse_start_mission_cwd(cx));
-                                }),
-                        ),
+                    WorkingDirField::new(
+                        modal.cwd.clone(),
+                        modal.submitting,
+                        Rc::new(move |_, cx| {
+                            browse_root.update(cx, |this, cx| this.browse_start_mission_cwd(cx));
+                        }),
+                    )
+                    .browse_id("browse-start-mission")
+                    .browse_focus(modal.browse_focus.clone()),
                 )
                 .emphasized(true)
                 .subtitle("Each role starts here. Leave blank to use its default directory or your home directory."),

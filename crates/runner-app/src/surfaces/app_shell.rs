@@ -561,7 +561,7 @@ impl NativeRoot {
             Vec::new()
         };
         let entity_overlays = if self.route != AppRoute::Settings {
-            self.render_entity_overlays(cx)
+            self.render_entity_overlays(window, cx)
         } else {
             Vec::new()
         };

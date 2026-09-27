@@ -422,11 +422,11 @@ fn seed_defaults_inserts_pair_coding_crew_on_empty_db() {
         .unwrap();
     assert_eq!(lead_handle, "coder");
 
-    let (name, addendum): (String, Option<String>) = conn
-        .query_row(
-            "SELECT name, system_prompt_addendum FROM crews WHERE id = ?1",
+    let (name, addendum, purpose, goal): (String, Option<String>, Option<String>, Option<String>) =
+        conn.query_row(
+            "SELECT name, system_prompt_addendum, purpose, goal FROM crews WHERE id = ?1",
             params![SEED_CREW_ID],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
         )
         .unwrap();
     assert_eq!(name, "Pair coding crew");
@@ -434,6 +434,10 @@ fn seed_defaults_inserts_pair_coding_crew_on_empty_db() {
         addendum.as_deref(),
         Some(SEED_CREW_ADDENDUM.trim_end_matches('\n'))
     );
+    // Neither reaches the app or a mission (#699); the conventions carry
+    // the definition of done the seed goal used to.
+    assert_eq!((purpose, goal), (None, None));
+    assert!(SEED_CREW_ADDENDUM.contains("a task is done when"));
 
     let expected_args: Vec<String> = serde_json::from_str(SEED_ROLE_ARGS_JSON).unwrap();
     let codex_seed_count = crate::repo::role::list(&conn)

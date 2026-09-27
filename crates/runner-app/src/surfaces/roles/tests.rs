@@ -1,26 +1,8 @@
-use super::logic::resolve_slot_runtime_layers;
 use super::logic::runtime_default_effort_label;
 use super::logic::runtime_model_placeholder;
 use super::logic::validate_role_handle;
 use super::*;
 use runner_backend::model::Runtime;
-
-#[test]
-fn legacy_slot_pins_reach_validation_as_raw_names() {
-    for name in ["qoder", "Runtime-Needle"] {
-        let layers = resolve_slot_runtime_layers("codex", Some(name), None, None);
-        assert!(layers.runtime_pinned);
-        assert_eq!(layers.runtime, name);
-        let raw_override = layers.runtime_pinned.then_some(layers.runtime.as_str());
-        let error = runner_backend::ops::slot::validate_runtime_override(raw_override).unwrap_err();
-        assert_eq!(
-            error.to_string(),
-            format!(
-                "unknown runtime '{name}' — valid runtimes: codex, claude-code, copilot, pi, trae"
-            )
-        );
-    }
-}
 
 fn runtime_with_defaults(
     default_model: Option<&str>,
@@ -72,54 +54,6 @@ fn runtime_default_labels_include_known_values() {
     assert_eq!(
         runtime_default_effort_label(&runtimes, "codex"),
         "Runtime default"
-    );
-}
-
-#[test]
-fn slot_runtime_layers_leave_blank_overrides_to_inherit_role_defaults() {
-    assert_eq!(
-        resolve_slot_runtime_layers("codex", None, None, None),
-        RuntimeLayerResolution {
-            runtime: "codex".into(),
-            runtime_pinned: false,
-            model: None,
-            effort: None,
-        }
-    );
-}
-
-#[test]
-fn same_runtime_pin_keeps_blank_model_and_effort_overrides() {
-    assert_eq!(
-        resolve_slot_runtime_layers("codex", Some("codex"), None, None),
-        RuntimeLayerResolution {
-            runtime: "codex".into(),
-            runtime_pinned: true,
-            model: None,
-            effort: None,
-        }
-    );
-}
-
-#[test]
-fn different_runtime_uses_runtime_defaults_unless_overridden() {
-    assert_eq!(
-        resolve_slot_runtime_layers("codex", Some("claude-code"), None, None),
-        RuntimeLayerResolution {
-            runtime: "claude-code".into(),
-            runtime_pinned: true,
-            model: None,
-            effort: None,
-        }
-    );
-    assert_eq!(
-        resolve_slot_runtime_layers("codex", Some("claude-code"), Some("opus"), Some("max"),),
-        RuntimeLayerResolution {
-            runtime: "claude-code".into(),
-            runtime_pinned: true,
-            model: Some("opus".into()),
-            effort: Some("max".into()),
-        }
     );
 }
 
@@ -183,7 +117,7 @@ fn prompt_meta_counts_lines_and_size() {
 
 #[test]
 fn prompt_preview_clamps_only_long_prompts_at_a_line_boundary() {
-    use super::logic::{prompt_preview, PROMPT_PREVIEW_LINES};
+    use crate::surfaces::profile_page::{prompt_preview, PREVIEW_LINES as PROMPT_PREVIEW_LINES};
 
     let fits = (1..=PROMPT_PREVIEW_LINES)
         .map(|line| format!("line {line}"))
@@ -453,12 +387,7 @@ impl RolePageHarness {
     }
 
     fn in_place_edit(&mut self) -> bool {
-        self.read(|root| {
-            root.role_surfaces
-                .edit
-                .as_ref()
-                .is_some_and(|form| form.slot.is_none())
-        })
+        self.read(|root| root.role_surfaces.edit.is_some())
     }
 }
 
@@ -506,6 +435,22 @@ fn role_page_columns_split_wide_and_stack_at_the_minimum_width() {
             assert!(
                 prompt.top() >= profile.bottom(),
                 "{width}: the prompt should wrap under the profile, {profile:?} vs {prompt:?}"
+            );
+        }
+        let actions = page.visual.debug_bounds("ROLE_PAGE_ACTIONS").unwrap();
+        assert!(
+            actions.size.width <= px(ROLE_COLUMN_WIDTH + 1.),
+            "{width}: Chat now and Edit keep the column's width: {actions:?}"
+        );
+        if prompt.top() >= profile.bottom() {
+            assert!(
+                (profile.size.width - prompt.size.width).abs() <= px(1.),
+                "{width}: a stacked profile spans the page like the prompt: {profile:?} vs {prompt:?}"
+            );
+        } else {
+            assert!(
+                (profile.size.width - px(ROLE_COLUMN_WIDTH)).abs() <= px(1.),
+                "{width}: beside the prompt the profile keeps its column: {profile:?}"
             );
         }
     }
@@ -599,6 +544,16 @@ fn role_list_table_fits_the_minimum_window_and_counts_its_rows() {
         let rows = page.visual.debug_bounds("ROLE_TABLE_ROWS").unwrap();
         let header = page.visual.debug_bounds("ROLE_TABLE_HEADER").unwrap();
         let actions = page.visual.debug_bounds("ROLE_ROW_ACTIONS").unwrap();
+        let new_role = page.visual.debug_bounds("PAGINATED_LIST_ACTION").unwrap();
+        let search = page.visual.debug_bounds("PAGINATED_LIST_SEARCH").unwrap();
+        assert!(
+            new_role.right() <= rows.right() + px(1.) && new_role.size.width > px(40.),
+            "{width}: + New role {new_role:?} is pushed off the page {rows:?}"
+        );
+        assert!(
+            header.top() - search.bottom() >= px(32.),
+            "{width}: the table header sits too close under the search {search:?} vs {header:?}"
+        );
         assert!(
             actions.right() <= rows.right() + px(1.),
             "{width}: row actions {actions:?} overflow the table {rows:?}"
@@ -680,7 +635,7 @@ fn edit_edits_in_place_and_cancel_discards_the_draft() {
     page.open_role("page-coder");
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -688,11 +643,8 @@ fn edit_edits_in_place_and_cancel_discards_the_draft() {
     assert!(page.visual.debug_bounds("ROLE_EDIT_IN_PLACE").is_some());
     assert!(page.visual.debug_bounds("ROLE_EDITING_TAG").is_some());
     assert!(page.visual.debug_bounds("ROLE_PROMPT_EDITOR").is_some());
-    assert!(
-        page.visual.debug_bounds("ROLE_EDIT_DRAWER").is_none(),
-        "the role page never opens the drawer"
-    );
     assert!(page.visual.debug_bounds("ROLE_EDIT_DIRTY").is_none());
+    let clean_setup = page.visual.debug_bounds("ROLE_PAGE_SETUP").unwrap();
 
     let name = page.read(|root| {
         root.role_surfaces
@@ -709,6 +661,11 @@ fn edit_edits_in_place_and_cancel_discards_the_draft() {
         .unwrap();
     page.visual.run_until_parked();
     assert!(page.visual.debug_bounds("ROLE_EDIT_DIRTY").is_some());
+    assert_eq!(
+        page.visual.debug_bounds("ROLE_PAGE_SETUP").unwrap().top(),
+        clean_setup.top(),
+        "\"Unsaved changes\" appears in reserved space; the setup below never moves"
+    );
 
     page.click("ROLE_EDIT_CANCEL");
     assert!(!page.in_place_edit());
@@ -718,7 +675,7 @@ fn edit_edits_in_place_and_cancel_discards_the_draft() {
     // Escape from a field cancels too, as it closes the drawer.
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -741,7 +698,7 @@ fn an_untouched_form_is_clean_even_when_an_arg_holds_a_space() {
     page.open_role("page-coder");
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -779,7 +736,7 @@ fn saving_a_rename_keeps_an_arg_that_holds_a_space() {
     page.open_role("page-coder");
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -833,7 +790,6 @@ fn a_legacy_shell_role_saves_only_after_an_agent_is_picked() {
         &[runtime_with_defaults(None, None)],
         &role,
         &role.runtime,
-        false,
     );
     assert_eq!(
         options
@@ -847,7 +803,7 @@ fn a_legacy_shell_role_saves_only_after_an_agent_is_picked() {
     page.open_role("legacy-shell");
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -930,7 +886,7 @@ fn the_prompt_editor_fills_the_column_while_editing() {
     page.visual.simulate_resize(size(px(1440.), px(900.)));
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -956,7 +912,7 @@ fn save_in_place_goes_through_the_shared_submit() {
     page.open_role("page-coder");
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     page.visual.run_until_parked();
@@ -998,7 +954,7 @@ fn leaving_the_role_page_discards_an_in_place_draft() {
     page.open_role("page-coder");
     page.host
         .update(&mut page.visual, |root, window, cx| {
-            root.open_role_edit(role.clone(), None, window, cx)
+            root.open_role_edit(role.clone(), window, cx)
         })
         .unwrap();
     assert!(page.in_place_edit());
@@ -1035,53 +991,6 @@ fn edit_details_opens_the_role_page_in_edit_mode() {
     );
     assert!(page.in_place_edit());
     assert!(page.visual.debug_bounds("ROLE_EDIT_IN_PLACE").is_some());
-    assert!(page.visual.debug_bounds("ROLE_EDIT_DRAWER").is_none());
-}
-
-#[test]
-fn a_crew_slot_edit_still_opens_the_drawer() {
-    use crate::surfaces::AppRoute;
-    use chrono::Utc;
-    use runner_backend::model::{Slot, SlotWithRole};
-
-    let mut page = role_page_harness("role-slot-drawer");
-    let role = create_test_role(&page.core, "page-coder", None);
-    let slot = SlotWithRole {
-        slot: Slot {
-            id: "slot".into(),
-            crew_id: "crew".into(),
-            role_id: role.id.clone(),
-            slot_handle: "page-coder".into(),
-            position: 0,
-            lead: true,
-            runtime_override: None,
-            model_override: Some("sonnet".into()),
-            effort_override: None,
-            added_at: Utc::now(),
-        },
-        role: role.clone(),
-    };
-    page.host
-        .update(&mut page.visual, |root, window, cx| {
-            root.route = AppRoute::CrewEditor("crew".into());
-            root.open_role_edit(role.clone(), Some(slot), window, cx)
-        })
-        .unwrap();
-    page.visual.run_until_parked();
-    assert!(page.visual.debug_bounds("ROLE_EDIT_DRAWER").is_some());
-    assert!(page.visual.debug_bounds("ROLE_EDIT_IN_PLACE").is_none());
-    let model = page.read(|root| {
-        let form = root.role_surfaces.edit.as_ref().unwrap();
-        assert!(form.slot.is_some());
-        form.model.clone()
-    });
-    let model = page
-        .host
-        .update(&mut page.visual, |_, _, cx| {
-            model.read(cx).text().to_owned()
-        })
-        .unwrap();
-    assert_eq!(model, "sonnet", "the drawer keeps the slot's overrides");
 }
 
 /// Records the width layout offers a text leaf, in the order offered.
@@ -1200,4 +1109,47 @@ fn profile_text_is_first_shaped_at_its_column_width() {
         "all offers: {:?}",
         offered.borrow()
     );
+}
+
+// A flex column's first sizing pass offers its `min_w(0)` rows no width; a
+// label or paragraph that wraps there is measured a character per line, and
+// the setup section kept that height as a gap below its last row.
+#[test]
+fn the_setup_section_ends_at_its_last_row_in_view_and_edit() {
+    use gpui::{px, size};
+
+    let mut page = role_page_harness("role-setup-height");
+    let role = create_test_role(
+        &page.core,
+        "page-reviewer",
+        Some("You are a reviewer in a two-person peer coding loop.\n\n".repeat(40)),
+    );
+    page.open_role("page-reviewer");
+    for edit in [false, true] {
+        if edit {
+            let role = role.clone();
+            page.host
+                .update(&mut page.visual, |root, window, cx| {
+                    root.open_role_edit(role, window, cx)
+                })
+                .unwrap();
+            page.visual.run_until_parked();
+        }
+        for width in [640., 1100., 1440.] {
+            page.visual.simulate_resize(size(px(width), px(900.)));
+            page.visual.run_until_parked();
+            let setup = page.visual.debug_bounds("ROLE_PAGE_SETUP").unwrap();
+            let last = page.visual.debug_bounds("ROLE_SETUP_LAST").unwrap();
+            assert!(
+                (setup.bottom() - last.bottom()).abs() <= px(1.),
+                "edit {edit}, {width}: the setup runs past its last row, {setup:?} vs {last:?}"
+            );
+            if edit {
+                assert!(
+                    last.size.width <= px(ROLE_COLUMN_WIDTH + 1.),
+                    "{width}: the edit form keeps the column's width: {last:?}"
+                );
+            }
+        }
+    }
 }

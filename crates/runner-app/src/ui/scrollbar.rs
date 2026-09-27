@@ -49,6 +49,12 @@ pub fn terminal_scrollbar_gutter() -> Rems {
     rems(ScrollbarKind::Terminal.gutter() / 16.)
 }
 
+/// Width an app list reserves at its right edge so its rows sit beside the
+/// scrollbar, not under it.
+pub fn app_scrollbar_gutter() -> Rems {
+    rems(ScrollbarKind::App.gutter() / 16.)
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct ScrollbarMetrics {
     pub viewport: f32,

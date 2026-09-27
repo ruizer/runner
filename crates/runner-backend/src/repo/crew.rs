@@ -127,8 +127,6 @@ pub fn list_with_role_count(conn: &Connection) -> rusqlite::Result<Vec<(Crew, i6
 
 const SEARCH_PREDICATE: &str = "(
        LOWER(c.name) LIKE LOWER(?1) ESCAPE '\\'
-    OR LOWER(COALESCE(c.purpose, '')) LIKE LOWER(?1) ESCAPE '\\'
-    OR LOWER(COALESCE(c.goal, '')) LIKE LOWER(?1) ESCAPE '\\'
     OR LOWER(COALESCE(c.system_prompt_addendum, '')) LIKE LOWER(?1) ESCAPE '\\'
     OR EXISTS (
         SELECT 1
