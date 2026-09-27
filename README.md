@@ -87,8 +87,8 @@ https://github.com/user-attachments/assets/fb3669a4-010d-42d0-9555-2a3ba3223c75
 <table>
 <tr>
 <td width="60%">
-  <img src="assets/roles.png" alt="Roles — reusable agent configurations, each with its runtime, command, and the crews and sessions using it" width="100%" />
-  <img src="assets/crews.png" alt="Crews — codex-crew and claude crew, each a coder lead and a reviewer drawn from roles" width="100%" />
+  <img src="assets/roles.png" alt="Role page — a role's pixel avatar, runtime, model, effort, permissions and command, beside its system prompt rendered as markdown" width="100%" />
+  <img src="assets/crews.png" alt="Crew page — claude pair, a Claude Code lead and a Codex reviewer drawn from roles, beside its team conventions" width="100%" />
 </td>
 <td width="40%" valign="middle">
 

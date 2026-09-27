@@ -87,8 +87,8 @@ https://github.com/user-attachments/assets/fb3669a4-010d-42d0-9555-2a3ba3223c75
 <table>
 <tr>
 <td width="60%">
-  <img src="assets/roles.png" alt="角色列表 — 可复用的 agent 配置，每个都列出运行时、命令，以及用到它的 crew 和会话" width="100%" />
-  <img src="assets/crews.png" alt="Crew 列表 — codex-crew 和 claude crew，各由一个 coder lead 和一个 reviewer 组成，都取自角色" width="100%" />
+  <img src="assets/roles.png" alt="角色页面 — 角色的像素头像、运行时、模型、effort、权限和命令，旁边是渲染成 markdown 的系统提示词" width="100%" />
+  <img src="assets/crews.png" alt="Crew 页面 — claude pair，一个 Claude Code 的 lead 和一个 Codex 的 reviewer，都取自角色，旁边是团队约定" width="100%" />
 </td>
 <td width="40%" valign="middle">
 
