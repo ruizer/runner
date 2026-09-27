@@ -79,6 +79,7 @@ impl SessionManager {
     pub(super) fn start_forwarder_thread(
         self: &Arc<Self>,
         session_id: String,
+        row_started_at: String,
         mission_id: Option<String>,
         rt_session: RuntimeSession,
         output: OutputStream,
@@ -159,6 +160,32 @@ impl SessionManager {
                     }
                     Ok(RuntimeOutput::AgentObservation(observation)) => {
                         manager_t.publish_observation(&session_id, observation, events.as_ref())
+                    }
+                    Ok(RuntimeOutput::CodexSessionStart(key)) => {
+                        let result = (|| -> Result<()> {
+                            let conn = pool.get()?;
+                            let Some(row) = crate::repo::session::get_row(&conn, &session_id)?
+                            else {
+                                return Ok(());
+                            };
+                            if row.agent_session_key.as_deref() != Some(&key)
+                                && crate::repo::session::rekey_agent_session_key(
+                                    &conn,
+                                    &session_id,
+                                    &key,
+                                    &row_started_at,
+                                )?
+                            {
+                                events.updated(&SessionUpdatedEvent {
+                                    session_id: session_id.clone(),
+                                    mission_id: row.mission_id,
+                                });
+                            }
+                            Ok(())
+                        })();
+                        if let Err(error) = result {
+                            log::warn!("rekey Codex session {session_id}: {error}");
+                        }
                     }
                     Ok(RuntimeOutput::StatusBridgeFailed) => {
                         manager_t.status_bridge_failed(&session_id, events.as_ref())

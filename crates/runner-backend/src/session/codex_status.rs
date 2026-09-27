@@ -303,12 +303,28 @@ impl CodexStatusWatcher {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn drain_observations(
         &mut self,
         mut transition: impl FnMut(AgentObservation, &'static str),
     ) -> Result<()> {
+        self.drain_with_session_starts(&mut transition, |_| {})
+    }
+
+    pub(crate) fn drain_with_session_starts(
+        &mut self,
+        mut transition: impl FnMut(AgentObservation, &'static str),
+        mut session_start: impl FnMut(String),
+    ) -> Result<()> {
         self.feed.drain(false, |report| {
-            if let Ok(report) = serde_json::from_value(report) {
+            if let Ok(report) = serde_json::from_value::<StatusReport>(report) {
+                if report.hook_event_name == "SessionStart" && report.agent_id.is_none() {
+                    if let Some(id) = report.session_id.as_deref() {
+                        if uuid::Uuid::parse_str(id).is_ok() {
+                            session_start(id.to_owned());
+                        }
+                    }
+                }
                 if let Some(value) = self.observation.observe(report) {
                     transition(value, "hook");
                 }
@@ -365,6 +381,31 @@ mod tests {
 
     fn abort(turn: &str) -> Value {
         json!({"type":"event_msg","payload":{"type":"turn_aborted","turn_id":turn,"reason":"interrupted"}})
+    }
+
+    #[test]
+    fn only_current_generation_root_session_starts_report_keys() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("codex.ndjson");
+        let mut watcher = CodexStatusWatcher::start(&path, "current".into()).unwrap();
+        let old = uuid::Uuid::new_v4().to_string();
+        let new = uuid::Uuid::new_v4().to_string();
+        let reports = [
+            json!({"generation":"old","hook_event_name":"SessionStart","session_id":old}),
+            json!({"generation":"current","hook_event_name":"SessionStart","session_id":old,"agent_id":"child"}),
+            json!({"generation":"current","hook_event_name":"SessionStart","session_id":"invalid"}),
+            json!({"generation":"current","hook_event_name":"SessionStart","session_id":new,"source":"clear"}),
+        ];
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        for report in reports {
+            writeln!(file, "{report}").unwrap();
+        }
+        watcher.feed.dirty.store(true, Ordering::Release);
+        let mut starts = Vec::new();
+        watcher
+            .drain_with_session_starts(|_, _| {}, |id| starts.push(id))
+            .unwrap();
+        assert_eq!(starts, vec![new]);
     }
 
     #[test]

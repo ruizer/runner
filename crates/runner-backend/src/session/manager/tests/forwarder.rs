@@ -40,7 +40,9 @@ fn forward_queued_output(items: Vec<RuntimeOutput>) -> Vec<ForwardedEvent> {
         match item {
             RuntimeOutput::Stream(bytes) => fake.push_output(0, &bytes),
             RuntimeOutput::StatusTransition { state, .. } => fake.push_status(0, state),
-            RuntimeOutput::AgentObservation(_) | RuntimeOutput::StatusBridgeFailed => {
+            RuntimeOutput::AgentObservation(_)
+            | RuntimeOutput::CodexSessionStart(_)
+            | RuntimeOutput::StatusBridgeFailed => {
                 panic!("not a byte-batching fixture")
             }
         }
@@ -50,6 +52,7 @@ fn forward_queued_output(items: Vec<RuntimeOutput>) -> Vec<ForwardedEvent> {
     let app_data = tempfile::tempdir().unwrap();
     mgr.start_forwarder_thread(
         rt_session.session_id.clone(),
+        String::new(),
         None,
         rt_session,
         output,
@@ -65,6 +68,159 @@ fn forward_queued_output(items: Vec<RuntimeOutput>) -> Vec<ForwardedEvent> {
     .unwrap();
     let events = std::mem::take(&mut *capture.0.lock().unwrap());
     events
+}
+
+#[test]
+fn codex_session_starts_rekey_current_running_row_for_direct_and_mission() {
+    for mission in [false, true] {
+        for keyed in [false, true] {
+            let pool = pool_with_schema();
+            let id = ulid::Ulid::new().to_string();
+            let mission_id = mission.then(|| ulid::Ulid::new().to_string());
+            let role_id = ulid::Ulid::new().to_string();
+            if let Some(mission_id) = mission_id.as_deref() {
+                insert_crew_role(&pool, mission_id, &role_id);
+            }
+            let old = uuid::Uuid::new_v4().to_string();
+            let new = uuid::Uuid::new_v4().to_string();
+            let mut row = crate::repo::session::SessionRowDb::new_running(id.clone());
+            row.agent_session_key = keyed.then(|| old.clone());
+            row.mission_id = mission_id.clone();
+            row.started_at = Some(Utc::now());
+            let started_at = row.started_at.unwrap().to_rfc3339();
+            crate::repo::session::insert(&pool.get().unwrap(), &row).unwrap();
+
+            let fake = fake_runtime();
+            let mgr = mgr_with_fake(None, Arc::clone(&fake));
+            let (rt_session, output) = fake
+                .spawn(SpawnSpec {
+                    session_id: id.clone(),
+                    ..Default::default()
+                })
+                .unwrap();
+            {
+                let spawns = fake.spawns.lock().unwrap();
+                let tx = spawns[0].tx.as_ref().unwrap();
+                tx.send(RuntimeOutput::CodexSessionStart(new.clone()))
+                    .unwrap();
+                tx.send(RuntimeOutput::CodexSessionStart(new.clone()))
+                    .unwrap();
+            }
+            fake.close_spawn(0);
+            let events = capture();
+            let app_data = tempfile::tempdir().unwrap();
+            mgr.start_forwarder_thread(
+                id.clone(),
+                started_at.clone(),
+                mission_id.clone(),
+                rt_session,
+                output,
+                Arc::clone(&pool),
+                events.clone(),
+                role("fake", &[]),
+                false,
+                false,
+                None,
+                app_data.path().to_path_buf(),
+            )
+            .join()
+            .unwrap();
+
+            let conn = pool.get().unwrap();
+            assert_eq!(
+                crate::repo::session::get_row(&conn, &id)
+                    .unwrap()
+                    .unwrap()
+                    .agent_session_key
+                    .as_deref(),
+                Some(new.as_str())
+            );
+            assert!(!crate::repo::session::capture_agent_session_key(
+                &conn,
+                &id,
+                &old,
+                &started_at
+            )
+            .unwrap());
+            let updates = events.updated.lock().unwrap();
+            assert_eq!(updates.len(), 1);
+            assert_eq!(updates[0].session_id, id);
+            assert_eq!(updates[0].mission_id, mission_id);
+        }
+    }
+}
+
+#[test]
+fn codex_session_starts_cannot_rekey_older_or_stopped_rows() {
+    for stale in [false, true] {
+        let pool = pool_with_schema();
+        let id = ulid::Ulid::new().to_string();
+        let old = uuid::Uuid::new_v4().to_string();
+        let new = uuid::Uuid::new_v4().to_string();
+        let mut row = crate::repo::session::SessionRowDb::new_running(id.clone());
+        row.agent_session_key = Some(old.clone());
+        row.started_at = Some(Utc::now());
+        let started_at = row.started_at.unwrap().to_rfc3339();
+        crate::repo::session::insert(&pool.get().unwrap(), &row).unwrap();
+        {
+            let conn = pool.get().unwrap();
+            if stale {
+                conn.execute(
+                    "UPDATE sessions SET started_at = ?2 WHERE id = ?1",
+                    params![id, (Utc::now() + chrono::Duration::seconds(1)).to_rfc3339()],
+                )
+                .unwrap();
+            } else {
+                conn.execute(
+                    "UPDATE sessions SET status = 'stopped' WHERE id = ?1",
+                    params![id],
+                )
+                .unwrap();
+            }
+        }
+        let fake = fake_runtime();
+        let mgr = mgr_with_fake(None, Arc::clone(&fake));
+        let (rt_session, output) = fake
+            .spawn(SpawnSpec {
+                session_id: id.clone(),
+                ..Default::default()
+            })
+            .unwrap();
+        fake.spawns.lock().unwrap()[0]
+            .tx
+            .as_ref()
+            .unwrap()
+            .send(RuntimeOutput::CodexSessionStart(new))
+            .unwrap();
+        fake.close_spawn(0);
+        let events = capture();
+        let app_data = tempfile::tempdir().unwrap();
+        mgr.start_forwarder_thread(
+            id.clone(),
+            started_at,
+            None,
+            rt_session,
+            output,
+            Arc::clone(&pool),
+            events.clone(),
+            role("fake", &[]),
+            false,
+            false,
+            None,
+            app_data.path().to_path_buf(),
+        )
+        .join()
+        .unwrap();
+        assert_eq!(
+            crate::repo::session::get_row(&pool.get().unwrap(), &id)
+                .unwrap()
+                .unwrap()
+                .agent_session_key
+                .as_deref(),
+            Some(old.as_str())
+        );
+        assert!(events.updated.lock().unwrap().is_empty());
+    }
 }
 
 #[test]
@@ -107,6 +263,7 @@ fn forwarder_delivers_a_cursor_burst_without_waiting_for_eof() {
     let app_data = tempfile::tempdir().unwrap();
     let forwarder = mgr.start_forwarder_thread(
         rt_session.session_id.clone(),
+        String::new(),
         None,
         rt_session,
         output,

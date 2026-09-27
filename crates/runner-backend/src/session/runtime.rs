@@ -139,6 +139,7 @@ pub enum RuntimeOutput {
     /// frontend terminal **appends** them.
     Stream(Vec<u8>),
     AgentObservation(super::status::AgentObservation),
+    CodexSessionStart(String),
     StatusBridgeFailed,
     /// Forwarder-inferred busy/idle transition. `source` is
     /// `"forwarder"` for these synthetic events. Static-str because
