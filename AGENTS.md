@@ -89,7 +89,7 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 
 ## Commit And PR Conventions
 
-- Use focused commits with an imperative subject.
+- Use focused commits with an imperative subject. A crew mission's pull request is one commit; see Crew Missions.
 - Common scopes: `db`, `commands`, `ui`, `event-log`, `session`, `event-bus`,
   `router`, `cli`, `mission`, `docs`, `validation`.
 - Example: `fix(session): preserve terminal geometry on tab switch`.
@@ -102,6 +102,8 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 A crew mission ends in an open pull request, never a merge. The crew works on its own branch in its own worktree, commits, pushes, opens the PR against `main`, and drives CI green on both platforms; then it stops. It does not merge the PR, delete its branch or worktree, or cut a nightly or release. Jason reviews the PR and does the final merge. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
 
 A mission runs in its worktree. Before starting it, create the worktree as described under Worktrees and commit the brief on its branch; then start the mission with the worktree as its directory, `runner mission start --crew <crew> --cwd <repo>/.worktrees/<flattened-branch> …`, not `--project runner`. Every slot's agent and shell then start in the worktree instead of the root checkout, the mission still lands under the runner project because the project is inferred from the directory, and the brief names the same path.
+
+A mission lands as a single commit. Before pushing, the crew squashes everything on its branch, the brief commit included, into one commit on top of `main`, with a subject that names the change rather than the brief. Fixes after the push, from review or CI, are folded into that commit with `git commit --amend` and pushed with `git push --force-with-lease`, so the pull request always shows one commit. Split into more than one commit only when the mission covers changes that are unrelated to each other, such as a fix and an independent cleanup that could each be reverted alone, and say why in the pull request body. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
 
 ## Notes For Agent Runtimes
 
