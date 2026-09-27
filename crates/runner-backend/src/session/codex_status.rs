@@ -90,12 +90,17 @@ impl CodexObservation {
             return None;
         }
         let session_id = report.session_id.filter(|id| !id.is_empty())?;
-        if self.session_id.as_ref().is_some_and(|id| *id != session_id) {
-            if report.hook_event_name != "SessionStart" {
-                return None;
+        let new_session = self.session_id.as_ref().is_some_and(|id| *id != session_id);
+        if new_session && report.hook_event_name != "SessionStart" {
+            return None;
+        }
+        if report.hook_event_name == "SessionStart" && (new_session || self.ended) {
+            if new_session {
+                self.retired_turns.clear();
+            } else if let Some(turn_id) = self.turn_id.take() {
+                self.retired_turns.insert(turn_id);
             }
             self.turn_id = None;
-            self.retired_turns.clear();
             self.pending_tools = 0;
             self.compacting = false;
             self.compaction_resume = None;
@@ -129,7 +134,11 @@ impl CodexObservation {
             self.pending_tools = 0;
             self.compacting = false;
             self.compaction_resume = None;
-            self.value.activity = Activity::Unavailable;
+            self.value.activity = if self.value.outcome.is_some() {
+                Activity::Ready
+            } else {
+                Activity::Unavailable
+            };
             self.value.detail = None;
             return (self.value.source == ObservationSource::Hook).then(|| self.value.clone());
         }
@@ -550,6 +559,99 @@ mod tests {
         assert!(observe(&mut state, report("Stop", "one")).is_none());
         assert_eq!(state.session_id.as_deref(), Some("new"));
         assert_eq!(state.value.activity, Activity::Working);
+    }
+
+    #[test]
+    fn same_session_start_after_end_recovers_from_interrupt_and_rejects_old_turn_hooks() {
+        for source in ["startup", "resume", "clear", "compact"] {
+            let mut state = CodexObservation::default();
+            let mut start = report("SessionStart", "");
+            start["transcript_path"] = json!("old-transcript.jsonl");
+            observe(&mut state, start);
+            observe(&mut state, report("UserPromptSubmit", "earlier"));
+            observe(&mut state, report("Stop", "earlier"));
+            observe(&mut state, report("UserPromptSubmit", "old"));
+            observe(&mut state, report("PreToolUse", "old"));
+            observe(&mut state, report("PreCompact", "old"));
+            let interrupted = observe(&mut state, report("Interrupt", "old")).unwrap();
+            assert_eq!(interrupted.outcome, Some(TurnOutcome::Interrupted));
+            let ended = observe(&mut state, report("SessionEnd", "old")).unwrap();
+            assert_eq!(ended.activity, Activity::Ready);
+            assert_eq!(ended.outcome, Some(TurnOutcome::Interrupted));
+            state.observe_transcript(&abort("old"));
+            assert_eq!(state.value.activity, Activity::Ready);
+            let mut child_start = report("SessionStart", "");
+            child_start["agent_id"] = json!("child");
+            assert!(observe(&mut state, child_start).is_none());
+            assert!(state.ended);
+
+            let mut restart = report("SessionStart", "");
+            restart["source"] = json!(source);
+            let restarted = observe(&mut state, restart).unwrap();
+            assert_eq!(restarted.activity, Activity::Idle);
+            assert_eq!(restarted.outcome, None);
+            assert_eq!(restarted.detail, None);
+            assert_eq!(state.session_id.as_deref(), Some("main"));
+            assert_eq!(state.turn_id, None);
+            assert!(state.retired_turns.contains("old"));
+            assert_eq!(state.pending_tools, 0);
+            assert!(!state.compacting);
+            assert!(state.compaction_resume.is_none());
+            assert!(!state.ended);
+            assert_eq!(state.transcript_path, None);
+
+            for event in [
+                "UserPromptSubmit",
+                "PreToolUse",
+                "PostToolUse",
+                "Stop",
+                "Interrupt",
+            ] {
+                assert!(
+                    observe(&mut state, report(event, "old")).is_none(),
+                    "{event}"
+                );
+            }
+            assert!(observe(&mut state, report("UserPromptSubmit", "earlier")).is_none());
+            state.observe_transcript(&abort("old"));
+            assert_eq!(state.value.activity, Activity::Idle);
+
+            let prompt = observe(&mut state, report("UserPromptSubmit", "fresh")).unwrap();
+            assert_eq!(prompt.activity, Activity::Working);
+            assert_eq!(prompt.outcome, None);
+            let tool = observe(&mut state, report("PreToolUse", "fresh")).unwrap();
+            assert_eq!(tool.detail, Some(WorkDetail::UsingTools));
+            assert!(observe(&mut state, report("SessionStart", "")).is_none());
+            assert_eq!(state.value, tool);
+            assert!(observe(&mut state, report("Stop", "old")).is_none());
+            let stopped = observe(&mut state, report("Stop", "fresh")).unwrap();
+            assert_eq!(stopped.activity, Activity::Ready);
+            assert_eq!(stopped.outcome, Some(TurnOutcome::Completed));
+        }
+    }
+
+    #[test]
+    fn completed_turn_session_end_stays_idle_until_same_session_restart() {
+        let mut state = CodexObservation::default();
+        observe(&mut state, report("UserPromptSubmit", "one"));
+        let stopped = observe(&mut state, report("Stop", "one")).unwrap();
+        assert_eq!(stopped.activity, Activity::Ready);
+        assert_eq!(stopped.outcome, Some(TurnOutcome::Completed));
+
+        let ended = observe(&mut state, report("SessionEnd", "one")).unwrap();
+        assert_eq!(ended.activity, Activity::Ready);
+        assert_eq!(ended.outcome, Some(TurnOutcome::Completed));
+        assert!(observe(&mut state, report("UserPromptSubmit", "two")).is_none());
+
+        let restarted = observe(&mut state, report("SessionStart", "")).unwrap();
+        assert_eq!(restarted.activity, Activity::Idle);
+        assert_eq!(restarted.outcome, None);
+        assert_eq!(
+            observe(&mut state, report("UserPromptSubmit", "two"))
+                .unwrap()
+                .activity,
+            Activity::Working
+        );
     }
 
     #[test]
