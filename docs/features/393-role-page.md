@@ -16,7 +16,7 @@ The positioning settled on 2026-09-16 raises the bar. A role is a setup that job
 
 ## Scope
 
-Redesign the role page and the role list in Pencil first, in `design/specs/393-role-page.pen`, which also holds the crew page ([699](./699-crew-page.md)), then implement to match. Both pages show the same data and run the same commands, with no backend changes. The list joined the scope on 2026-09-26.
+Redesign the role page and the role list in Pencil first, in `design/specs/archive/393-role-page.pen`, which also holds the crew page ([699](./699-crew-page.md)), then implement to match. Both pages show the same data and run the same commands, with no backend changes. The list joined the scope on 2026-09-26.
 
 - **Profile split**: a left column holds the role's pixel avatar, display name and handle, Chat now and Edit, then the setup (runtime, model and effort, permissions, command, working directory), the crews using the role and its activity. The system prompt fills the right column. The avatar is the mission's `RoleAvatar` seeded with the role's handle, so it needs no new field, and a slot that keeps its role's handle looks the same on the crew page and in a mission.
 - **Edit in place**: Edit turns the page into its own form instead of opening the edit drawer. The left column's values become controls, the prompt card becomes the editor at full column height, and Save and Cancel replace Chat now and Edit. The editor shows the prompt as markdown text in the mono font, with a Markdown | Preview switch in its header that opens on Markdown. In edit mode the card has a neutral border, not the accent colour. The create form keeps its drawer.
