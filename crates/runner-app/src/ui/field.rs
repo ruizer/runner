@@ -1,14 +1,17 @@
 use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
+use std::time::Duration;
 
 use gpui::prelude::*;
 use gpui::{
-    canvas, div, point, px, rems, svg, AnyElement, App, Bounds, BoxShadow, ClipboardItem, Context,
-    CursorStyle, ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle,
-    Focusable, FontWeight, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseMoveEvent,
-    MouseUpEvent, Pixels, Point, Rems, Render, RenderOnce, ScrollHandle, SharedString,
-    UTF16Selection, Window, WrappedLine,
+    canvas, div, fill, point, px, relative, rems, size, svg, AnyElement, App, AvailableSpace,
+    Bounds, BoxShadow, ClipboardItem, ContentMask, Context, CursorStyle, DispatchPhase, Element,
+    ElementId, ElementInputHandler, Entity, EntityInputHandler, FocusHandle, Focusable, Font,
+    FontWeight, GlobalElementId, Hsla, InspectorElementId, IntoElement, KeyDownEvent, LayoutId,
+    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Rems, Render,
+    RenderOnce, ScrollHandle, SharedString, Size, Style, Task, TextAlign, TextRun, UTF16Selection,
+    Window, WrappedLine,
 };
 use unicode_segmentation::UnicodeSegmentation as _;
 
@@ -21,6 +24,8 @@ use crate::ui::tooltip::Tooltip;
 use crate::{Copy, Cut, Paste, SelectAll};
 
 pub type KeyDownInterceptor = Rc<dyn Fn(&KeyDownEvent, &mut Window, &mut App) -> bool>;
+
+const AUTO_SCROLL_TICK: Duration = Duration::from_millis(16);
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 struct Selection {
@@ -183,7 +188,7 @@ impl TextBuffer {
             .split_word_bound_indices()
             .find_map(|(start, segment)| {
                 let end = start + segment.len();
-                (start <= position && (position < end || position == self.text.len()))
+                (start <= position && (position < end || end == self.text.len()))
                     .then_some(start..end)
             })
             .unwrap_or(position..position);
@@ -338,104 +343,710 @@ impl TextFieldKind {
     }
 }
 
-struct TextFieldLayoutLine {
-    start: usize,
-    top: Pixels,
-    layout: WrappedLine,
-}
-
-struct TextFieldLayout {
-    origin: Point<Pixels>,
-    line_height: Pixels,
-    lines: Vec<TextFieldLayoutLine>,
-    text_len: usize,
+/// What a field's text is shaped from: the text shown (the value, or the
+/// placeholder while the value is empty) and the style it inherits.
+#[derive(Clone, Debug, PartialEq)]
+struct FieldTextKey {
+    text: SharedString,
+    placeholder: bool,
     multiline: bool,
+    font: Font,
+    color: Hsla,
+    font_size: Pixels,
+    line_height: Pixels,
 }
 
-impl TextFieldLayout {
-    fn new(
-        text: &str,
-        kind: TextFieldKind,
-        bare: bool,
-        right_padding: f32,
-        scroll_offset: Point<Pixels>,
-        bounds: Bounds<Pixels>,
-        window: &mut Window,
-    ) -> Self {
-        let rem_size = window.rem_size();
-        let left_padding = if bare { px(0.) } else { rem_size * (10. / 16.) };
-        let right_padding = if bare {
-            px(0.)
-        } else {
-            rem_size * (right_padding / 16.)
-        };
-        let top_padding = if bare || !kind.multiline() {
-            px(0.)
-        } else {
-            rem_size * (6. / 16.)
-        };
-        let text_style = window.text_style();
-        let font_size = text_style.font_size.to_pixels(rem_size);
-        let line_height = if kind.multiline() {
-            rem_size * (20. / 16.)
-        } else {
-            text_style.line_height_in_pixels(rem_size)
-        };
-        let content_width = (bounds.size.width - left_padding - right_padding).max(px(0.));
-        let shaped = window
-            .text_system()
-            .shape_text(
-                text.to_owned().into(),
-                font_size,
-                &[text_style.to_run(text.len())],
-                kind.multiline().then_some(content_width),
-                None,
-            )
-            .unwrap_or_default();
-        let mut start = 0;
-        let mut top = px(0.);
-        let mut lines = Vec::with_capacity(shaped.len());
-        for (source, layout) in text.split('\n').zip(shaped) {
-            let row_count = layout.wrap_boundaries().len() + 1;
-            lines.push(TextFieldLayoutLine { start, top, layout });
-            start += source.len() + usize::from(start + source.len() < text.len());
-            top += line_height * row_count as f32;
+/// Where an index shows on a line: its visual row and its x on that row.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+struct Spot {
+    row: usize,
+    x: Pixels,
+}
+
+/// A glyph's source index and its box on its visual row.
+#[derive(Clone, Copy, Debug)]
+struct GlyphBox {
+    index: usize,
+    row: usize,
+    left: Pixels,
+    right: Pixels,
+}
+
+/// A grapheme boundary of a line and where it shows.
+#[derive(Clone, Copy, Debug)]
+struct Stop {
+    index: usize,
+    /// Where it shows as the start of the text after it.
+    after: Spot,
+    /// Where it shows as the end of the text before it, which is the end of
+    /// the previous row where a soft wrap breaks the line.
+    before: Spot,
+}
+
+/// A line's glyphs where they are painted, split into rows at the same
+/// glyphs as the painter splits them, and where each boundary shows. It
+/// lays text out left to right; glyphs out of source order, as right-to-left
+/// runs shape, stay in bounds and map only to grapheme boundaries.
+#[derive(Debug)]
+struct LineGeometry {
+    /// The right end of each visual row.
+    row_ends: Vec<Pixels>,
+    /// In visual order.
+    glyphs: Vec<GlyphBox>,
+    /// In source order.
+    stops: Vec<Stop>,
+}
+
+impl LineGeometry {
+    /// `glyphs` are each glyph's source index and x in the unwrapped line,
+    /// in visual order; `wraps` are the glyphs that start a new row.
+    fn new(source: &str, glyphs: &[(usize, Pixels)], wraps: &[usize], width: Pixels) -> Self {
+        let mut wraps = wraps.iter().peekable();
+        let mut row_ends = vec![px(0.)];
+        let mut row_x = px(0.);
+        let mut boxes = Vec::with_capacity(glyphs.len());
+        for (ordinal, &(index, x)) in glyphs.iter().enumerate() {
+            if wraps.next_if(|wrap| **wrap == ordinal).is_some() {
+                row_ends.push(px(0.));
+                row_x = x;
+            }
+            let left = x - row_x;
+            let right =
+                (glyphs.get(ordinal + 1).map_or(width, |(_, next)| *next) - row_x).max(left);
+            let row = row_ends.len() - 1;
+            row_ends[row] = row_ends[row].max(right);
+            boxes.push(GlyphBox {
+                index,
+                row,
+                left,
+                right,
+            });
         }
+        let mut by_index = (0..boxes.len()).collect::<Vec<_>>();
+        by_index.sort_by_key(|ordinal| (boxes[*ordinal].index, *ordinal));
+        let stops = source
+            .grapheme_indices(true)
+            .map(|(index, _)| index)
+            .chain([source.len()])
+            .map(|index| {
+                let next = by_index.partition_point(|ordinal| boxes[*ordinal].index < index);
+                let after = by_index.get(next).map(|ordinal| {
+                    let glyph = boxes[*ordinal];
+                    Spot {
+                        row: glyph.row,
+                        x: glyph.left,
+                    }
+                });
+                let before = next.checked_sub(1).map(|previous| {
+                    let glyph = boxes[by_index[previous]];
+                    Spot {
+                        row: glyph.row,
+                        x: glyph.right,
+                    }
+                });
+                Stop {
+                    index,
+                    after: after.or(before).unwrap_or_default(),
+                    before: before.or(after).unwrap_or_default(),
+                }
+            })
+            .collect();
         Self {
-            origin: bounds.origin + point(left_padding, top_padding) + scroll_offset,
-            line_height,
-            lines,
-            text_len: text.len(),
-            multiline: kind.multiline(),
+            row_ends,
+            glyphs: boxes,
+            stops,
         }
     }
 
-    fn index_for_point(&self, screen_point: Point<Pixels>) -> usize {
-        let local = screen_point - self.origin;
-        if !self.multiline {
-            return self.lines.first().map_or(0, |line| {
-                line.start
-                    + line
-                        .layout
-                        .closest_index_for_position(point(local.x, px(0.)), self.line_height)
-                        .unwrap_or_else(|index| index)
-            });
+    fn len(&self) -> usize {
+        self.stops.last().map_or(0, |stop| stop.index)
+    }
+
+    fn rows(&self) -> usize {
+        self.row_ends.len()
+    }
+
+    /// Where `index` shows: after the text before it with `upstream`, else
+    /// before the text after it.
+    fn spot(&self, index: usize, upstream: bool) -> Spot {
+        let stop = self
+            .stops
+            .partition_point(|stop| stop.index < index)
+            .min(self.stops.len() - 1);
+        let stop = self.stops[stop];
+        if upstream {
+            stop.before
+        } else {
+            stop.after
         }
-        if local.y < px(0.) {
-            return 0;
-        }
-        for line in &self.lines {
-            let height = self.line_height * (line.layout.wrap_boundaries().len() + 1) as f32;
-            if local.y < line.top + height {
-                let relative = point(local.x, local.y - line.top);
-                return line.start
-                    + line
-                        .layout
-                        .closest_index_for_position(relative, self.line_height)
-                        .unwrap_or_else(|index| index);
+    }
+
+    /// The index at `x` on a row: the boundary closest to it, or with
+    /// `under`, the start of the grapheme it falls on. Also whether it shows
+    /// there as the end of the text before it.
+    fn index_at(&self, row: usize, x: Pixels, under: bool) -> (usize, bool) {
+        if !under {
+            let mut closest: Option<(Pixels, usize, bool)> = None;
+            for stop in &self.stops {
+                for (spot, upstream) in [(stop.after, false), (stop.before, true)] {
+                    if spot.row != row || (upstream && stop.before == stop.after) {
+                        continue;
+                    }
+                    let distance = (spot.x - x).abs();
+                    if closest.is_none_or(|(closest, ..)| distance < closest) {
+                        closest = Some((distance, stop.index, upstream));
+                    }
+                }
+            }
+            if let Some((_, index, upstream)) = closest {
+                return (index, upstream);
             }
         }
-        self.text_len
+        // The grapheme holding the glyph nearest `x`; also where no boundary
+        // shows on the row, as when a wrap falls inside a grapheme.
+        let distance = |glyph: &GlyphBox| {
+            if x < glyph.left {
+                glyph.left - x
+            } else if x >= glyph.right {
+                x - glyph.right
+            } else {
+                px(0.)
+            }
+        };
+        let index = self
+            .glyphs
+            .iter()
+            .filter(|glyph| glyph.row == row)
+            .min_by(|a, b| {
+                distance(a)
+                    .partial_cmp(&distance(b))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map_or(0, |glyph| glyph.index);
+        let stop = self
+            .stops
+            .partition_point(|stop| stop.index <= index)
+            .max(1)
+            - 1;
+        (self.stops[stop].index, false)
+    }
+
+    /// The spans a range covers on each row, as `(row, left, right)`, with a
+    /// block of `newline_width` at the end of the last row for a selected
+    /// line break.
+    fn spans(
+        &self,
+        range: Range<usize>,
+        newline_width: Option<Pixels>,
+    ) -> Vec<(usize, Pixels, Pixels)> {
+        let mut boxes = self
+            .glyphs
+            .iter()
+            .filter(|glyph| range.contains(&glyph.index))
+            .map(|glyph| (glyph.row, glyph.left, glyph.right))
+            .collect::<Vec<_>>();
+        if let Some(width) = newline_width {
+            let row = self.rows() - 1;
+            boxes.push((row, self.row_ends[row], self.row_ends[row] + width));
+        }
+        boxes.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then(a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+        });
+        let mut spans: Vec<(usize, Pixels, Pixels)> = Vec::with_capacity(boxes.len());
+        for (row, left, right) in boxes {
+            match spans.last_mut() {
+                Some(span) if span.0 == row && left <= span.2 => span.2 = span.2.max(right),
+                _ => spans.push((row, left, right)),
+            }
+        }
+        spans
+    }
+}
+
+/// One hard line of a field's text, shaped and wrapped.
+struct FieldLine {
+    start: usize,
+    top: Pixels,
+    layout: WrappedLine,
+    geometry: LineGeometry,
+}
+
+impl FieldLine {
+    fn new(source: &str, start: usize, top: Pixels, layout: WrappedLine) -> Self {
+        let unwrapped = &layout.unwrapped_layout;
+        let mut run_starts = Vec::with_capacity(unwrapped.runs.len());
+        let mut glyphs = Vec::new();
+        for run in &unwrapped.runs {
+            run_starts.push(glyphs.len());
+            glyphs.extend(
+                run.glyphs
+                    .iter()
+                    .map(|glyph| (glyph.index, glyph.position.x)),
+            );
+        }
+        let wraps = layout
+            .wrap_boundaries()
+            .iter()
+            .map(|boundary| run_starts[boundary.run_ix] + boundary.glyph_ix)
+            .collect::<Vec<_>>();
+        let geometry = LineGeometry::new(source, &glyphs, &wraps, unwrapped.width);
+        Self {
+            start,
+            top,
+            layout,
+            geometry,
+        }
+    }
+
+    fn end(&self) -> usize {
+        self.start + self.geometry.len()
+    }
+
+    fn row_top(&self, row: usize, line_height: Pixels) -> Pixels {
+        self.top + line_height * row as f32
+    }
+}
+
+/// A field's text shaped once, at the width the field gives it. Painting,
+/// hit-testing, caret movement and IME all read this one layout.
+struct FieldText {
+    key: FieldTextKey,
+    wrap_width: Option<Pixels>,
+    lines: Vec<FieldLine>,
+    len: usize,
+    /// The width of the block a selected line break paints.
+    newline_width: Pixels,
+    size: Size<Pixels>,
+}
+
+impl FieldText {
+    fn new(key: FieldTextKey, wrap_width: Option<Pixels>, window: &Window) -> Self {
+        let text_system = window.text_system();
+        let run = TextRun {
+            len: key.text.len(),
+            font: key.font.clone(),
+            color: key.color,
+            background_color: None,
+            underline: None,
+            strikethrough: None,
+        };
+        let mut shaped = text_system
+            .shape_text(key.text.clone(), key.font_size, &[run], wrap_width, None)
+            .unwrap_or_default()
+            .into_iter();
+        let mut lines = Vec::new();
+        let mut start = 0;
+        let mut top = px(0.);
+        let mut width = px(0.);
+        for source in key.text.split('\n') {
+            let line = FieldLine::new(source, start, top, shaped.next().unwrap_or_default());
+            start += source.len() + 1;
+            top += key.line_height * line.geometry.rows() as f32;
+            width = width.max(line.layout.width());
+            lines.push(line);
+        }
+        let font_id = text_system.resolve_font(&key.font);
+        let newline_width = text_system
+            .advance(font_id, key.font_size, ' ')
+            .map_or(key.font_size / 2., |advance| advance.width);
+        Self {
+            len: key.text.len(),
+            size: size(wrap_width.unwrap_or(width), top),
+            key,
+            wrap_width,
+            lines,
+            newline_width,
+        }
+    }
+
+    fn line_height(&self) -> Pixels {
+        self.key.line_height
+    }
+
+    fn line_index(&self, index: usize) -> usize {
+        self.lines
+            .partition_point(|line| line.start <= index)
+            .max(1)
+            - 1
+    }
+
+    /// The top left of the caret at `index`, relative to the text's origin.
+    fn caret_position(&self, index: usize, upstream: bool) -> Point<Pixels> {
+        if self.key.placeholder {
+            return Point::default();
+        }
+        let line = &self.lines[self.line_index(index)];
+        let spot = line
+            .geometry
+            .spot(index.saturating_sub(line.start), upstream);
+        point(spot.x, line.row_top(spot.row, self.line_height()))
+    }
+
+    /// The index at a point relative to the text's origin, and whether it
+    /// shows there as the end of the text before it. Above the text is its
+    /// start, below it its end; a single-line field reads only `x`.
+    fn index_for_position(&self, position: Point<Pixels>, under: bool) -> (usize, bool) {
+        if self.key.placeholder {
+            return (0, false);
+        }
+        let (line, row) = if self.key.multiline {
+            if position.y < px(0.) {
+                return (0, false);
+            }
+            let line = &self.lines[self
+                .lines
+                .partition_point(|line| line.top <= position.y)
+                .max(1)
+                - 1];
+            let row = ((position.y - line.top) / self.line_height()).floor() as usize;
+            if row >= line.geometry.rows() {
+                return (self.len, false);
+            }
+            (line, row)
+        } else {
+            (&self.lines[0], 0)
+        };
+        let (index, upstream) = line.geometry.index_at(row, position.x, under);
+        (line.start + index, upstream)
+    }
+
+    /// Where Up or Down from `index` lands, keeping `goal_x` (or the caret's
+    /// own x), and whether it shows as the end of the text before it. From
+    /// the first row Up goes to the start, from the last Down to the end.
+    fn vertical_target(
+        &self,
+        index: usize,
+        upstream: bool,
+        up: bool,
+        goal_x: Option<Pixels>,
+    ) -> (usize, bool, Pixels) {
+        if self.key.placeholder {
+            return (0, false, px(0.));
+        }
+        let line_ix = self.line_index(index);
+        let line = &self.lines[line_ix];
+        let spot = line
+            .geometry
+            .spot(index.saturating_sub(line.start), upstream);
+        let x = goal_x.unwrap_or(spot.x);
+        let target = if up {
+            if spot.row > 0 {
+                Some((line_ix, spot.row - 1))
+            } else {
+                line_ix
+                    .checked_sub(1)
+                    .map(|previous| (previous, self.lines[previous].geometry.rows() - 1))
+            }
+        } else if spot.row + 1 < line.geometry.rows() {
+            Some((line_ix, spot.row + 1))
+        } else {
+            (line_ix + 1 < self.lines.len()).then_some((line_ix + 1, 0))
+        };
+        match target {
+            Some((line_ix, row)) => {
+                let line = &self.lines[line_ix];
+                let (index, upstream) = line.geometry.index_at(row, x, false);
+                (line.start + index, upstream, x)
+            }
+            None => (if up { 0 } else { self.len }, false, x),
+        }
+    }
+
+    /// The rectangles a range covers, one per run of glyphs on a visual row,
+    /// relative to the text's origin. With `newline_blocks`, a selected line
+    /// break adds a block at the end of its line, so empty lines show as
+    /// selected.
+    fn range_rects(&self, range: Range<usize>, newline_blocks: bool) -> Vec<Bounds<Pixels>> {
+        let mut rects = Vec::new();
+        if self.key.placeholder || range.is_empty() {
+            return rects;
+        }
+        let line_height = self.line_height();
+        for (line_ix, line) in self
+            .lines
+            .iter()
+            .enumerate()
+            .skip(self.line_index(range.start))
+        {
+            if line.start >= range.end {
+                break;
+            }
+            let local = range.start.saturating_sub(line.start)..range.end - line.start;
+            let newline =
+                newline_blocks && range.end > line.end() && line_ix + 1 < self.lines.len();
+            for (row, left, right) in line
+                .geometry
+                .spans(local, newline.then_some(self.newline_width))
+            {
+                let top = line.row_top(row, line_height);
+                rects.push(Bounds::from_corners(
+                    point(left, top),
+                    point(right, top + line_height),
+                ));
+            }
+        }
+        rects
+    }
+
+    /// The bounds of a range's first span, or of the caret for an empty
+    /// range.
+    fn range_bounds(&self, range: Range<usize>, upstream: bool) -> Bounds<Pixels> {
+        self.range_rects(range.clone(), false)
+            .into_iter()
+            .next()
+            .unwrap_or_else(|| {
+                Bounds::new(
+                    self.caret_position(range.start, upstream),
+                    size(px(0.), self.line_height()),
+                )
+            })
+    }
+}
+
+/// What a text field shares with the element that draws it.
+#[derive(Default)]
+struct FieldTextState {
+    shaped: Option<FieldText>,
+    /// Where the text was last painted, in window coordinates, and the scroll
+    /// offset it was painted at; `None` while a read-only display shows.
+    origin: Option<Point<Pixels>>,
+    scroll_offset: Point<Pixels>,
+    /// Scroll the caret into view on the next prepaint.
+    reveal_caret: bool,
+}
+
+impl FieldTextState {
+    fn shape(
+        &mut self,
+        key: &FieldTextKey,
+        wrap_width: Option<Pixels>,
+        window: &Window,
+    ) -> &FieldText {
+        let reusable = self.shaped.as_ref().is_some_and(|shaped| {
+            shaped.key == *key
+                && match (shaped.wrap_width, wrap_width) {
+                    // Layout rounds to device pixels, so a shape measured at
+                    // the unrounded width is the one the bounds carry.
+                    (Some(shaped), Some(width)) => (shaped - width).abs() < px(1.),
+                    (shaped, width) => shaped == width,
+                }
+        });
+        if !reusable {
+            self.shaped = Some(FieldText::new(key.clone(), wrap_width, window));
+        }
+        self.shaped.as_ref().expect("shaped above")
+    }
+}
+
+/// Draws a text field's editable text from one shaped layout: glyphs,
+/// selection, IME underline and caret, with the field's input handler and
+/// its window-wide drag listener.
+struct TextFieldElement {
+    field: Entity<TextField>,
+}
+
+impl IntoElement for TextFieldElement {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for TextFieldElement {
+    type RequestLayoutState = FieldTextKey;
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, Self::RequestLayoutState) {
+        let field = self.field.read(cx);
+        let key = field.text_key(window);
+        let mut style = Style::default();
+        style.size.width = relative(1.).into();
+        if !key.multiline {
+            style.size.height = key.line_height.into();
+            return (window.request_layout(style, [], cx), key);
+        }
+        let state = Rc::clone(&field.text_state);
+        let measured = key.clone();
+        let layout_id =
+            window.request_measured_layout(style, move |known, available, window, _| {
+                let width = known.width.or(match available.width {
+                    AvailableSpace::Definite(width) => Some(width),
+                    _ => None,
+                });
+                match width {
+                    Some(width) => {
+                        state
+                            .borrow_mut()
+                            .shape(&measured, Some(width), window)
+                            .size
+                    }
+                    None => size(
+                        px(0.),
+                        measured.line_height * (measured.text.matches('\n').count() + 1) as f32,
+                    ),
+                }
+            });
+        (layout_id, key)
+    }
+
+    fn prepaint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        key: &mut Self::RequestLayoutState,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self::PrepaintState {
+        let field = self.field.read(cx);
+        let caret = field.buffer.selection.caret;
+        let row_end = field.caret_row_end == Some(caret);
+        let scroll_handle = field.scroll_handle.clone();
+        let mut state = field.text_state.borrow_mut();
+        let caret_top = state
+            .shape(key, key.multiline.then_some(bounds.size.width), window)
+            .caret_position(caret, row_end)
+            .y;
+        let mut origin = bounds.origin;
+        let mut offset = if key.multiline {
+            scroll_handle.offset()
+        } else {
+            Point::default()
+        };
+        if key.multiline && std::mem::take(&mut state.reveal_caret) {
+            let top = origin.y + caret_top;
+            let bottom = top + key.line_height;
+            let viewport = scroll_handle.bounds();
+            let delta = if top < viewport.top() {
+                viewport.top() - top
+            } else if bottom > viewport.bottom() {
+                viewport.bottom() - bottom
+            } else {
+                px(0.)
+            };
+            if delta != px(0.) {
+                let max = scroll_handle.max_offset().height;
+                let y = (offset.y + delta).clamp(-max, px(0.));
+                origin.y += y - offset.y;
+                offset.y = y;
+                scroll_handle.set_offset(offset);
+            }
+        }
+        state.origin = Some(origin);
+        state.scroll_offset = offset;
+    }
+
+    fn paint(
+        &mut self,
+        _id: Option<&GlobalElementId>,
+        _inspector_id: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _key: &mut Self::RequestLayoutState,
+        _prepaint: &mut Self::PrepaintState,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let field = self.field.read(cx);
+        let focus_handle = field.focus_handle.clone();
+        let focused = focus_handle.is_focused(window);
+        let disabled = field.disabled;
+        let selection = field.buffer.selection;
+        let row_end = field.caret_row_end == Some(selection.caret);
+        let marked = field
+            .buffer
+            .marked
+            .as_ref()
+            .map(|marked| marked.range.clone());
+        let text_state = Rc::clone(&field.text_state);
+        let state = text_state.borrow();
+        let (Some(shaped), Some(origin)) = (state.shaped.as_ref(), state.origin) else {
+            return;
+        };
+        let content = Bounds::new(origin, bounds.size);
+        if !disabled {
+            window.handle_input(
+                &focus_handle,
+                ElementInputHandler::new(content, self.field.clone()),
+                cx,
+            );
+            let field = self.field.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Capture && field.read(cx).selecting {
+                    field.update(cx, |field, cx| field.on_drag_move(event, window, cx));
+                }
+            });
+        }
+
+        let line_height = shaped.line_height();
+        if focused {
+            for rect in shaped.range_rects(selection.range(), true) {
+                window.paint_quad(fill(
+                    rect + origin,
+                    theme::with_alpha(theme::accent(), 0.267),
+                ));
+            }
+        }
+        let visible = window.content_mask().bounds;
+        // A one-line placeholder clips at the content edge, clear of a
+        // trailing control such as a suggestions chevron.
+        let clip =
+            (!shaped.key.multiline && shaped.key.placeholder).then_some(ContentMask { bounds });
+        window.with_content_mask(clip, |window| {
+            for line in &shaped.lines {
+                let top = origin.y + line.top;
+                let bottom = top + line_height * line.geometry.rows() as f32;
+                if bottom < visible.top() || top > visible.bottom() {
+                    continue;
+                }
+                let _ = line.layout.paint(
+                    point(origin.x, top),
+                    line_height,
+                    TextAlign::Left,
+                    None,
+                    window,
+                    cx,
+                );
+            }
+        });
+        if !focused {
+            return;
+        }
+        if let Some(marked) = marked {
+            for rect in shaped.range_rects(marked, false) {
+                window.paint_quad(fill(
+                    Bounds::from_corners(
+                        point(rect.left(), rect.bottom() - px(1.)),
+                        rect.bottom_right(),
+                    ) + origin,
+                    theme::accent(),
+                ));
+            }
+        }
+        let caret = shaped.caret_position(selection.caret, row_end);
+        let caret_height = window.rem_size().min(line_height);
+        window.paint_quad(fill(
+            Bounds::new(
+                origin + caret + point(px(0.), (line_height - caret_height) / 2.),
+                size(px(1.), caret_height),
+            ),
+            theme::accent(),
+        ));
     }
 }
 
@@ -481,7 +1092,17 @@ pub struct TextField {
     scroll_handle: ScrollHandle,
     scrollbar: Option<Entity<Scrollbar>>,
     selecting: bool,
-    text_layout: Rc<RefCell<Option<TextFieldLayout>>>,
+    /// Where a selection drag last saw the pointer.
+    drag_position: Option<Point<Pixels>>,
+    /// Scrolls a textarea toward a drag that left it, while the button is down.
+    auto_scroll: Option<Task<()>>,
+    text_state: Rc<RefCell<FieldTextState>>,
+    /// The caret index that shows at the end of the row a soft wrap broke,
+    /// rather than at the start of the next one.
+    caret_row_end: Option<usize>,
+    /// The x that consecutive Ups and Downs keep, from the index the last one
+    /// left the caret at; anything else that moves the caret clears it.
+    vertical_goal: Option<(usize, Pixels)>,
     auto_grow_rows: Option<u8>,
     key_interceptor: Option<KeyDownInterceptor>,
     truncate_unfocused: bool,
@@ -518,7 +1139,11 @@ impl TextField {
             scroll_handle: ScrollHandle::new(),
             scrollbar: None,
             selecting: false,
-            text_layout: Rc::new(RefCell::new(None)),
+            drag_position: None,
+            auto_scroll: None,
+            text_state: Rc::default(),
+            caret_row_end: None,
+            vertical_goal: None,
             auto_grow_rows: None,
             key_interceptor: None,
             truncate_unfocused: false,
@@ -621,17 +1246,20 @@ impl TextField {
 
     pub fn reset(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.buffer.reset(text);
+        self.vertical_goal = None;
         cx.notify();
     }
 
     pub fn set_text(&mut self, text: impl Into<String>, cx: &mut Context<Self>) {
         self.buffer.reset(text);
+        self.vertical_goal = None;
         self.buffer.edited = true;
         cx.notify();
     }
 
     pub fn select_all(&mut self, cx: &mut Context<Self>) {
         self.buffer.select_all();
+        self.vertical_goal = None;
         cx.notify();
     }
 
@@ -694,6 +1322,7 @@ impl TextField {
         if self.disabled {
             return;
         }
+        let vertical_goal = self.vertical_goal.take();
         if !self.is_composing()
             && self
                 .key_interceptor
@@ -709,14 +1338,35 @@ impl TextField {
                 EnterBehavior::Block => cx.stop_propagation(),
                 EnterBehavior::InsertNewline => {
                     self.buffer.replace_selection("\n");
+                    self.reveal_caret();
                     cx.stop_propagation();
                     cx.notify();
                 }
             }
             return;
         }
+        let modifiers = event.keystroke.modifiers;
+        if self.kind.multiline()
+            && !self.is_composing()
+            && matches!(event.keystroke.key.as_str(), "up" | "down")
+            && !(modifiers.platform || modifiers.control || modifiers.alt || modifiers.function)
+        {
+            self.move_vertically(
+                event.keystroke.key == "up",
+                modifiers.shift,
+                vertical_goal,
+                window,
+            );
+            cx.stop_propagation();
+            cx.notify();
+            return;
+        }
+        let before = (self.buffer.selection, self.buffer.text.len());
         let handled = handle_key_down(&mut self.buffer, event, cx);
         if handled {
+            if (self.buffer.selection, self.buffer.text.len()) != before {
+                self.reveal_caret();
+            }
             cx.stop_propagation();
             cx.notify();
         }
@@ -735,6 +1385,8 @@ impl TextField {
         if let Some(text) = self.buffer.selected_text().map(str::to_owned) {
             cx.write_to_clipboard(ClipboardItem::new_string(text));
             self.buffer.delete_left(Boundary::Grapheme);
+            self.vertical_goal = None;
+            self.reveal_caret();
             cx.notify();
         }
     }
@@ -745,13 +1397,133 @@ impl TextField {
         }
         if let Some(text) = cx.read_from_clipboard().and_then(|item| item.text()) {
             self.buffer.replace_selection(&text);
+            self.vertical_goal = None;
+            self.reveal_caret();
             cx.notify();
         }
     }
 
     fn on_select_all(&mut self, _: &SelectAll, _: &mut Window, cx: &mut Context<Self>) {
         self.buffer.select_all();
+        self.vertical_goal = None;
         cx.notify();
+    }
+
+    fn reveal_caret(&self) {
+        self.text_state.borrow_mut().reveal_caret = true;
+    }
+
+    /// The shaped text for the current value, reshaped at the last painted
+    /// width and style when an edit landed since, and where it was painted
+    /// at the current scroll offset.
+    fn with_text<R>(
+        &self,
+        window: &Window,
+        f: impl FnOnce(&FieldText, Option<Point<Pixels>>) -> R,
+    ) -> Option<R> {
+        let mut state = self.text_state.borrow_mut();
+        let shaped = state.shaped.as_ref()?;
+        let current = if self.buffer.text.is_empty() {
+            shaped.key.placeholder && shaped.key.text == self.placeholder
+        } else {
+            !shaped.key.placeholder && shaped.key.text.as_ref() == self.buffer.text
+        };
+        if !current {
+            let (text, placeholder) = self.display_text();
+            let key = FieldTextKey {
+                text,
+                placeholder,
+                ..shaped.key.clone()
+            };
+            let wrap_width = shaped.wrap_width;
+            state.shaped = Some(FieldText::new(key, wrap_width, window));
+        }
+        let origin = state
+            .origin
+            .map(|origin| origin + (self.scroll_offset() - state.scroll_offset));
+        state.shaped.as_ref().map(|shaped| f(shaped, origin))
+    }
+
+    fn scroll_offset(&self) -> Point<Pixels> {
+        if self.kind.multiline() {
+            self.scroll_handle.offset()
+        } else {
+            Point::default()
+        }
+    }
+
+    fn display_text(&self) -> (SharedString, bool) {
+        if self.buffer.text.is_empty() {
+            (self.placeholder.clone(), true)
+        } else {
+            (SharedString::from(self.buffer.text.clone()), false)
+        }
+    }
+
+    fn text_key(&self, window: &Window) -> FieldTextKey {
+        let style = window.text_style();
+        let rem_size = window.rem_size();
+        let (text, placeholder) = self.display_text();
+        FieldTextKey {
+            text,
+            placeholder,
+            multiline: self.kind.multiline(),
+            font: style.font(),
+            color: if placeholder && !self.placeholder_as_value {
+                theme::faint()
+            } else {
+                style.color
+            },
+            font_size: style.font_size.to_pixels(rem_size),
+            line_height: style.line_height_in_pixels(rem_size),
+        }
+    }
+
+    /// The index under a window point, and whether it is the end of a
+    /// soft-wrapped row; `None` until the text has been painted.
+    fn index_for_point(
+        &self,
+        position: Point<Pixels>,
+        under: bool,
+        window: &Window,
+    ) -> Option<(usize, bool)> {
+        self.with_text(window, |text, origin| {
+            origin.map(|origin| text.index_for_position(position - origin, under))
+        })
+        .flatten()
+    }
+
+    fn move_vertically(
+        &mut self,
+        up: bool,
+        extend: bool,
+        vertical_goal: Option<(usize, Pixels)>,
+        window: &Window,
+    ) {
+        let selection = self.buffer.selection;
+        let from = if extend || selection.is_empty() {
+            selection.caret
+        } else if up {
+            selection.range().start
+        } else {
+            selection.range().end
+        };
+        let row_end = self.caret_row_end == Some(from);
+        let goal_x = vertical_goal
+            .filter(|(index, _)| *index == from)
+            .map(|(_, x)| x);
+        let (target, row_end, x) = self
+            .with_text(window, |text, _| {
+                text.vertical_target(from, row_end, up, goal_x)
+            })
+            .unwrap_or_else(|| {
+                let end = if up { 0 } else { self.buffer.text.len() };
+                (end, false, px(0.))
+            });
+        self.buffer.move_to(target, extend);
+        self.caret_row_end = row_end.then_some(target);
+        self.vertical_goal = Some((target, x));
+        self.reveal_caret();
     }
 
     fn on_mouse_down(
@@ -764,43 +1536,107 @@ impl TextField {
             return;
         }
         self.focus_handle.focus(window);
-        let position = self
-            .text_layout
-            .borrow()
-            .as_ref()
-            .map_or(self.buffer.text.len(), |layout| {
-                layout.index_for_point(event.position)
-            });
+        let (position, row_end) = self
+            .index_for_point(event.position, event.click_count >= 2, window)
+            .unwrap_or((self.buffer.text.len(), false));
         self.selecting = true;
+        self.drag_position = None;
+        self.caret_row_end = None;
+        self.vertical_goal = None;
         match event.click_count {
             2 => self.buffer.select_word_at(position),
             count if count >= 3 => self.buffer.select_line_at(position),
-            _ => self.buffer.move_to(position, event.modifiers.shift),
+            _ => {
+                self.buffer.move_to(position, event.modifiers.shift);
+                self.caret_row_end = row_end.then_some(position);
+            }
         }
         cx.stop_propagation();
         cx.notify();
     }
 
-    fn on_mouse_move(
+    /// A window-wide mouse move while this field's selection drag is in
+    /// progress, so the selection follows the pointer outside the field too.
+    fn on_drag_move(
         &mut self,
         event: &MouseMoveEvent,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if !self.selecting || !event.dragging() {
+        if event.pressed_button != Some(MouseButton::Left) {
+            self.stop_selecting();
             return;
         }
-        let Some(position) = self
-            .text_layout
-            .borrow()
-            .as_ref()
-            .map(|layout| layout.index_for_point(event.position))
+        self.drag_position = Some(event.position);
+        self.select_to_drag_position(window, cx);
+        if self.auto_scroll.is_none() && self.auto_scroll_step().is_some() {
+            self.auto_scroll = Some(cx.spawn_in(window, async move |field, cx| {
+                loop {
+                    cx.background_executor().timer(AUTO_SCROLL_TICK).await;
+                    let scrolled = field
+                        .update_in(cx, |field, window, cx| field.auto_scroll_tick(window, cx))
+                        .unwrap_or(false);
+                    if !scrolled {
+                        break;
+                    }
+                }
+                field.update(cx, |field, _| field.auto_scroll = None).ok();
+            }));
+        }
+    }
+
+    fn select_to_drag_position(&mut self, window: &Window, cx: &mut Context<Self>) {
+        let Some((index, row_end)) = self
+            .drag_position
+            .and_then(|position| self.index_for_point(position, false, window))
         else {
             return;
         };
-        self.buffer.move_to(position, true);
-        cx.stop_propagation();
+        self.buffer.move_to(index, true);
+        self.caret_row_end = row_end.then_some(index);
+        self.vertical_goal = None;
         cx.notify();
+    }
+
+    /// How far a textarea scrolls per tick toward a drag above or below it.
+    fn auto_scroll_step(&self) -> Option<Pixels> {
+        if !self.kind.multiline() {
+            return None;
+        }
+        let position = self.drag_position?;
+        let line_height = self.text_state.borrow().shaped.as_ref()?.line_height();
+        let viewport = self.scroll_handle.bounds();
+        let distance = if position.y < viewport.top() {
+            viewport.top() - position.y
+        } else if position.y > viewport.bottom() {
+            viewport.bottom() - position.y
+        } else {
+            return None;
+        };
+        let speed = (distance.abs() / 2.).clamp(line_height / 2., line_height * 3.);
+        Some(if distance > px(0.) { speed } else { -speed })
+    }
+
+    fn auto_scroll_tick(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        let Some(step) = self.selecting.then(|| self.auto_scroll_step()).flatten() else {
+            return false;
+        };
+        let offset = self.scroll_handle.offset();
+        let max = self.scroll_handle.max_offset().height;
+        let y = (offset.y + step).clamp(-max, px(0.));
+        if y == offset.y {
+            return false;
+        }
+        self.scroll_handle.set_offset(point(offset.x, y));
+        self.select_to_drag_position(window, cx);
+        cx.notify();
+        true
+    }
+
+    fn stop_selecting(&mut self) {
+        self.selecting = false;
+        self.drag_position = None;
+        self.auto_scroll = None;
     }
 
     fn on_mouse_up(
@@ -809,7 +1645,7 @@ impl TextField {
         _window: &mut Window,
         _cx: &mut Context<Self>,
     ) {
-        self.selecting = false;
+        self.stop_selecting();
     }
 
     /// The compacted path to show, or `None` while the field edits it.
@@ -834,126 +1670,39 @@ impl TextField {
         })
     }
 
-    fn render_text(&self, focused: bool) -> AnyElement {
-        if self.buffer.text.is_empty() {
-            return div()
-                .flex()
-                .items_center()
-                .min_h(rems(1.))
-                .min_w(px(0.))
-                // A one-line placeholder clips at the content edge, clear of
-                // a trailing control such as a suggestions chevron.
-                .when(self.kind == TextFieldKind::Input, |text| {
-                    text.flex_1().overflow_hidden().whitespace_nowrap()
-                })
-                .text_color(if self.placeholder_as_value {
-                    theme::text()
-                } else {
-                    theme::faint()
-                })
-                .when(focused, |text| text.child(input_caret()))
-                .child(self.placeholder.clone())
-                .into_any_element();
-        }
-
-        if let Some(shown) = self.compact_path_shown(focused) {
+    fn render_text(&self, focused: bool, field: Entity<Self>) -> AnyElement {
+        let read_only = if let Some(shown) = self.compact_path_shown(focused) {
             let rendered = shown.clone();
-            return div()
-                .debug_selector(move || format!("TEXT_FIELD_COMPACT {rendered}"))
-                .min_w(px(0.))
-                .w_full()
-                .truncate()
-                .child(shown)
-                .into_any_element();
-        }
-
-        if self.kind == TextFieldKind::Input && self.truncate_unfocused && !focused {
-            return div()
-                .min_w(px(0.))
-                .w_full()
-                .truncate()
-                .child(self.buffer.text.clone())
-                .into_any_element();
-        }
-
-        let selection = focused.then_some(self.buffer.selection.range());
-        let marked = focused
-            .then(|| {
-                self.buffer
-                    .marked
-                    .as_ref()
-                    .map(|marked| marked.range.clone())
-            })
-            .flatten();
-        if self.kind == TextFieldKind::Input {
-            return self.render_text_line(0, &self.buffer.text, focused, &selection, &marked);
-        }
-
-        let mut content = div().flex().flex_col().min_w(px(0.)).w_full();
-        let mut offset = 0;
-        for segment in self.buffer.text.split_inclusive('\n') {
-            let line = segment.strip_suffix('\n').unwrap_or(segment);
-            content =
-                content.child(self.render_text_line(offset, line, focused, &selection, &marked));
-            offset += segment.len();
-        }
-        if self.buffer.text.ends_with('\n') {
-            content = content.child(self.render_text_line(
-                self.buffer.text.len(),
-                "",
-                focused,
-                &selection,
-                &marked,
-            ));
-        }
-        content.into_any_element()
-    }
-
-    fn render_text_line(
-        &self,
-        line_start: usize,
-        line: &str,
-        focused: bool,
-        selection: &Option<Range<usize>>,
-        marked: &Option<Range<usize>>,
-    ) -> AnyElement {
-        let caret = self.buffer.selection.caret;
-        let mut content = div()
-            .flex()
-            .items_center()
-            .min_w(px(0.))
-            .min_h(rems(1.))
-            .when(self.kind == TextFieldKind::Input, |line| {
-                line.whitespace_nowrap()
-            })
-            .when(self.kind != TextFieldKind::Input, |line| line.flex_wrap());
-        for (relative_start, grapheme) in line.grapheme_indices(true) {
-            let start = line_start + relative_start;
-            if focused && caret == start {
-                content = content.child(input_caret());
-            }
-            let end = start + grapheme.len();
-            content = content.child(
+            Some(
                 div()
-                    .when(
-                        selection
-                            .as_ref()
-                            .is_some_and(|range| range.start < end && start < range.end),
-                        |text| text.bg(theme::with_alpha(theme::accent(), 0.267)),
-                    )
-                    .when(
-                        marked
-                            .as_ref()
-                            .is_some_and(|range| range.start < end && start < range.end),
-                        |text| text.border_b_1().border_color(theme::accent()),
-                    )
-                    .child(grapheme.to_string()),
-            );
+                    .debug_selector(move || format!("TEXT_FIELD_COMPACT {rendered}"))
+                    .min_w(px(0.))
+                    .w_full()
+                    .truncate()
+                    .child(shown),
+            )
+        } else if self.kind == TextFieldKind::Input
+            && self.truncate_unfocused
+            && !focused
+            && !self.buffer.text.is_empty()
+        {
+            Some(
+                div()
+                    .min_w(px(0.))
+                    .w_full()
+                    .truncate()
+                    .child(self.buffer.text.clone()),
+            )
+        } else {
+            None
+        };
+        match read_only {
+            Some(display) => {
+                self.text_state.borrow_mut().origin = None;
+                display.into_any_element()
+            }
+            None => TextFieldElement { field }.into_any_element(),
         }
-        if focused && caret == line_start + line.len() {
-            content = content.child(input_caret());
-        }
-        content.into_any_element()
     }
 }
 
@@ -1001,6 +1750,8 @@ impl EntityInputHandler for TextField {
             return;
         }
         self.buffer.replace_text_in_range(range, text);
+        self.vertical_goal = None;
+        self.reveal_caret();
         cx.notify();
     }
 
@@ -1017,34 +1768,37 @@ impl EntityInputHandler for TextField {
         }
         self.buffer
             .replace_and_mark_text_in_range(range, new_text, new_selected_range);
+        self.vertical_goal = None;
+        self.reveal_caret();
         cx.notify();
     }
 
     fn bounds_for_range(
         &mut self,
-        _range_utf16: Range<usize>,
+        range_utf16: Range<usize>,
         element_bounds: Bounds<Pixels>,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<Bounds<Pixels>> {
-        Some(element_bounds)
+        let range = text_util::range_from_utf16(&self.buffer.text, &range_utf16);
+        let upstream = self.caret_row_end == Some(range.start);
+        self.with_text(window, |text, origin| {
+            origin.map(|origin| text.range_bounds(range, upstream) + origin)
+        })
+        .flatten()
+        .or(Some(element_bounds))
     }
 
     fn character_index_for_point(
         &mut self,
         point: Point<Pixels>,
-        _window: &mut Window,
+        window: &mut Window,
         _cx: &mut Context<Self>,
     ) -> Option<usize> {
-        self.text_layout.borrow().as_ref().map_or_else(
-            || Some(self.buffer.character_index_utf16()),
-            |layout| {
-                Some(text_util::offset_to_utf16(
-                    &self.buffer.text,
-                    layout.index_for_point(point),
-                ))
-            },
-        )
+        Some(self.index_for_point(point, false, window).map_or_else(
+            || self.buffer.character_index_utf16(),
+            |(index, _)| text_util::offset_to_utf16(&self.buffer.text, index),
+        ))
     }
 }
 
@@ -1060,7 +1814,7 @@ impl Render for TextField {
         let compact_shown = self
             .compact_path_shown(focused)
             .map(|shown| (self.buffer.text.clone(), shown));
-        let input_entity = cx.entity();
+        let field = cx.entity();
         if self.kind != TextFieldKind::Input && self.scrollbar.is_none() {
             let owner = cx.entity_id();
             let scroll_handle = self.scroll_handle.clone();
@@ -1068,12 +1822,6 @@ impl Render for TextField {
         }
         let multiline = self.kind != TextFieldKind::Input;
         let scrollbar = self.scrollbar.clone();
-        let text_layout = Rc::clone(&self.text_layout);
-        let layout_text = self.buffer.text.clone();
-        let layout_kind = self.kind;
-        let layout_bare = self.bare;
-        let layout_right_padding = self.right_padding;
-        let layout_scroll_handle = self.scroll_handle.clone();
         // Auto-grow textareas take their height from the wrapped content between
         // the base row count and `auto_grow_rows`; everything else is fixed-height.
         let auto_grow = self
@@ -1145,7 +1893,6 @@ impl Render for TextField {
             .on_action(cx.listener(Self::on_paste))
             .on_action(cx.listener(Self::on_select_all))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::on_mouse_down))
-            .on_mouse_move(cx.listener(Self::on_mouse_move))
             .on_mouse_up(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .on_mouse_up_out(MouseButton::Left, cx.listener(Self::on_mouse_up))
             .text_size(self.text_size)
@@ -1155,7 +1902,7 @@ impl Render for TextField {
                 input.font_family(theme::UI_MONOSPACE_FONT)
             })
             .when(self.kind == TextFieldKind::Input, |input| {
-                input.child(self.render_text(focused))
+                input.child(self.render_text(focused, field.clone()))
             })
             .when(multiline, |input| {
                 input.child(
@@ -1172,7 +1919,7 @@ impl Render for TextField {
                         .overflow_y_scroll()
                         .scrollbar_width(px(0.))
                         .track_scroll(&self.scroll_handle)
-                        .child(self.render_text(focused)),
+                        .child(self.render_text(focused, field)),
                 )
             })
             .when(compact_shown.is_some(), |input| {
@@ -1219,40 +1966,6 @@ impl Render for TextField {
                     )
                     .absolute()
                     .inset_0(),
-                )
-            })
-            .when(!self.disabled, |input| {
-                input.child(
-                    canvas(
-                        move |bounds, window, _| {
-                            text_layout.replace(Some(TextFieldLayout::new(
-                                &layout_text,
-                                layout_kind,
-                                layout_bare,
-                                layout_right_padding,
-                                if layout_kind.multiline() {
-                                    layout_scroll_handle.offset()
-                                } else {
-                                    Point::default()
-                                },
-                                bounds,
-                                window,
-                            )));
-                        },
-                        move |bounds, _, window, cx| {
-                            let focus = input_entity.read(cx).focus_handle.clone();
-                            window.handle_input(
-                                &focus,
-                                ElementInputHandler::new(bounds, input_entity.clone()),
-                                cx,
-                            );
-                        },
-                    )
-                    .absolute()
-                    .top_0()
-                    .right_0()
-                    .bottom_0()
-                    .left_0(),
                 )
             })
             .when(multiline, |input| input.children(scrollbar))
@@ -1796,14 +2509,6 @@ fn enter_should_submit(composing: bool) -> bool {
     enter_behavior(TextFieldKind::Input, composing) == EnterBehavior::Submit
 }
 
-fn input_caret() -> impl IntoElement {
-    div()
-        .flex_none()
-        .w(rems(1. / 16.))
-        .h(rems(1.))
-        .bg(theme::accent())
-}
-
 fn normalize_input_text(text: &str, multiline: bool) -> String {
     if multiline {
         text.replace("\r\n", "\n").replace('\r', "\n")
@@ -1836,6 +2541,602 @@ fn is_word(segment: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The test platform's text system advances every character by 0.6 em;
+    /// fields default to 14 px text, and textarea rows are 20 px.
+    const ADVANCE: f32 = 14. * 0.6;
+    const ROW: f32 = 20.;
+    /// Wraps a 110 px wide textarea's text after ten characters.
+    const WRAPPED: &str = "alpha beta gamma\n\nend";
+
+    struct FieldHost {
+        input: Entity<TextField>,
+        width: Pixels,
+    }
+
+    impl Render for FieldHost {
+        fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+            // Room around the field, so a drag can leave it inside the window.
+            div().p(px(100.)).child(
+                div()
+                    .w(self.width)
+                    .debug_selector(|| "FIELD_HOST".into())
+                    .child(self.input.clone()),
+            )
+        }
+    }
+
+    fn open_field(
+        width: f32,
+        build: impl FnOnce(FocusHandle) -> TextField + 'static,
+    ) -> (gpui::VisualTestContext, Entity<TextField>) {
+        let mut cx = gpui::TestAppContext::single();
+        let window = cx.add_window(|_, cx| FieldHost {
+            input: cx.new(|cx| build(cx.focus_handle())),
+            width: px(width),
+        });
+        cx.run_until_parked();
+        let visual = gpui::VisualTestContext::from_window(window.into(), &cx);
+        visual.run_until_parked();
+        let input = window.read_with(&cx, |host, _| host.input.clone()).unwrap();
+        (visual, input)
+    }
+
+    fn text_origin(visual: &gpui::VisualTestContext, input: &Entity<TextField>) -> Point<Pixels> {
+        input.read_with(visual, |field, _| {
+            field
+                .text_state
+                .borrow()
+                .origin
+                .expect("the text was painted")
+        })
+    }
+
+    /// A point `chars` advances along the text's row `row`, a little below
+    /// the row's top.
+    fn at(origin: Point<Pixels>, chars: f32, row: f32) -> Point<Pixels> {
+        origin + point(px(chars * ADVANCE), px(row * ROW + 5.))
+    }
+
+    #[track_caller]
+    fn assert_near(actual: Point<Pixels>, expected: Point<Pixels>) {
+        assert!(
+            (actual.x - expected.x).abs() < px(0.01) && (actual.y - expected.y).abs() < px(0.01),
+            "{actual:?} is not {expected:?}"
+        );
+    }
+
+    #[track_caller]
+    fn assert_bounds_near(actual: Option<Bounds<Pixels>>, expected: Bounds<Pixels>) {
+        let actual = actual.expect("bounds");
+        assert_near(actual.origin, expected.origin);
+        assert_near(actual.bottom_right(), expected.bottom_right());
+    }
+
+    fn click(visual: &mut gpui::VisualTestContext, position: Point<Pixels>, count: usize) {
+        click_with(visual, position, count, gpui::Modifiers::none());
+    }
+
+    fn click_with(
+        visual: &mut gpui::VisualTestContext,
+        position: Point<Pixels>,
+        click_count: usize,
+        modifiers: gpui::Modifiers,
+    ) {
+        visual.simulate_event(MouseDownEvent {
+            position,
+            modifiers,
+            button: MouseButton::Left,
+            click_count,
+            first_mouse: false,
+        });
+        visual.simulate_event(MouseUpEvent {
+            position,
+            modifiers,
+            button: MouseButton::Left,
+            click_count,
+        });
+    }
+
+    fn selection(visual: &gpui::VisualTestContext, input: &Entity<TextField>) -> (usize, usize) {
+        input.read_with(visual, |field, _| {
+            (field.buffer.selection.anchor, field.buffer.selection.caret)
+        })
+    }
+
+    fn caret(visual: &gpui::VisualTestContext, input: &Entity<TextField>) -> usize {
+        selection(visual, input).1
+    }
+
+    /// The caret's top left, relative to the text's origin, as painted.
+    fn caret_position(
+        visual: &gpui::VisualTestContext,
+        input: &Entity<TextField>,
+    ) -> Point<Pixels> {
+        input.read_with(visual, |field, _| {
+            let caret = field.buffer.selection.caret;
+            let state = field.text_state.borrow();
+            state
+                .shaped
+                .as_ref()
+                .unwrap()
+                .caret_position(caret, field.caret_row_end == Some(caret))
+        })
+    }
+
+    /// Runs the auto-scroll timer `ticks` times; the test clock fires one
+    /// timer per advance.
+    fn tick(visual: &mut gpui::VisualTestContext, ticks: usize) {
+        for _ in 0..ticks {
+            visual.executor().advance_clock(AUTO_SCROLL_TICK);
+            visual.run_until_parked();
+        }
+    }
+
+    fn scroll_y(visual: &gpui::VisualTestContext, input: &Entity<TextField>) -> Pixels {
+        input.read_with(visual, |field, _| field.scroll_handle.offset().y)
+    }
+
+    fn wrapped_field() -> (gpui::VisualTestContext, Entity<TextField>) {
+        let (visual, input) = open_field(110., |focus| {
+            TextField::textarea(focus, WRAPPED, "", 6, false)
+        });
+        input.read_with(&visual, |field, _| {
+            let state = field.text_state.borrow();
+            let lines = &state.shaped.as_ref().unwrap().lines;
+            let rows = lines
+                .iter()
+                .map(|line| line.geometry.rows())
+                .collect::<Vec<_>>();
+            assert_eq!(rows, [2, 1, 1]);
+            assert_eq!(
+                lines[0].geometry.spot(6, false).row,
+                1,
+                "alpha / beta gamma"
+            );
+        });
+        (visual, input)
+    }
+
+    #[test]
+    fn a_click_lands_where_the_text_is_painted_after_wraps_at_line_ends_and_below() {
+        let (mut visual, input) = wrapped_field();
+        let origin = text_origin(&visual, &input);
+
+        click(&mut visual, at(origin, 2.3, 1.), 1);
+        assert_eq!(caret(&visual, &input), 8, "after the soft wrap");
+        assert_near(
+            caret_position(&visual, &input),
+            point(px(2. * ADVANCE), px(ROW)),
+        );
+
+        click(&mut visual, at(origin, 9.6, 1.), 1);
+        assert_eq!(caret(&visual, &input), 16, "the end of the wrapped line");
+
+        click(&mut visual, at(origin, 9., 0.), 1);
+        assert_eq!(caret(&visual, &input), 6, "past the end of the first row");
+        // The caret stays at the end of the row that was clicked.
+        assert_near(
+            caret_position(&visual, &input),
+            point(px(6. * ADVANCE), px(0.)),
+        );
+
+        click(&mut visual, at(origin, 0.4, 1.), 1);
+        assert_eq!(caret(&visual, &input), 6, "the start of the second row");
+        assert_near(caret_position(&visual, &input), point(px(0.), px(ROW)));
+
+        click(&mut visual, at(origin, 3., 2.), 1);
+        assert_eq!(caret(&visual, &input), 17, "the empty line");
+        assert_near(caret_position(&visual, &input), point(px(0.), px(2. * ROW)));
+
+        click(&mut visual, at(origin, 1.6, 3.), 1);
+        assert_eq!(
+            caret(&visual, &input),
+            20,
+            "the closest boundary on the last line"
+        );
+
+        click(&mut visual, at(origin, 1., 4.5), 1);
+        assert_eq!(caret(&visual, &input), WRAPPED.len(), "below the text");
+        assert_near(
+            caret_position(&visual, &input),
+            point(px(3. * ADVANCE), px(3. * ROW)),
+        );
+
+        click(&mut visual, at(origin, 3., 2.), 1);
+        click_with(
+            &mut visual,
+            at(origin, 2.3, 1.),
+            1,
+            gpui::Modifiers::shift(),
+        );
+        assert_eq!(selection(&visual, &input), (17, 8), "shift-click extends");
+    }
+
+    #[test]
+    fn a_long_line_hit_tests_the_painted_glyphs_to_its_end() {
+        let text = "The quick brown fox jumps over the lazy dog, then naps.";
+        let (mut visual, input) =
+            open_field(600., move |focus| TextField::new(focus, text, "", false));
+        let origin = text_origin(&visual, &input);
+        for index in [0, 17, 40, text.len() - 1, text.len()] {
+            click(
+                &mut visual,
+                origin + point(px((index as f32 + 0.3) * ADVANCE), px(5.)),
+                1,
+            );
+            assert_eq!(caret(&visual, &input), index);
+            assert_near(
+                caret_position(&visual, &input),
+                point(px(index as f32 * ADVANCE), px(0.)),
+            );
+        }
+        click(&mut visual, origin + point(px(-4.), px(5.)), 1);
+        assert_eq!(caret(&visual, &input), 0);
+    }
+
+    #[test]
+    fn double_and_triple_clicks_select_the_word_and_line_under_the_pointer() {
+        let (mut visual, input) = wrapped_field();
+        let origin = text_origin(&visual, &input);
+        let selected = |visual: &gpui::VisualTestContext| {
+            input.read_with(visual, |field, _| {
+                field.buffer.selected_text().unwrap_or_default().to_owned()
+            })
+        };
+
+        click(&mut visual, at(origin, 4.8, 0.), 2);
+        assert_eq!(
+            selected(&visual),
+            "alpha",
+            "the right half of its last letter"
+        );
+        click(&mut visual, at(origin, 3.8, 1.), 2);
+        assert_eq!(selected(&visual), "beta", "a word after the soft wrap");
+        click(&mut visual, at(origin, 3., 2.), 2);
+        assert_eq!(selected(&visual), "\n", "an empty line");
+        click(&mut visual, at(origin, 1., 4.5), 2);
+        assert_eq!(selected(&visual), "end", "below the text, the last word");
+
+        click(&mut visual, at(origin, 1., 1.), 3);
+        assert_eq!(
+            selected(&visual),
+            "alpha beta gamma\n",
+            "the whole wrapped line"
+        );
+        click(&mut visual, at(origin, 3., 2.), 3);
+        assert_eq!(selected(&visual), "\n");
+    }
+
+    #[test]
+    fn a_drag_past_the_field_keeps_selecting_and_scrolls_until_the_button_is_up() {
+        let text = (0..12)
+            .map(|line| format!("line {line:02}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let (mut visual, input) = open_field(300., move |focus| {
+            TextField::textarea(focus, text, "", 3, false)
+        });
+        let origin = text_origin(&visual, &input);
+        let field = visual.debug_bounds("FIELD_HOST").unwrap();
+        let left = Some(MouseButton::Left);
+        let none = gpui::Modifiers::none();
+
+        visual.simulate_mouse_down(at(origin, 2., 0.), MouseButton::Left, none);
+        visual.simulate_mouse_move(
+            point(field.right() + px(50.), at(origin, 0., 1.).y),
+            left,
+            none,
+        );
+        assert_eq!(
+            selection(&visual, &input),
+            (2, 15),
+            "right of the field, to the row's end"
+        );
+
+        visual.simulate_mouse_move(
+            point(field.left() + px(20.), field.bottom() + px(30.)),
+            left,
+            none,
+        );
+        let below = caret(&visual, &input);
+        assert!(
+            below > 15,
+            "below the field, into the rows under the pointer: {below}"
+        );
+        assert_eq!(
+            scroll_y(&visual, &input),
+            px(0.),
+            "scrolling waits for the timer"
+        );
+
+        tick(&mut visual, 5);
+        let scrolled = scroll_y(&visual, &input);
+        assert!(scrolled < px(0.), "the field scrolls toward the pointer");
+        assert!(caret(&visual, &input) > below, "and the selection follows");
+
+        visual.simulate_mouse_up(
+            point(field.left(), field.bottom() + px(30.)),
+            MouseButton::Left,
+            none,
+        );
+        let stopped = selection(&visual, &input);
+        let stopped_at = scroll_y(&visual, &input);
+        tick(&mut visual, 10);
+        assert_eq!(
+            scroll_y(&visual, &input),
+            stopped_at,
+            "mouse up stops scrolling"
+        );
+
+        visual.simulate_mouse_move(at(origin, 0., 0.), left, none);
+        assert_eq!(
+            selection(&visual, &input),
+            stopped,
+            "the listener is inert after mouse up"
+        );
+
+        let origin = text_origin(&visual, &input);
+        assert_eq!(
+            origin.y - field.top(),
+            px(7. - 92.5),
+            "five ticks scrolled 92.5 px"
+        );
+        visual.simulate_mouse_down(at(origin, 2., 5.), MouseButton::Left, none);
+        visual.simulate_mouse_move(
+            point(field.left() + px(20.), field.top() - px(40.)),
+            left,
+            none,
+        );
+        assert!(
+            caret(&visual, &input) > 0,
+            "above the field, a row scrolled out of view"
+        );
+        tick(&mut visual, 20);
+        assert_eq!(
+            scroll_y(&visual, &input),
+            px(0.),
+            "scrolled back to the top"
+        );
+        assert_eq!(caret(&visual, &input), 0, "above the text, its start");
+        visual.simulate_mouse_up(at(origin, 0., 0.), MouseButton::Left, none);
+    }
+
+    #[test]
+    fn up_and_down_move_by_visual_row_keeping_x() {
+        let (mut visual, input) = wrapped_field();
+        let origin = text_origin(&visual, &input);
+        click(&mut visual, at(origin, 2., 1.), 1);
+        assert_eq!(caret(&visual, &input), 8);
+
+        visual.simulate_keystrokes("up");
+        assert_eq!(caret(&visual, &input), 2, "across the soft wrap");
+        visual.simulate_keystrokes("up");
+        assert_eq!(caret(&visual, &input), 0, "from the first row, the start");
+        visual.simulate_keystrokes("down");
+        assert_eq!(caret(&visual, &input), 8, "back down, keeping x");
+        visual.simulate_keystrokes("down");
+        assert_eq!(caret(&visual, &input), 17, "onto the empty line");
+        visual.simulate_keystrokes("down");
+        assert_eq!(caret(&visual, &input), 20, "x kept through the empty line");
+        visual.simulate_keystrokes("down");
+        assert_eq!(
+            caret(&visual, &input),
+            WRAPPED.len(),
+            "from the last row, the end"
+        );
+
+        visual.simulate_keystrokes("shift-up shift-up");
+        assert_eq!(
+            selection(&visual, &input),
+            (WRAPPED.len(), 8),
+            "shift extends"
+        );
+        visual.simulate_keystrokes("up");
+        assert_eq!(
+            selection(&visual, &input),
+            (2, 2),
+            "up from the selection's start"
+        );
+
+        click(&mut visual, at(origin, 9., 0.), 1);
+        visual.simulate_keystrokes("down");
+        assert_eq!(caret(&visual, &input), 12, "from the end of a wrapped row");
+
+        click(&mut visual, at(origin, 2., 1.), 1);
+        visual.simulate_keystrokes("down");
+        assert_eq!(caret(&visual, &input), 17);
+        visual.simulate_keystrokes("left right down");
+        assert_eq!(
+            caret(&visual, &input),
+            18,
+            "a sideways move drops the kept x, so Down starts from the empty line's own x"
+        );
+    }
+
+    #[test]
+    fn glyphs_out_of_source_order_map_only_to_grapheme_boundaries() {
+        let cases = [
+            // Shaped right to left, wrapped after two glyphs.
+            (
+                "abcd",
+                vec![(3, px(0.)), (2, px(10.)), (1, px(20.)), (0, px(30.))],
+                vec![2],
+            ),
+            // Wrapped inside a grapheme, before its combining accent.
+            (
+                "e\u{301}x",
+                vec![(0, px(0.)), (1, px(10.)), (3, px(10.))],
+                vec![1],
+            ),
+        ];
+        for (source, glyphs, wraps) in cases {
+            let geometry = LineGeometry::new(source, &glyphs, &wraps, px(40.));
+            let boundaries = source
+                .grapheme_indices(true)
+                .map(|(index, _)| index)
+                .chain([source.len()])
+                .collect::<Vec<_>>();
+            assert_eq!(geometry.rows(), 2);
+            for row in 0..geometry.rows() {
+                for x in [-5., 0., 5., 12., 25., 35., 60.] {
+                    for under in [false, true] {
+                        let (index, _) = geometry.index_at(row, px(x), under);
+                        assert!(
+                            boundaries.contains(&index),
+                            "{source:?} row {row} at {x}: {index}"
+                        );
+                    }
+                }
+            }
+            for index in 0..=source.len() + 1 {
+                for upstream in [false, true] {
+                    assert!(geometry.spot(index, upstream).row < geometry.rows());
+                }
+            }
+            for (_, left, right) in geometry.spans(0..source.len(), Some(px(4.))) {
+                assert!(left <= right);
+            }
+        }
+    }
+
+    #[test]
+    fn a_textarea_scrolls_to_keep_the_caret_in_view() {
+        let text = (0..12)
+            .map(|line| format!("line {line:02}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let len = text.len();
+        let (mut visual, input) = open_field(300., move |focus| {
+            TextField::textarea(focus, text, "", 3, false)
+        });
+        let origin = text_origin(&visual, &input);
+        let bottom = px(-(12. - 3.) * ROW);
+        click(&mut visual, at(origin, 1., 0.), 1);
+
+        visual.simulate_keystrokes("end");
+        assert_eq!(scroll_y(&visual, &input), bottom, "moving to the end");
+        visual.simulate_keystrokes("home");
+        assert_eq!(scroll_y(&visual, &input), px(0.), "moving to the start");
+        visual.simulate_keystrokes("down down down down");
+        assert_eq!(
+            scroll_y(&visual, &input),
+            px(-2. * ROW),
+            "moving down a row at a time"
+        );
+
+        input.update(&mut visual, |field, cx| {
+            field.buffer.move_to(len, false);
+            cx.notify();
+        });
+        visual.run_until_parked();
+        assert_eq!(
+            scroll_y(&visual, &input),
+            px(-2. * ROW),
+            "only edits and moves scroll"
+        );
+        visual.simulate_input("x");
+        assert_eq!(
+            input.read_with(&visual, |field, _| field.text().len()),
+            len + 1
+        );
+        assert_eq!(scroll_y(&visual, &input), bottom, "typing at the end");
+    }
+
+    #[test]
+    fn auto_grow_follows_the_wrapped_rows_up_to_its_maximum() {
+        let (mut visual, input) = open_field(110., |focus| {
+            TextField::textarea(focus, "", "", 1, false).auto_grow(6)
+        });
+        let mut height_for = |text: &str| {
+            input.update(&mut visual, |field, cx| field.reset(text.to_owned(), cx));
+            visual.run_until_parked();
+            visual.debug_bounds("FIELD_HOST").unwrap().size.height
+        };
+        let chrome = 14.;
+        assert_eq!(height_for(""), px(ROW + chrome), "one row");
+        assert_eq!(height_for("one"), px(ROW + chrome));
+        assert_eq!(height_for("a\nb\nc"), px(3. * ROW + chrome), "three lines");
+        assert_eq!(
+            height_for("alpha beta gamma delta"),
+            px(4. * ROW + chrome),
+            "soft wraps grow it too: alpha / beta / gamma / delta"
+        );
+        assert_eq!(
+            height_for(&"line\n".repeat(20)),
+            px(6. * ROW + chrome),
+            "capped at its maximum"
+        );
+    }
+
+    #[test]
+    fn ime_bounds_and_character_index_come_from_the_painted_layout() {
+        let (mut visual, input) = wrapped_field();
+        let origin = text_origin(&visual, &input);
+        let host = visual.debug_bounds("FIELD_HOST").unwrap();
+        let (beta, empty, across, index) = visual.update(|window, cx| {
+            input.update(cx, |field, cx| {
+                (
+                    field.bounds_for_range(8..10, host, window, cx),
+                    field.bounds_for_range(0..0, host, window, cx),
+                    field.bounds_for_range(3..8, host, window, cx),
+                    field.character_index_for_point(at(origin, 2.2, 1.), window, cx),
+                )
+            })
+        });
+        assert_bounds_near(
+            beta,
+            Bounds::from_corners(
+                origin + point(px(2. * ADVANCE), px(ROW)),
+                origin + point(px(4. * ADVANCE), px(2. * ROW)),
+            ),
+        );
+        assert_eq!(beta.map(|beta| host.contains(&beta.center())), Some(true));
+        assert_bounds_near(empty, Bounds::new(origin, size(px(0.), px(ROW))));
+        // A range across a wrap reports its first row.
+        assert_bounds_near(
+            across,
+            Bounds::from_corners(
+                origin + point(px(3. * ADVANCE), px(0.)),
+                origin + point(px(6. * ADVANCE), px(ROW)),
+            ),
+        );
+        assert_eq!(index, Some(8));
+
+        click(&mut visual, at(origin, 9., 0.), 1);
+        assert_eq!(caret(&visual, &input), 6);
+        let wrap_end = visual.update(|window, cx| {
+            input.update(cx, |field, cx| {
+                field.bounds_for_range(6..6, host, window, cx)
+            })
+        });
+        assert_bounds_near(
+            wrap_end,
+            Bounds::new(
+                origin + point(px(6. * ADVANCE), px(0.)),
+                size(px(0.), px(ROW)),
+            ),
+        );
+    }
+
+    #[test]
+    fn an_empty_field_places_the_caret_before_its_placeholder_and_takes_input() {
+        let (mut visual, input) = open_field(300., |focus| {
+            TextField::new(focus, "", "Search roles", false)
+        });
+        let origin = text_origin(&visual, &input);
+        click(&mut visual, origin + point(px(40.), px(5.)), 1);
+        assert_near(caret_position(&visual, &input), Point::default());
+        visual.simulate_input("ab");
+        visual.simulate_keystrokes("left");
+        assert_eq!(
+            input.read_with(&visual, |field, _| field.text().to_owned()),
+            "ab"
+        );
+        assert_eq!(caret(&visual, &input), 1);
+        visual.simulate_keystrokes("up");
+        assert_eq!(caret(&visual, &input), 1, "a single-line field ignores Up");
+    }
 
     #[test]
     fn a_path_compacts_to_home_then_folds_its_middle_keeping_the_last_folder() {
@@ -1907,27 +3208,9 @@ mod tests {
 
     #[test]
     fn an_unfocused_path_field_shows_what_fits_and_keeps_the_last_folder() {
-        use gpui::{TestAppContext, VisualTestContext};
-
-        struct FieldHost {
-            input: Entity<TextField>,
-        }
-        impl Render for FieldHost {
-            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-                div().w(px(200.)).child(self.input.clone())
-            }
-        }
-
         let path = "/opt/work/some-long-folder/another-long-folder/runner-app";
-        let mut cx = TestAppContext::single();
-        let window = cx.add_window(|_, cx| {
-            let input = cx.new(|cx| working_dir_text_field(cx.focus_handle(), path, ""));
-            FieldHost { input }
-        });
-        cx.run_until_parked();
-        let mut visual = VisualTestContext::from_window(window.into(), &cx);
-        visual.run_until_parked();
-        let input = window.read_with(&cx, |host, _| host.input.clone()).unwrap();
+        let (mut visual, input) =
+            open_field(200., move |focus| working_dir_text_field(focus, path, ""));
         let shown = input.read_with(&visual, |field, _| field.compact_path_shown(false));
         let shown = shown.expect("an unfocused path field compacts");
         assert_ne!(shown, path, "the full path does not fit 200 px");
