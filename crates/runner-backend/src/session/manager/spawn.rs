@@ -1206,6 +1206,7 @@ impl SessionManager {
 
         let forwarder = self.start_forwarder_thread(
             session_id.clone(),
+            row_started_at,
             Some(mission.id.clone()),
             rt_session,
             output,
@@ -1701,6 +1702,7 @@ impl SessionManager {
 
         let forwarder = self.start_forwarder_thread(
             session_id.clone(),
+            started_at,
             None,
             rt_session,
             output,
@@ -2081,6 +2083,7 @@ impl SessionManager {
                 );
                 let forwarder = self.start_forwarder_thread(
                     session_id.clone(),
+                    started_at,
                     None,
                     rt_session,
                     output,
@@ -2851,6 +2854,7 @@ impl SessionManager {
 
         let forwarder = self.start_forwarder_thread(
             session_id.to_string(),
+            started_at,
             snap.mission_id.clone(),
             rt_session,
             output,

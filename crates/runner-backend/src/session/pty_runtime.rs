@@ -115,10 +115,11 @@ impl HookStatusWatcher {
     fn drain_observations(
         &mut self,
         transition: impl FnMut(super::status::AgentObservation, &'static str),
+        session_start: impl FnMut(String),
     ) -> crate::error::Result<()> {
         match self {
             Self::Claude(watcher) => watcher.drain_observations(transition),
-            Self::Codex(watcher) => watcher.drain_observations(transition),
+            Self::Codex(watcher) => watcher.drain_with_session_starts(transition, session_start),
             Self::Copilot(watcher) => watcher.drain_observations(transition),
             Self::Pi(watcher) => watcher.drain_observations(transition),
         }
@@ -1249,12 +1250,17 @@ fn idle_monitor_thread(
             break;
         }
         if let Some(watcher) = hook_status.as_mut() {
-            if let Err(error) = watcher.drain_observations(|observation, _source| {
-                let mut detector = detector.lock().expect("idle detector poisoned");
-                if detector.accept_hook(&observation) {
-                    let _ = tx.send(RuntimeOutput::AgentObservation(observation));
-                }
-            }) {
+            if let Err(error) = watcher.drain_observations(
+                |observation, _source| {
+                    let mut detector = detector.lock().expect("idle detector poisoned");
+                    if detector.accept_hook(&observation) {
+                        let _ = tx.send(RuntimeOutput::AgentObservation(observation));
+                    }
+                },
+                |id| {
+                    let _ = tx.send(RuntimeOutput::CodexSessionStart(id));
+                },
+            ) {
                 log::warn!("read agent status: {error}");
                 detector
                     .lock()
@@ -2367,6 +2373,7 @@ mod tests {
                     Ok(
                         RuntimeOutput::Stream(_)
                         | RuntimeOutput::AgentObservation(_)
+                        | RuntimeOutput::CodexSessionStart(_)
                         | RuntimeOutput::StatusBridgeFailed,
                     ) => {}
                     Err(mpsc::RecvTimeoutError::Timeout) => continue,
@@ -2870,6 +2877,7 @@ mod tests {
                 Ok(
                     RuntimeOutput::StatusTransition { .. }
                     | RuntimeOutput::AgentObservation(_)
+                    | RuntimeOutput::CodexSessionStart(_)
                     | RuntimeOutput::StatusBridgeFailed,
                 ) => {}
                 Err(_) => {}
@@ -2915,6 +2923,7 @@ mod tests {
                 Ok(
                     RuntimeOutput::Stream(_)
                     | RuntimeOutput::AgentObservation(_)
+                    | RuntimeOutput::CodexSessionStart(_)
                     | RuntimeOutput::StatusBridgeFailed,
                 ) => {}
                 Err(mpsc::RecvTimeoutError::Timeout) => continue,
@@ -3063,6 +3072,7 @@ mod tests {
                 Ok(
                     RuntimeOutput::StatusTransition { .. }
                     | RuntimeOutput::AgentObservation(_)
+                    | RuntimeOutput::CodexSessionStart(_)
                     | RuntimeOutput::StatusBridgeFailed,
                 )
                 | Err(_) => {}
@@ -3109,6 +3119,7 @@ mod tests {
                 Ok(
                     RuntimeOutput::StatusTransition { .. }
                     | RuntimeOutput::AgentObservation(_)
+                    | RuntimeOutput::CodexSessionStart(_)
                     | RuntimeOutput::StatusBridgeFailed,
                 ) => {}
                 Err(_) => {}
@@ -3434,7 +3445,11 @@ mod tests {
                     }
                 }
                 Ok(RuntimeOutput::Stream(bytes)) => handshake.observe(&rt, &session, &bytes),
-                Ok(RuntimeOutput::AgentObservation(_) | RuntimeOutput::StatusBridgeFailed) => {}
+                Ok(
+                    RuntimeOutput::AgentObservation(_)
+                    | RuntimeOutput::CodexSessionStart(_)
+                    | RuntimeOutput::StatusBridgeFailed,
+                ) => {}
                 Err(mpsc::RecvTimeoutError::Timeout) => {}
                 Err(mpsc::RecvTimeoutError::Disconnected) => break,
             }
