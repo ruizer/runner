@@ -2,6 +2,8 @@
 
 > Companion to [`../product/vision.md`](../product/vision.md). The vision doc defines *what* we're building and why; this doc defines *how* it works — tech stack, the model concepts the code is built around, and the protocol / schema decisions that make the model work. Rewritten 2026-08-22 (M6.5) for the native GPUI app (shipped as `v0.6.0` on 2026-08-23; §14 updated then); the Tauri + xterm.js era version is in history (`git show 0e5ea18:docs/arch/arch.md`) and the port that replaced it is recorded in [`../impls/archive/gpui-rewrite/`](../impls/archive/gpui-rewrite/README.md).
 
+For new agent support, use the [runtime integration checklist](runtime-integration.md): P0 requirements, P1/P2 capabilities, acceptance checks, and implementation entry points.
+
 ## 1. Overview
 
 Runner is a local desktop app for macOS and Windows. A user configures a **crew** of CLI coding agents, launches a **mission** to activate it, and watches the crew coordinate in real time. The app is one native process: a GPUI user interface, a Rust application core (`crates/runner-backend`), an `alacritty_terminal` grid per live session, SQLite for configuration, and a per-mission NDJSON file for live coordination state. There is no webview, no IPC bridge, and no serialization between the PTY and the screen.
