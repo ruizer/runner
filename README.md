@@ -20,7 +20,7 @@
 <p align="center">
   <strong>Where terminal agents work together.</strong>
   <br />
-  Claude Code, Codex, Copilot CLI and pi on the same task, in one mission. Each agent keeps its own TUI in a real terminal; Runner is what sits between them.
+  Claude Code, Codex, Antigravity CLI, Copilot CLI and pi on the same task, in one mission. Each agent keeps its own TUI in a real terminal; Runner is what sits between them.
 </p>
 
 <p align="center">
@@ -269,7 +269,7 @@ Still pending:
 - [x] Track the active conversation after agy's `/clear` (`/new`), `/resume`, or `/fork` changes it inside a running chat.
 - [ ] Windows smoke for Antigravity CLI.
 
-Claude Code and Codex are the primary agents, with tuned launch and nudge timing. GitHub Copilot CLI needs a Copilot subscription. pi brings your own configured model provider. Antigravity CLI signs in with a Google account and updates itself when it starts, so it has no **Update** button. [Issues](https://github.com/yicheng47/runner/issues) are welcome.
+Claude Code, Codex and Antigravity CLI are the primary agents. Claude Code and Codex have tuned launch and nudge timing. GitHub Copilot CLI needs a Copilot subscription. pi brings your own configured model provider. Antigravity CLI signs in with a Google account and updates itself when it starts, so it has no **Update** button. [Issues](https://github.com/yicheng47/runner/issues) are welcome.
 
 Install the agent CLIs separately. Runner detects them on `PATH`, with per-agent executable overrides in **Settings → Agents**, which also shows each CLI's version and, when a newer one is published, an **Update** button that runs the CLI's own updater in a terminal. On Windows, Claude Code and pi's bash tool require Git for Windows; npm-based CLI installations require Node.js. PowerShell 7 is optional. Agents run natively on Windows, without WSL.
 

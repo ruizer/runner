@@ -20,7 +20,7 @@
 <p align="center">
   <strong>让终端 agent 协同工作。</strong>
   <br />
-  Claude Code、Codex、Copilot CLI 和 pi 在同一个 mission 里做同一件事。每个 agent 在真实终端里保留自己的 TUI，Runner 是夹在它们中间的那一层。
+  Claude Code、Codex、Antigravity CLI、Copilot CLI 和 pi 在同一个 mission 里做同一件事。每个 agent 在真实终端里保留自己的 TUI，Runner 是夹在它们中间的那一层。
 </p>
 
 <p align="center">
@@ -269,7 +269,7 @@ agent 使用 `--json`；不加时，列表和详情命令会为人显示表格�
 - [x] agy 在运行中的聊天里通过 `/clear`（`/new`）、`/resume` 或 `/fork` 切换对话后，跟踪当前对话 ID。
 - [ ] 在 Windows 上对 Antigravity CLI 做冒烟测试。
 
-Claude Code 和 Codex 是主要支持的 agent，启动和催促时序做过调优。GitHub Copilot CLI 需要 Copilot 订阅。pi 使用你已经配置好的模型提供商。Antigravity CLI 使用 Google 账号登录，并在启动时自行更新，所以没有 **Update** 按钮。欢迎提 [issue](https://github.com/yicheng47/runner/issues)。
+Claude Code、Codex 和 Antigravity CLI 是主要支持的 agent。Claude Code 和 Codex 的启动和催促时序做过调优。GitHub Copilot CLI 需要 Copilot 订阅。pi 使用你已经配置好的模型提供商。Antigravity CLI 使用 Google 账号登录，并在启动时自行更新，所以没有 **Update** 按钮。欢迎提 [issue](https://github.com/yicheng47/runner/issues)。
 
 agent 的命令行工具需要单独安装。Runner 会在 `PATH` 上检测它们，也可以在 **Settings → Agents** 里为每个 agent 单独指定可执行文件；这里还会显示每个 CLI 的版本，有新版本发布时出现 **Update** 按钮，在终端里运行该 CLI 自带的更新命令。在 Windows 上，Claude Code 和 pi 的 bash 工具需要 Git for Windows；通过 npm 安装的 CLI 需要 Node.js。PowerShell 7 可选。agent 在 Windows 上原生运行，不需要 WSL。
 
