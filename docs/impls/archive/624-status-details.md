@@ -4,7 +4,7 @@ Plan for feature [624](../../features/archive/624-status-details.md) ([#624](htt
 
 ## Status (2026-09-17)
 
-Shipped in [PR #631](https://github.com/yicheng47/runner/pull/631) on 2026-09-17, both CI jobs green, after Jason's macOS smoke pass (an overall pass on the dev build; the Windows column of the [smoke record](../../tests/archive/624-status-details-smoke.md) is still open). Design signed off the same day: four frames on `design/runner.pen` (`z92Zy9`, `qKf92`, `HiZ5G`, `bqwlq`). Mission 1 ran on `feat/624-status-details` with the codex peer crew, all four items in one PR after Jason folded the working detail in; brief at [`gpui-rewrite/briefs/624-m1-status-details.md`](../briefs/624-m1-status-details.md).
+Shipped in [PR #631](https://github.com/yicheng47/runner/pull/631) on 2026-09-17, both CI jobs green, after Jason's macOS smoke pass (an overall pass on the dev build; the Windows column of the [smoke record](../../tests/archive/624-status-details-smoke.md) is still open). Design signed off the same day: four frames on `design/runner.pen` (`z92Zy9`, `qKf92`, `HiZ5G`, `bqwlq`). Mission 1 ran on `feat/624-status-details` with the codex peer crew, all four items in one PR after Jason folded the working detail in; brief at [`gpui-rewrite/briefs/624-m1-status-details.md`](https://github.com/yicheng47/runner/blob/c1862492a9d3d7397de6571d13a10db824fe5d9b/docs/impls/briefs/624-m1-status-details.md).
 
 ## Decisions that bind
 

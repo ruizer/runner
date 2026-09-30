@@ -17,7 +17,7 @@ The capability audit was redone against installed binaries and was wrong in both
 
 ## 2026-09-14 — slice 1 landed
 
-`9584330`, via mission `01M2EM1GJQSHQT783Y7W8TEVQR` on `codex-crew` (~65 min, brief at [`347-slice-1-claude-hook-bridge.md`](../../briefs/347-slice-1-claude-hook-bridge.md)). Extends the per-spawn `--settings` injection that already carried the `claude_rekey` `SessionStart` hook, so nothing is written into the user's config. 700 backend tests; `make verify` run independently before landing.
+`9584330`, via mission `01M2EM1GJQSHQT783Y7W8TEVQR` on `codex-crew` (~65 min, brief at [`347-slice-1-claude-hook-bridge.md`](https://github.com/yicheng47/runner/blob/c1862492a9d3d7397de6571d13a10db824fe5d9b/docs/impls/briefs/347-slice-1-claude-hook-bridge.md)). Extends the per-spawn `--settings` injection that already carried the `claude_rekey` `SessionStart` hook, so nothing is written into the user's config. 700 backend tests; `make verify` run independently before landing.
 
 Two mission-goal instructions turned out to be wrong and were reversed mid-flight. **Do not key Idle on `Stop`** was built on the premise that `Notification(idle_prompt)` is a turn boundary; the reviewer found `messageIdleNotifThresholdMs:60000` in the 2.1.270 binary, making it a delayed, user-disableable idle notice. Keying on `Stop` is safe because Busy/Idle gates no behaviour — a continuation costs one wrong glyph, self-corrected. **Align the two spawn gates** narrowed the rekey stale-report cleanup for runners with a user-supplied `--settings`; caught in re-review and restored.
 
@@ -25,7 +25,7 @@ Driving the real app then found the blocker the documentation pass had missed: C
 
 ## 2026-09-14 — slice 2 authorized
 
-Jason requested the existing Codex crew for slice 2 after the progress check. Prepared `feat/347-status-ui` in the existing checkout and the [mission brief](../../briefs/347-slice-2-status-ui.md): normalized status and Claude human-wait delivery hold, followed by every designed pane/tab/sidebar/mission surface, with a working-tree review before Jason's smoke test. Codex/TRAE adapters and title-heuristic removal remain later slices. Native Windows hooks remain baseline-only for this mission, with explicit documentation and tests required. Pencil's desktop MCP was unavailable during preparation; the brief requires retrying the connection and recording any outstanding visual verification.
+Jason requested the existing Codex crew for slice 2 after the progress check. Prepared `feat/347-status-ui` in the existing checkout and the [mission brief](https://github.com/yicheng47/runner/blob/c1862492a9d3d7397de6571d13a10db824fe5d9b/docs/impls/briefs/347-slice-2-status-ui.md): normalized status and Claude human-wait delivery hold, followed by every designed pane/tab/sidebar/mission surface, with a working-tree review before Jason's smoke test. Codex/TRAE adapters and title-heuristic removal remain later slices. Native Windows hooks remain baseline-only for this mission, with explicit documentation and tests required. Pencil's desktop MCP was unavailable during preparation; the brief requires retrying the connection and recording any outstanding visual verification.
 
 
 ## 2026-09-14 — slice 2 implementation, review pending

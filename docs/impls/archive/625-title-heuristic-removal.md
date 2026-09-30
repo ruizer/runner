@@ -1,6 +1,6 @@
 # 625 — Remove the title-spinner status heuristic
 
-Tracking issue: [#625](https://github.com/yicheng47/runner/issues/625). Slice 6 of the [347 plan](./347-hook-status/plan.md), split out of [#610](https://github.com/yicheng47/runner/issues/610) on 2026-09-16. Chore, P2. Shipped 2026-09-17 in [#638](https://github.com/yicheng47/runner/pull/638). Implemented by a codex peer crew mission from the [brief](../briefs/625-m1-title-heuristic-removal.md), landed by the driving Claude session.
+Tracking issue: [#625](https://github.com/yicheng47/runner/issues/625). Slice 6 of the [347 plan](./347-hook-status/plan.md), split out of [#610](https://github.com/yicheng47/runner/issues/610) on 2026-09-16. Chore, P2. Shipped 2026-09-17 in [#638](https://github.com/yicheng47/runner/pull/638). Implemented by a codex peer crew mission from the [brief](https://github.com/yicheng47/runner/blob/c1862492a9d3d7397de6571d13a10db824fe5d9b/docs/impls/briefs/625-m1-title-heuristic-removal.md), landed by the driving Claude session.
 
 ## Why
 
