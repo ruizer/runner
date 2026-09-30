@@ -11,7 +11,7 @@ However, it does not show the model or thinking effort that the chat is running 
 
 ## Design
 
-`design/specs/756-chat-side-panel-model-effort.pen`: the role chat with the panel open (`Zyp5L`), and the role chat and runtime chat panels side by side (`wdEC4`).
+`design/specs/archive/756-chat-side-panel-model-effort.pen`: the role chat with the panel open (`Zyp5L`), and the role chat and runtime chat panels side by side (`wdEC4`). The shipped design is `cmp/ChatSidePanel` (`WlZj2`) in `design/runner.pen`, open in the chat band's `S2S7j` and `l9okg`.
 
 ## Scope
 
