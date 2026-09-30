@@ -171,7 +171,7 @@ Carbon 和 Runner Light 是 Runner 自己的主题，Catppuccin Mocha 和 Latte 
 
 ### 还有这些
 
-- **会话不随应用退出而结束** — 退出或崩溃不会杀掉你的 agent；下次启动会重新接上仍在运行的会话，工作进行中时退出会先询问。
+- **重启后 agent 接着干** — 退出会停止所有 agent；下次启动时，退出前还在运行的 chat 和 mission agent 会重新打开，各自接着原来的对话（**Settings → General → Resume running agents on launch**）。崩溃之后，可以在会话所在的面板里手动恢复。应用关闭期间 agent 继续运行的能力已在计划中（[#645](https://github.com/yicheng47/runner/issues/645)）。
 - **项目** — 绑定一次工作目录；在项目里发起的 chat 和 mission 都会继承它的 cwd，并归在侧边栏里自己的分组下。agent 也可以通过 CLI 创建、重命名、归档和删除项目。
 - **Mission 控制** — 停止、恢复或重启单个槽位，不用重启整个 mission；重启的会话会带着最初的任务简报重新开始。mission 固定使用 Bypass 权限，避免无人值守的槽位卡在工具授权提示上。
 - **真实终端** — 每一栏都是跑在 GPU 绘制的 `alacritty_terminal` 网格上的真实 PTY：agent 自己的配色、鼠标上报、输入法（包括拼音）、复制、文件路径粘贴、10,000 行回滚。点击文件路径可在编辑器里打开；选中一段输出可以在侧线程里追问；⌘+ 和 ⌘− 把整个应用从 60% 缩放到 200%。

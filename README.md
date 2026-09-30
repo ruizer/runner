@@ -171,7 +171,7 @@ Carbon and Runner Light are Runner's own themes; Catppuccin Mocha and Latte ride
 
 ### Also in the box
 
-- **Sessions that outlive the app** — quitting or crashing does not kill your agents; the next launch reattaches to the sessions still running, and a quit while work is in flight asks first.
+- **Agents come back after a relaunch** — quitting stops every agent, and the next launch reopens the chats and mission agents that were live, each resuming its own conversation (**Settings → General → Resume running agents on launch**). After a crash, resume a session from its pane. Agents that keep running while Runner is closed are planned in [#645](https://github.com/yicheng47/runner/issues/645).
 - **Projects** — bind a working directory once; chats and missions started inside a project inherit its cwd and stay grouped in their own sidebar section. Agents can create, rename, file into, and delete projects through the CLI too.
 - **Mission controls** — stop, resume, or restart a single slot without restarting the mission; a restarted session comes back fresh with its original brief. Missions use Bypass permissions so unattended slots do not wait at a tool prompt.
 - **Real terminals** — every pane is a real PTY on an `alacritty_terminal` grid drawn on the GPU: the agents' own colours, mouse reporting, IME input (Pinyin included), copy, file-path paste, 10,000 lines of scrollback. Click a file path to open it in your editor; select some output and ask about it in a side thread; ⌘+ and ⌘− zoom the app from 60% to 200%.
