@@ -25,7 +25,7 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 | [0.12.3](https://github.com/yicheng47/runner/releases/tag/v0.12.3) | Shipped 2026-09-29: Antigravity CLI runtime, live models, quota, managed skill and conversation/status follow-ups | #644, #747 |
 | [0.12.4](https://github.com/yicheng47/runner/releases/tag/v0.12.4) | Shipped 2026-09-29: submit Codex inbox nudges correctly after Windows paste bursts | #753 |
 | [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) | Shipped 2026-09-30: Start a chat and chat side panel redesigns, crew field removal, model defaults, usage visibility, pi multiline input and macOS kana fixes | #735, #756, #729, #762, #752, #755, #730 |
-| [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: mission monitoring, role/crew creation pages, role side panel and single-tab close | #748, #768, #731, #725 |
+| [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: idle Codex message delivery, mission monitoring, role/crew creation pages, role side panel and single-tab close | #766, #748, #768, #731, #725 |
 | [0.13](https://github.com/yicheng47/runner/milestone/3) | Mission coordination and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions and pi MCP management | #562, #704, #552, #701, #709, #723, #764 |
 | [0.14](https://github.com/yicheng47/runner/milestone/4) | Session host, shell process status, 简体中文 | #645, #586, #565 |
 
@@ -35,10 +35,11 @@ A minor is a change to the model or a new surface; a patch is fixes and follow-t
 
 ## Open work by release
 
-There are 20 open issues: four in 0.12, seven in 0.13, three in 0.14, and six unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
+There are 20 open issues: five in 0.12, seven in 0.13, three in 0.14, and five unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
 
 | Release | Issue | Reason and ordering |
 | --- | --- | --- |
+| 0.12 | [#766](https://github.com/yicheng47/runner/issues/766) idle Codex message delivery | P1; fix crew messages held at an empty composer in this patch cycle |
 | 0.12 | [#748](https://github.com/yicheng47/runner/issues/748) mission monitoring from Codex | P1; spec under review for Runner-delivered mission notices in the starting chat, with idle delivery still to verify |
 | 0.12 | [#768](https://github.com/yicheng47/runner/issues/768) New role / New crew pages | P2; [PR #770](https://github.com/yicheng47/runner/pull/770) replaces the old create modals with page creation states |
 | 0.12 | [#731](https://github.com/yicheng47/runner/issues/731) role side panel | P2; the same PR adds clamped markdown prompts and Open role, following the shipped #756 setup rows |
@@ -67,11 +68,10 @@ There are 20 open issues: four in 0.12, seven in 0.13, three in 0.14, and six un
 
 ## Backlog
 
-These six open issues have no release commitment; setting a milestone schedules them.
+These five open issues have no release commitment; setting a milestone schedules them.
 
 - **P2:** [#559](https://github.com/yicheng47/runner/issues/559) command palette; the existing quick switcher remains.
 - **P2:** [#577](https://github.com/yicheng47/runner/issues/577) per-role skills and MCP picks; the global catalogs already work.
 - **P2:** [#630](https://github.com/yicheng47/runner/issues/630) token ledger, re-runnable tasks and subscription quota.
-- **P2:** [#766](https://github.com/yicheng47/runner/issues/766) crew messages held at an idle Codex slot as though its empty composer had a draft.
 - **P3:** [#582](https://github.com/yicheng47/runner/issues/582) split files that outgrew the #478 audit; time it around feature work on those files.
 - **P3:** [#771](https://github.com/yicheng47/runner/issues/771) evaluate selective `gpui-base` adoption for shared UI controls; start with one ordinary field and resolve the Windows manifest dependency before integration.
