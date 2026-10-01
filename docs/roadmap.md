@@ -6,7 +6,7 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 
 - **Latest release:** [0.12.6](https://github.com/yicheng47/runner/releases/tag/v0.12.6) on 2026-10-01: creating roles and crews on their own pages, Open role and the full role prompt in the chat side panel, ⌘W closing the tab instead of the window (⇧⌘W for the window; Ctrl+Shift+W and Alt+F4 on Windows), sidebar label truncation, and a bounded status watcher start. It also carries the GPUI move to `gpui-pre =0.3.7`. Earlier 0.12.x patches shipped the Start a chat redesign, Antigravity CLI and Codex Speed.
 - **Merged since that release:** nothing user-facing yet. The nightly feed builds from `main`.
-- **In flight:** keyboard-driven Start a chat, new terminal and new mission ([#772](https://github.com/yicheng47/runner/issues/772)) has a crew mission running. Mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12, and the runtime adapter refactor ([777](./features/777-runtime-adapter.md)) is a P1 draft in 0.12.
+- **In flight:** keyboard-driven Start a chat, new terminal and new mission ([#772](https://github.com/yicheng47/runner/issues/772)) has a crew mission running. Mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12, and the runtime adapter refactor ([777](./features/777-runtime-adapter.md)) is a settled P1 spec in 0.12, landing as three PRs.
 - **Next minor:** missions as containers ([562](./features/562-mission-spawn.md)) and session-to-session prompts ([704](./features/704-session-send.md)) remain the 0.13 headline specs. #704 currently carries the `release-blocker` label.
 
 ## Releases
@@ -42,7 +42,7 @@ There are 19 open issues: four in 0.12, seven in 0.13, three in 0.14, and five u
 | --- | --- | --- |
 | 0.12 | [#766](https://github.com/yicheng47/runner/issues/766) idle Codex message delivery | P1; fix crew messages held at an empty composer in this patch cycle |
 | 0.12 | [#748](https://github.com/yicheng47/runner/issues/748) mission monitoring from Codex | P1; spec under review for Runner-delivered mission notices in the starting chat, with idle delivery still to verify |
-| 0.12 | [#777](https://github.com/yicheng47/runner/issues/777) runtime adapter trait | P1; draft [spec](./features/777-runtime-adapter.md): one module per agent runtime behind a `RuntimeAdapter` trait, with no behavior change; lands before #723 and #764 add runtimes and MCP clients |
+| 0.12 | [#777](https://github.com/yicheng47/runner/issues/777) runtime adapter trait | P1; settled [spec](./features/777-runtime-adapter.md), three PRs: one module per agent runtime behind a `RuntimeAdapter` trait, with no behavior change; lands before #723 and #764 add runtimes and MCP clients |
 | 0.12 | [#772](https://github.com/yicheng47/runner/issues/772) keyboard-driven Start a chat, new terminal and new mission | P2; draft [spec](./features/772-keyboard-create.md) with open questions on initial focus and the new keys |
 | 0.13 | [#562](https://github.com/yicheng47/runner/issues/562) missions as containers | P1 headline; migrate the roster model and settle lifecycle contracts before the dependent UI |
 | 0.13 | [#704](https://github.com/yicheng47/runner/issues/704) session-to-session prompts | P1 release blocker; the terminal layer beside #562, with no bus or new tables |

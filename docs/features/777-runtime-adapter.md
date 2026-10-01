@@ -2,7 +2,7 @@
 
 > Tracking issue: [#777](https://github.com/yicheng47/runner/issues/777)
 > Priority: P1, 0.12. Platforms: macOS and Windows; a refactor with no user-visible change.
-> Status: draft, 2026-10-01; decisions to confirm at the end.
+> Status: draft, 2026-10-01; decisions settled the same day. Lands as three PRs (see Decisions).
 
 ## Motivation
 
@@ -113,14 +113,16 @@ Adding a runtime means a `runtimes/<name>/` module, one `Runtime` variant with i
 - New runtime features, and fixes to existing per-runtime gaps. A bug found during the move gets its own issue and stays in its current form, unless it blocks the move.
 - Renaming `SessionRuntime`, `PtyRuntime` or `RuntimeSession`. The new trait is named `RuntimeAdapter` precisely to avoid a clash with those PTY-layer names.
 
-## Decisions to confirm
+## Decisions
 
-1. **Move `Runtime` into `runner-core`.** Recommended. Core already has `serde`; the `schemars` derive goes behind a core feature that `runner-backend` enables, and `runner_backend::model::Runtime` stays as a re-export so import paths don't change. This puts key, display name, default command and managed-skill root next to the enum, which removes the CLI's `runtime_command` and `RUNNER_SKILL_ROOTS` copies. The alternative keeps the enum in the backend with a second identity table in core, plus a test that keeps the two in step.
-2. **One PR per phase.** Recommended, so each review covers one layer and the golden tests show that nothing moved. Phase 0 can ride with phase 1. A single mission PR for everything would be one very large, mechanical commit.
+Settled with Jason on 2026-10-01.
+
+1. **`Runtime` moves into `runner-core`.** Core already has `serde`; the `schemars` derive goes behind a core feature that `runner-backend` enables, and `runner_backend::model::Runtime` stays as a re-export so import paths don't change. Key, display name, default command and managed-skill root sit next to the enum, which removes the CLI's `runtime_command` and the `RUNNER_SKILL_ROOTS` copy.
+2. **Three PRs, one mission each, in order.** PR 1 is phases 0 and 1: the argv layer, which the golden tests prove unchanged. PR 2 is phase 2: spawn hooks and status watchers, the riskiest part, because key capture, trust and hook watchers only show in a live session. PR 3 is phases 3 and 4: making `UsageSnapshot` a map and replacing `McpClientId` break `app_shell.rs` and Settings → MCP in the same change, so the catalog and the app move together without temporary shims. Each mission starts after the previous PR merges.
 
 ## Implementation phases
 
-Each phase is a PR that leaves behavior unchanged and keeps the golden tests passing without edits. Temporary `Option<Runtime>` shims may live inside a phase but are gone by the end of phase 4.
+The phases land as three PRs: phases 0 and 1, then phase 2, then phases 3 and 4. Each PR leaves behavior unchanged and keeps the golden tests passing without edits. Temporary `Option<Runtime>` shims may live between PRs but are gone by the end of PR 3.
 
 0. **Characterization tests.** Golden tests that build the composed argv and env for each of the six runtimes across these launch shapes: direct chat fresh and resumed; mission worker and lead; fork where supported; each offered permission mode in a direct chat and in a mission; model and effort set and unset; hooks on and off. The app data dir, session ids and generated UUIDs are normalized. The tests are written and passing against current `main` before any code moves.
 1. **Trait, registry and identity.** Add `runtimes/` with the trait, `NoAgent` and the six adapters. Move the identity data, the catalog merge, and every `router/runtime.rs` argv, permission, resume and fork function into adapters. `router/runtime.rs` keeps only shared types (`ResumePlan`, `ForkPlan`, `PermissionMode`, `MissionPermissionMode`) and helpers.
@@ -130,11 +132,11 @@ Each phase is a PR that leaves behavior unchanged and keeps the golden tests pas
 
 ## Verification
 
-- `make verify` passes for every phase, and CI is green on macOS and Windows. Imports and helpers used only by `cfg(unix)` tests are `cfg(unix)`-gated.
+- `make verify` passes for every PR, and CI is green on macOS and Windows. Imports and helpers used only by `cfg(unix)` tests are `cfg(unix)`-gated.
 - The golden expectation files do not change after phase 0.
 - At the end, `rg 'Runtime::(Codex|ClaudeCode|Antigravity|Pi|Copilot|Trae)\b' crates -g '*.rs'` matches only `runtimes/`, the `runner-core` identity table, the app's `runtime_ui`, and tests. Review checks this with a grep rather than a test that scans source files.
 - **Stub runtime check:** at the end of phase 4, a throwaway branch adds an `Example` runtime that appears in Settings → Agents and launches as a chat. Its diff touches only the files listed under [After the change](#after-the-change). The PR records that file list, and the branch is not merged.
-- **Jason's smoke test** on the installed runtimes (Codex, Claude Code, Antigravity, pi): one chat and one mission slot each, then a resume, a status change, a model and effort override, and the usage popover. Nothing should look or behave differently.
+- **Jason's smoke test** on each PR, on the installed runtimes (Codex, Claude Code, Antigravity, pi). Every PR: one chat and one mission slot each, a resume, and a model and effort override. PR 2 adds status changes through a turn and an interrupt, and a conversation switch (`/new` or `/clear`) followed by a resume. PR 3 adds the usage popover and Settings → Agents, Skills and MCP. Nothing should look or behave differently.
 
 ## Relevant code
 
