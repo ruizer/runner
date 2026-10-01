@@ -1,5 +1,7 @@
 # 731 — Role side panel redesign
 
+> Status: merged to `main` in [PR #770](https://github.com/yicheng47/runner/pull/770) on 2026-10-01, unreleased; archived 2026-10-01. The original scope and dated design decisions follow.
+
 > Tracking issue: [#731](https://github.com/yicheng47/runner/issues/731)
 > Priority: P2, milestone 0.12. Platforms: macOS and Windows.
 > History: filed 2026-09-27 after the role page (#393, PR #720) and crew page (#699, PR #727) redesigns shipped. #756 (PR #765, 2026-09-30) took the identity and setup rows; this spec keeps the rest. Design signed off 2026-09-30.
@@ -15,7 +17,7 @@ The panel should read like a compact version of the new role page, so a role loo
 
 ## Design
 
-`design/specs/731-role-side-panel.pen`, frame `l20LyZ`: a role chat with the panel open, built on `cmp/ChatSidePanel`.
+`design/specs/archive/731-role-side-panel.pen`, frame `l20LyZ`: a role chat with the panel open, built on `cmp/ChatSidePanel`. The shipped design is `cmp/ChatSidePanel` (`WlZj2`) in `design/runner.pen`.
 
 ## Scope
 

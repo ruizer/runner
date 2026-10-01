@@ -1,5 +1,7 @@
 # 768 — New role and New crew open their pages
 
+> Status: merged to `main` in [PR #770](https://github.com/yicheng47/runner/pull/770) on 2026-10-01, unreleased; archived 2026-10-01. The original scope and dated design decisions follow.
+
 > Tracking issue: [#768](https://github.com/yicheng47/runner/issues/768)
 > Priority: P2, 0.12. Platforms: macOS and Windows.
 > History: filed 2026-09-30 as "New role and New crew modals were left out of the role/crew redesign". Jason chose the page approach over a redesigned modal the same day, and signed off the design.
@@ -13,7 +15,7 @@ A redesigned modal would be a third copy of the same fields, next to the role pa
 
 ## Design
 
-`design/specs/768-new-role-crew.pen`: New role `jXUZc` and New crew `L5MbU`. Each is the page's in-place edit layout (`runner.pen` `eOJby` and `VFMMV`) with the changes below.
+`design/specs/archive/768-new-role-crew.pen`: New role `jXUZc` and New crew `L5MbU`. The shipped design is in `design/runner.pen`'s ROLES & CREWS band: `Role — page · creating (768)` and `Crew — page · creating (768)`. Each is the page's in-place edit layout (`runner.pen` `eOJby` and `VFMMV`) with the changes below.
 
 ## Scope
 

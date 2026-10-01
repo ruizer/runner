@@ -5,8 +5,8 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 ## Where the project is
 
 - **Latest release:** [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) on 2026-09-30: the Start a chat redesign, model and effort in the chat side panel, removal of unused crew fields, and model-default, usage, keyboard and font fixes. Antigravity CLI and Codex Speed shipped in earlier 0.12.x patches.
-- **Merged since that release:** the GPUI move to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), closing [#733](https://github.com/yicheng47/runner/issues/733)) and sidebar label/action fixes ([#769](https://github.com/yicheng47/runner/pull/769)). These are on `main`; the nightly feed builds from `main`.
-- **In flight:** [PR #770](https://github.com/yicheng47/runner/pull/770) completes the New role / New crew pages ([#768](https://github.com/yicheng47/runner/issues/768)) and role side panel ([#731](https://github.com/yicheng47/runner/issues/731)), with macOS and Windows checks green. Mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12.
+- **Merged since that release:** the GPUI move to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), closing [#733](https://github.com/yicheng47/runner/issues/733)), sidebar label/action fixes ([#769](https://github.com/yicheng47/runner/pull/769)), and the New role / New crew pages with the role side panel prompt and Open role ([#770](https://github.com/yicheng47/runner/pull/770), closing [#768](https://github.com/yicheng47/runner/issues/768) and [#731](https://github.com/yicheng47/runner/issues/731)). These are on `main`; the nightly feed builds from `main`.
+- **In flight:** mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12.
 - **Next minor:** missions as containers ([562](./features/562-mission-spawn.md)) and session-to-session prompts ([704](./features/704-session-send.md)) remain the 0.13 headline specs. #704 currently carries the `release-blocker` label.
 
 ## Releases
@@ -25,7 +25,7 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 | [0.12.3](https://github.com/yicheng47/runner/releases/tag/v0.12.3) | Shipped 2026-09-29: Antigravity CLI runtime, live models, quota, managed skill and conversation/status follow-ups | #644, #747 |
 | [0.12.4](https://github.com/yicheng47/runner/releases/tag/v0.12.4) | Shipped 2026-09-29: submit Codex inbox nudges correctly after Windows paste bursts | #753 |
 | [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) | Shipped 2026-09-30: Start a chat and chat side panel redesigns, crew field removal, model defaults, usage visibility, pi multiline input and macOS kana fixes | #735, #756, #729, #762, #752, #755, #730 |
-| [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: idle Codex message delivery, mission monitoring, role/crew creation pages, role side panel and single-tab close | #766, #748, #768, #731, #725 |
+| [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: idle Codex message delivery, mission monitoring and single-tab close | #766, #748, #725 |
 | [0.13](https://github.com/yicheng47/runner/milestone/3) | Mission coordination and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions and pi MCP management | #562, #704, #552, #701, #709, #723, #764 |
 | [0.14](https://github.com/yicheng47/runner/milestone/4) | Session host, shell process status, 简体中文 | #645, #586, #565 |
 
@@ -35,14 +35,12 @@ A minor is a change to the model or a new surface; a patch is fixes and follow-t
 
 ## Open work by release
 
-There are 20 open issues: five in 0.12, seven in 0.13, three in 0.14, and five unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
+There are 18 open issues: three in 0.12, seven in 0.13, three in 0.14, and five unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
 
 | Release | Issue | Reason and ordering |
 | --- | --- | --- |
 | 0.12 | [#766](https://github.com/yicheng47/runner/issues/766) idle Codex message delivery | P1; fix crew messages held at an empty composer in this patch cycle |
 | 0.12 | [#748](https://github.com/yicheng47/runner/issues/748) mission monitoring from Codex | P1; spec under review for Runner-delivered mission notices in the starting chat, with idle delivery still to verify |
-| 0.12 | [#768](https://github.com/yicheng47/runner/issues/768) New role / New crew pages | P2; [PR #770](https://github.com/yicheng47/runner/pull/770) replaces the old create modals with page creation states |
-| 0.12 | [#731](https://github.com/yicheng47/runner/issues/731) role side panel | P2; the same PR adds clamped markdown prompts and Open role, following the shipped #756 setup rows |
 | 0.12 | [#725](https://github.com/yicheng47/runner/issues/725) close a single chat or terminal tab with ⌘W | A visible tab-close bug with a narrow fix; it need not wait for the next minor |
 | 0.13 | [#562](https://github.com/yicheng47/runner/issues/562) missions as containers | P1 headline; migrate the roster model and settle lifecycle contracts before the dependent UI |
 | 0.13 | [#704](https://github.com/yicheng47/runner/issues/704) session-to-session prompts | P1 release blocker; the terminal layer beside #562, with no bus or new tables |
