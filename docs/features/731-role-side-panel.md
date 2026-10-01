@@ -1,7 +1,7 @@
 # 731 — Role side panel redesign
 
 > Tracking issue: [#731](https://github.com/yicheng47/runner/issues/731)
-> Priority: P2, unscheduled after the 2026-09-27 milestone review. Platforms: macOS and Windows.
+> Priority: P2, milestone 0.12. Platforms: macOS and Windows.
 > History: filed 2026-09-27 after the role page (#393, PR #720) and crew page (#699, PR #727) redesigns shipped. #756 (PR #765, 2026-09-30) took the identity and setup rows; this spec keeps the rest. Design signed off 2026-09-30.
 
 ## Motivation

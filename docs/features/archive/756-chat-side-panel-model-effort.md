@@ -1,5 +1,7 @@
 # 756 — Show model and effort in direct chat side panel meta info
 
+> Status: shipped in [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) on 2026-09-30; archived 2026-10-01. The original scope and dated decisions follow.
+
 > Tracking issue: [#756](https://github.com/yicheng47/runner/issues/756)
 > Priority: P2. Platforms: macOS and Windows.
 

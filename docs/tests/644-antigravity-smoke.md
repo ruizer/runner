@@ -2,7 +2,7 @@
 
 Follow-up [#747 validation](747-antigravity-followups.md) records the 2026-09-28 CLI probes and automated results. Native Runner UI and JASONPC checks in this checklist remain pending where the follow-up marks them so.
 
-Branch: `feat/644-antigravity-runtime`. Spec: [644](../features/644-antigravity-runtime.md). Phases 1–3 are implemented and unit-tested. Initial live macOS checks against `agy` 1.2.12 in runner-dev are recorded below; the remaining phase 4 and hook checks stay on the checklist.
+Branch: `feat/644-antigravity-runtime`. Spec: [644](../features/archive/644-antigravity-runtime.md). Phases 1–3 are implemented and unit-tested. Initial live macOS checks against `agy` 1.2.12 in runner-dev are recorded below; the remaining phase 4 and hook checks stay on the checklist.
 
 ## Coverage boundary
 

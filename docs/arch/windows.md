@@ -90,7 +90,7 @@ To preview the update indicator in a development build, set `$env:RUNNER_DEV_UPD
 
 ## Terminal working directory
 
-Terminal splits follow a shell's live working directory through OSC 7 ([#575](../features/575-live-cwd.md)). On macOS Runner injects the reporting hook into zsh and bash; on Windows it injects nothing, so a split opens at the split-from shell's spawn directory unless the user's own prompt sends OSC 7. The parser accepts the Windows form `file://<COMPUTERNAME>/C:/…`, so oh-my-posh with `"pwd": "osc7"`, or this snippet placed at the end of a PowerShell profile, is enough. It has not been verified on native Windows yet:
+Terminal splits follow a shell's live working directory through OSC 7 ([#575](../features/archive/575-live-cwd.md)). On macOS Runner injects the reporting hook into zsh and bash; on Windows it injects nothing, so a split opens at the split-from shell's spawn directory unless the user's own prompt sends OSC 7. The parser accepts the Windows form `file://<COMPUTERNAME>/C:/…`, so oh-my-posh with `"pwd": "osc7"`, or this snippet placed at the end of a PowerShell profile, is enough. It has not been verified on native Windows yet:
 
 ```powershell
 $runnerPrompt = $function:prompt
@@ -112,5 +112,5 @@ The unsigned Windows port shipped in 0.8.0 and signing followed with [#497](http
 - Confirm SmartScreen behavior for the signed stable installer on a fresh Windows 11 PC and record the result in the [signing spec](../features/archive/497-windows-code-signing.md).
 - Complete detailed installed-build lifecycle, crash/relaunch, IME, resize, DPI, path, and update/data-retention acceptance. The [remaining validation checklist](../impls/archive/windows-nightly/impl_log.md#todo) preserves the specific cases and prior results. Native TRAE and Antigravity CLI validation is still pending.
 - Investigate the shutdown `window not found` diagnostic. The separate development-only DXGI debug-interface warning is an optional `gpui-pre-windows` debug probe (`check_debug_layer_available` in `src/directx_devices.rs`, under `debug_assertions`) and is skipped in release builds.
-- Inject the OSC 7 prompt hook into PowerShell as Runner does for zsh and bash on macOS, through `-NoExit -Command` and a `prompt` wrapper that coexists with oh-my-posh and starship, and consider Windows Terminal's OSC 9;9 ([#575](../features/575-live-cwd.md)); validate the snippet above on native Windows first.
+- Inject the OSC 7 prompt hook into PowerShell as Runner does for zsh and bash on macOS, through `-NoExit -Command` and a `prompt` wrapper that coexists with oh-my-posh and starship, and consider Windows Terminal's OSC 9;9 ([#575](../features/archive/575-live-cwd.md)); validate the snippet above on native Windows first.
 - Promote `Rust / Windows` to a required branch check after a week of green merges, planned no earlier than 2026-09-12; inspect current branch protection before changing it.

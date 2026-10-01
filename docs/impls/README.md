@@ -10,7 +10,7 @@ None.
 
 ## Archive
 
-- [`733-gpui-pre.md`](./archive/733-gpui-pre.md) — move GPUI from the yanked `gpui-ce` 0.3.3 to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), implementation complete; awaiting smoke tests and merge).
+- [`733-gpui-pre.md`](./archive/733-gpui-pre.md) — move GPUI from the yanked `gpui-ce` 0.3.3 to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), merged 2026-09-30; not yet in a stable release).
 
 Shipped plans are in [`archive/`](./archive/) in number order, and each names its PR. Multi-mission programs keep a folder with a condensed README:
 

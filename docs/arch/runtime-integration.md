@@ -113,7 +113,7 @@ Installing an agent, signing in, buying a subscription, and reproducing every ve
 
 ## Antigravity: lessons for the next runtime
 
-These examples describe the implementation and recorded evidence through 2026-09-29, using the [initial Antigravity spec](../features/644-antigravity-runtime.md) and the [follow-up validation record](../tests/747-antigravity-followups.md). They are examples of the contract, not a fresh certification of the installed CLI.
+These examples describe the implementation and recorded evidence through 2026-09-29, using the [initial Antigravity spec](../features/archive/644-antigravity-runtime.md) and the [follow-up validation record](../tests/747-antigravity-followups.md). They are examples of the contract, not a fresh certification of the installed CLI.
 
 | Area | What Antigravity taught us | Tier |
 | --- | --- | --- |

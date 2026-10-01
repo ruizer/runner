@@ -1,14 +1,16 @@
 # 644 — Antigravity CLI runtime
 
+> Status: shipped in [0.12.3](https://github.com/yicheng47/runner/releases/tag/v0.12.3) on 2026-09-29; archived 2026-10-01. The original scope and dated decisions follow.
+
 > Tracking issue: [#644](https://github.com/yicheng47/runner/issues/644)
 > Priority: P1, milestone 0.12.x. Platforms: macOS and Windows; JASONPC smoke pending.
 > Probed 2026-09-23 against the installed `agy` on macOS, which updated itself from 1.2.8 to 1.2.9 in the middle of the probe. Every claim below comes from `--help`, the docs bundled under `~/.gemini/antigravity-cli/builtin/skills/`, agy's own logs, or a live session recorded in a PTY. This spec supersedes the issue body where they differ.
 
-> Follow-up: [#747](https://github.com/yicheng47/runner/issues/747) supersedes the v1 deferrals below. On agy 1.2.12, Runner follows `Streaming conversation <id>` throughout a process for `/new`, `/fork` and `/resume`; discovers models through bounded `agy models` with cache/static fallback; reads structured quota via `agy -p /usage --output-format json`; installs its skill under `~/.gemini/antigravity-cli/skills`; and has a recorded first-turn fixture. See the [dated validation record](../tests/747-antigravity-followups.md) for probe results and pending native UI/Windows checks.
+> Follow-up: [#747](https://github.com/yicheng47/runner/issues/747) supersedes the v1 deferrals below. On agy 1.2.12, Runner follows `Streaming conversation <id>` throughout a process for `/new`, `/fork` and `/resume`; discovers models through bounded `agy models` with cache/static fallback; reads structured quota via `agy -p /usage --output-format json`; installs its skill under `~/.gemini/antigravity-cli/skills`; and has a recorded first-turn fixture. See the [dated validation record](../../tests/747-antigravity-followups.md) for probe results and pending native UI/Windows checks.
 
 ## Motivation
 
-Antigravity CLI (`agy`) is Google's terminal coding agent: the TUI surface of Antigravity, sharing its agent engine, and the migration path from Gemini CLI. It runs Gemini models by default plus Claude and GPT-OSS, and signs in with a Google account, so supporting it puts Runner in front of users on a Google AI plan who never run Claude Code or Codex. It is a TUI on a PTY and fits the adapter the way Copilot ([540](./archive/540-copilot-cli-runtime.md)) and pi ([539](./archive/539-pi-runtime.md)) do. The inventory in 540 is the checklist; this spec lists only the values that are agy's.
+Antigravity CLI (`agy`) is Google's terminal coding agent: the TUI surface of Antigravity, sharing its agent engine, and the migration path from Gemini CLI. It runs Gemini models by default plus Claude and GPT-OSS, and signs in with a Google account, so supporting it puts Runner in front of users on a Google AI plan who never run Claude Code or Codex. It is a TUI on a PTY and fits the adapter the way Copilot ([540](./540-copilot-cli-runtime.md)) and pi ([539](./539-pi-runtime.md)) do. The inventory in 540 is the checklist; this spec lists only the values that are agy's.
 
 ## Probe evidence
 
@@ -71,7 +73,7 @@ Antigravity CLI (`agy`) is Google's terminal coding agent: the TUI surface of An
 
 ## What a new runtime touches
 
-Sites and their shapes follow the [540 inventory](./archive/540-copilot-cli-runtime.md#what-a-new-runtime-touches); these are agy's values. *Exhaustive* marks the `match` arms the compiler forces.
+Sites and their shapes follow the [540 inventory](./540-copilot-cli-runtime.md#what-a-new-runtime-touches); these are agy's values. *Exhaustive* marks the `match` arms the compiler forces.
 
 ### Spawn path (`crates/runner-backend`)
 
@@ -179,7 +181,7 @@ MCP client and default registration, the Agents row, the Skills pane, the mark a
 
 ### Phase 3 — hook status (macOS)
 
-The Runner-owned hooks folder, `agy_status.rs`, the watcher, env injection and the decision 5 mapping, with its smoke checklist in [`docs/tests/644-antigravity-smoke.md`](../tests/644-antigravity-smoke.md).
+The Runner-owned hooks folder, `agy_status.rs`, the watcher, env injection and the decision 5 mapping, with its smoke checklist in [`docs/tests/644-antigravity-smoke.md`](../../tests/644-antigravity-smoke.md).
 
 ### Phase 4 — smoke (macOS, then JASONPC)
 
@@ -187,7 +189,7 @@ Direct chat: the first turn arrives once, the pane paints, the tab keeps Runner'
 
 ### Phase 5 — follow-ups, each its own issue
 
-Model discovery from `agy models`; the persona on a native channel; hooks on Windows; `/usage` for the [706](./706-agent-usage.md) usage popover. The model and usage items were delivered by [#747](../tests/747-antigravity-followups.md); this line records the original #644 deferral.
+Model discovery from `agy models`; the persona on a native channel; hooks on Windows; `/usage` for the [706](./706-agent-usage.md) usage popover. The model and usage items were delivered by [#747](../../tests/747-antigravity-followups.md); this line records the original #644 deferral.
 
 ## Verification
 

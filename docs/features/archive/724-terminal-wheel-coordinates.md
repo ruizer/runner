@@ -1,6 +1,8 @@
 # 724 — Preserve terminal wheel coordinates
 
-Tracking issue: [#724](https://github.com/yicheng47/runner/issues/724). Priority: P2. Status: ready for implementation. This is a terminal input correction with no visual or layout changes; no Pencil design is needed.
+> Status: shipped in [0.12.2](https://github.com/yicheng47/runner/releases/tag/v0.12.2) on 2026-09-28; archived 2026-10-01. The original scope and dated decisions follow.
+
+Tracking issue: [#724](https://github.com/yicheng47/runner/issues/724). Priority: P2. This is a terminal input correction with no visual or layout changes; no Pencil design is needed.
 
 ## Motivation
 

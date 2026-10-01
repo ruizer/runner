@@ -1,5 +1,7 @@
 # 393 — Role page redesign
 
+> Status: shipped in [0.12.0](https://github.com/yicheng47/runner/releases/tag/v0.12.0) on 2026-09-27; archived 2026-10-01. The original scope and dated decisions follow.
+
 > Tracking issue: [#393](https://github.com/yicheng47/runner/issues/393)
 > Priority: P1, 0.12 release blocker. Platforms: macOS and Windows.
 > History: filed as spec 58 for both detail pages in the Tauri era and renumbered to 393 on 2026-09-01. On 2026-09-22 it was split: this spec covers the role page, which goes first, and the crew page follows as [699](./699-crew-page.md).

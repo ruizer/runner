@@ -1,5 +1,7 @@
 # 740 — Codex speed in role settings
 
+> Status: shipped in [0.12.1](https://github.com/yicheng47/runner/releases/tag/v0.12.1) on 2026-09-28; archived 2026-10-01. The original scope and dated decisions follow.
+
 [Tracking issue #740](https://github.com/yicheng47/runner/issues/740) · P2 · 0.12
 
 ## Motivation

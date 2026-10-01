@@ -1,12 +1,14 @@
 # 575 — Splits and new terminals follow the shell's live cwd
 
+> Status: shipped in [0.11.5](https://github.com/yicheng47/runner/releases/tag/v0.11.5) on 2026-09-26; archived 2026-10-01. The original scope and dated decisions follow.
+
 > Tracking issue: [#575](https://github.com/yicheng47/runner/issues/575)
-> Priority: P3, milestone 0.14. Depends on [#574](./archive/574-terminal-tab-split.md), shipped.
-> Brief: [`docs/impls/briefs/575-live-cwd.md`](../impls/briefs/575-live-cwd.md). Platforms: macOS for the injected shell integration; the parser and the fallback are shared with Windows.
+> Priority: P3, milestone 0.14. Depends on [#574](./574-terminal-tab-split.md), shipped.
+> Brief: [`docs/impls/briefs/575-live-cwd.md`](../../impls/briefs/575-live-cwd.md). Platforms: macOS for the injected shell integration; the parser and the fallback are shared with Windows.
 
 ## Motivation
 
-[574](./archive/574-terminal-tab-split.md) made a terminal-tab split spawn a shell in the directory the split-from pane's shell was *spawned* in. After `cd crates/runner-app` a split still opens at the tab's original directory. Ghostty's split opens where you are: the shell reports every directory change with OSC 7 (`ESC ] 7 ; file://host/path ST`), and Ghostty injects the hook that sends it. Runner should do the same for its terminals.
+[574](./574-terminal-tab-split.md) made a terminal-tab split spawn a shell in the directory the split-from pane's shell was *spawned* in. After `cd crates/runner-app` a split still opens at the tab's original directory. Ghostty's split opens where you are: the shell reports every directory change with OSC 7 (`ESC ] 7 ; file://host/path ST`), and Ghostty injects the hook that sends it. Runner should do the same for its terminals.
 
 ## Behavior
 
@@ -19,7 +21,7 @@
 
 ### Parsing
 
-- **Where.** `vte` 0.15 routes OSC 7 to its unhandled branch and drops it (`osc_dispatch`, `vte-0.15.0/src/ansi.rs`; [586](./586-shell-status-detection.md) found the same for OSC 133). `TerminalSession::feed_output` therefore scans the raw chunk before handing it to the parser, beside the existing DEC 2031 scan. The scan runs only for shell-runtime sessions; agent sessions never scan, so their output path is unchanged.
+- **Where.** `vte` 0.15 routes OSC 7 to its unhandled branch and drops it (`osc_dispatch`, `vte-0.15.0/src/ansi.rs`; [586](../586-shell-status-detection.md) found the same for OSC 133). `TerminalSession::feed_output` therefore scans the raw chunk before handing it to the parser, beside the existing DEC 2031 scan. The scan runs only for shell-runtime sessions; agent sessions never scan, so their output path is unchanged.
 - **Scanner.** A small state machine per session: it looks for the ESC bytes in the chunk, recognizes the `ESC ] 7 ;` introducer, and collects the payload up to BEL (`0x07`) or ST (`ESC \`). An introducer or a terminator split across two PTY reads is carried to the next chunk: at most three bytes of a partial introducer, or the unterminated payload. ESC followed by anything but `\`, CAN and SUB abort the sequence, as they do in `vte`. A payload over 16 KiB is abandoned. `0x9C` (C1 ST) is not a terminator: in UTF-8 output it is a continuation byte, and a raw CJK path can contain it. The byte work per chunk is one pass looking for ESC; parsing happens only when a report completes, which is once per prompt.
 - **Report.** `file://host/path`, scheme case-insensitive. The host must be empty, `localhost`, or this machine's hostname (`gethostname`, `COMPUTERNAME` on Windows) or its first label, compared ASCII case-insensitively; zsh's `$HOST` and bash's `$HOSTNAME` both come from `gethostname`, so a user's own hook that sends `Jasons-Mac-Studio.local` matches while the hostname stays the same. The path is cut at `?` or `#` as a URI's path is, percent-decoded, and must be absolute; on Windows `/C:/…` becomes `C:/…`. Anything else is ignored: another scheme, a foreign host (an `ssh` session's remote shell), a relative path, invalid UTF-8 after decoding, garbage. An ignored report keeps the previous live cwd, so splitting while `ssh`'d elsewhere opens a local shell where you ran `ssh`, as Ghostty does.
 - **Storage.** The live cwd is an in-memory `Option<PathBuf>` on the `TerminalSession`, beside the spawn cwd on the session row, which stays the fallback. It is not checked on arrival: `TerminalSession::live_cwd()` returns it only if it is a directory at the moment of reading, so a directory removed since the report falls back to the spawn cwd instead of failing the split. A respawned shell gets a fresh `TerminalSession` and starts without a live cwd.
@@ -30,7 +32,7 @@ The rule: **a new shell starts where the session it is created from is.** The li
 
 - **Split Right / Split Down on a terminal tab** (`split_pane`): the split-from pane's shell.
 - **New terminal on a terminal tab**: its split path is the same `split_pane`; when it fills an empty pane instead, `terminal_start_location` uses the focused pane's shell the same way.
-- **Terminal drawer** (chat tab and mission): unchanged. A drawer shell is created from its tab's focused chat or from the mission ([469](./archive/469-terminal-drawer.md) anchors it there), and a chat's cwd does not move: agents are never scanned, and following cwd for chat sessions is a non-goal. A drawer shell that `cd`s elsewhere does not pull the next `+` away from the chat's repository. The one case where the drawer does follow a shell is the same rule applied through `terminal_start_location`: a chat tab whose focused pane is a legacy shell pane ([469](./archive/469-terminal-drawer.md)'s migration note).
+- **Terminal drawer** (chat tab and mission): unchanged. A drawer shell is created from its tab's focused chat or from the mission ([469](./469-terminal-drawer.md) anchors it there), and a chat's cwd does not move: agents are never scanned, and following cwd for chat sessions is a non-goal. A drawer shell that `cd`s elsewhere does not pull the next `+` away from the chat's repository. The one case where the drawer does follow a shell is the same rule applied through `terminal_start_location`: a chat tab whose focused pane is a legacy shell pane ([469](./469-terminal-drawer.md)'s migration note).
 - **New terminal tab from the sidebar**: unchanged; there is no source session.
 - **Relative file links** (`link_at`): the live cwd first, then `link_cwd`'s spawn or project cwd. `resolve_file_candidate` already requires the joined path to exist, so a link printed before a `cd` fails the first candidate and resolves against the second. A relative name that exists in both directories resolves against the live one; per-line cwd tracking, as iTerm2 does it, is out of v1.
 - **Relaunch.** A split's session row records the cwd it spawned in, which is now the live cwd, so relaunch brings each split back where it opened. The live cwd itself is not persisted, and a shell that relaunches or restarts comes back at its recorded spawn cwd as today.
@@ -71,7 +73,7 @@ In bash, Runner's hook takes the bootstrap's place in `PROMPT_COMMAND`, and it p
 - Following cwd for chat sessions, or scanning agent output at all.
 - Persisting the live cwd across relaunch, or restarting an exited shell at its last live cwd. The `TerminalSession` and its live cwd go away when the shell exits.
 - `kitty-shell-cwd://`, OSC 9;9 and OSC 1337 `CurrentDir`: other cwd reports, none of which Runner's injected hooks send.
-- OSC 133 prompt marks. [586](./586-shell-status-detection.md)'s semantic phase can reuse this injection when it lands.
+- OSC 133 prompt marks. [586](../586-shell-status-detection.md)'s semantic phase can reuse this injection when it lands.
 
 ## Open items
 
@@ -84,7 +86,7 @@ In bash, Runner's hook takes the bootstrap's place in `PROMPT_COMMAND`, and it p
 - `runner-backend`: the injected environment and unchanged argv for zsh and bash, including a user `ZDOTDIR` and an inherited `PROMPT_COMMAND`; no change for fish, a role-backed shell, a mission shell or an agent runtime; script files written and rewritten when stale. Real shells: `/bin/zsh` and `/bin/bash` spawned through the PTY runtime with a temporary `HOME` (and a `ZDOTDIR` case), `cd` into a directory with a space and CJK characters, asserting the OSC 7 arrives, percent-encoded, and that the user's startup files printed their markers. For both shells, an rc that already sends OSC 7 directly, through a helper function, from `PS1`, or (zsh) through an autoloaded function, or that adds its emitter to the hook list or to `PS1` after the first prompt, gets exactly one report per prompt, and Runner's hook is gone from the hook list.
 - `runner-app`: the cwd choice for split and New terminal: a live cwd that exists wins; a missing, removed or non-directory live cwd falls back to the spawn cwd, then the existing chain.
 - The six gates in the brief, with exit codes.
-- Jason's smoke test: [`docs/tests/575-live-cwd-smoke.md`](../tests/575-live-cwd-smoke.md).
+- Jason's smoke test: [`docs/tests/575-live-cwd-smoke.md`](../../tests/575-live-cwd-smoke.md).
 
 ## References
 
