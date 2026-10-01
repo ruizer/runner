@@ -93,6 +93,7 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 - Common scopes: `db`, `commands`, `ui`, `event-log`, `session`, `event-bus`,
   `router`, `cli`, `mission`, `docs`, `validation`.
 - Example: `fix(session): preserve terminal geometry on tab switch`.
+- A doc-only change (`docs/`, the READMEs, this file) is committed straight to `main` from the root checkout, with no branch, worktree or pull request; a mission brief still goes on its mission's branch. Open a PR for docs only when the edit is large and spans several files, such as a restructure or a rename across the docs tree.
 - For validation branches, keep PR descriptions current when scope changes.
 - Bring a branch up to date by rebasing it onto `origin/main` and pushing with `git push --force-with-lease`; never merge `main` into a branch. A PR's history stays its own commits on top of `main`.
 - Do not add tool-specific co-author trailers unless the user explicitly asks.
