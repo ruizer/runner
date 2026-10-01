@@ -4,9 +4,9 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 
 ## Where the project is
 
-- **Latest release:** [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) on 2026-09-30: the Start a chat redesign, model and effort in the chat side panel, removal of unused crew fields, and model-default, usage, keyboard and font fixes. Antigravity CLI and Codex Speed shipped in earlier 0.12.x patches.
-- **Merged since that release:** the GPUI move to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), closing [#733](https://github.com/yicheng47/runner/issues/733)), sidebar label/action fixes ([#769](https://github.com/yicheng47/runner/pull/769)), the New role / New crew pages with the role side panel prompt and Open role ([#770](https://github.com/yicheng47/runner/pull/770), closing [#768](https://github.com/yicheng47/runner/issues/768) and [#731](https://github.com/yicheng47/runner/issues/731)), and ⌘W closing the tab instead of the window, with ⇧⌘W (Alt+F4 on Windows) for the window ([#773](https://github.com/yicheng47/runner/pull/773), closing [#725](https://github.com/yicheng47/runner/issues/725)). These are on `main`; the nightly feed builds from `main`.
-- **In flight:** mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12.
+- **Latest release:** [0.12.6](https://github.com/yicheng47/runner/releases/tag/v0.12.6) on 2026-10-01: creating roles and crews on their own pages, Open role and the full role prompt in the chat side panel, ⌘W closing the tab instead of the window (⇧⌘W for the window; Ctrl+Shift+W and Alt+F4 on Windows), sidebar label truncation, and a bounded status watcher start. It also carries the GPUI move to `gpui-pre =0.3.7`. Earlier 0.12.x patches shipped the Start a chat redesign, Antigravity CLI and Codex Speed.
+- **Merged since that release:** nothing user-facing yet. The nightly feed builds from `main`.
+- **In flight:** keyboard-driven Start a chat, new terminal and new mission ([#772](https://github.com/yicheng47/runner/issues/772)) has a crew mission running. Mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12.
 - **Next minor:** missions as containers ([562](./features/562-mission-spawn.md)) and session-to-session prompts ([704](./features/704-session-send.md)) remain the 0.13 headline specs. #704 currently carries the `release-blocker` label.
 
 ## Releases
@@ -25,6 +25,7 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 | [0.12.3](https://github.com/yicheng47/runner/releases/tag/v0.12.3) | Shipped 2026-09-29: Antigravity CLI runtime, live models, quota, managed skill and conversation/status follow-ups | #644, #747 |
 | [0.12.4](https://github.com/yicheng47/runner/releases/tag/v0.12.4) | Shipped 2026-09-29: submit Codex inbox nudges correctly after Windows paste bursts | #753 |
 | [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) | Shipped 2026-09-30: Start a chat and chat side panel redesigns, crew field removal, model defaults, usage visibility, pi multiline input and macOS kana fixes | #735, #756, #729, #762, #752, #755, #730 |
+| [0.12.6](https://github.com/yicheng47/runner/releases/tag/v0.12.6) | Shipped 2026-10-01: role and crew creation pages, Open role and the full prompt in the chat side panel, ⌘W closes the tab, sidebar label truncation, a bounded status watcher start, and the GPUI move to gpui-pre | #768, #731, #725, #769, #774, #733 |
 | [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: idle Codex message delivery, mission monitoring and keyboard-driven creation | #766, #748, #772 |
 | [0.13](https://github.com/yicheng47/runner/milestone/3) | Mission coordination and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions and pi MCP management | #562, #704, #552, #701, #709, #723, #764 |
 | [0.14](https://github.com/yicheng47/runner/milestone/4) | Session host, shell process status, 简体中文 | #645, #586, #565 |
@@ -35,7 +36,7 @@ A minor is a change to the model or a new surface; a patch is fixes and follow-t
 
 ## Open work by release
 
-There are 19 open issues: three in 0.12, seven in 0.13, three in 0.14, and six unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
+There are 18 open issues: three in 0.12, seven in 0.13, three in 0.14, and five unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
 
 | Release | Issue | Reason and ordering |
 | --- | --- | --- |
@@ -66,11 +67,10 @@ There are 19 open issues: three in 0.12, seven in 0.13, three in 0.14, and six u
 
 ## Backlog
 
-These six open issues have no release commitment; setting a milestone schedules them.
+These five open issues have no release commitment; setting a milestone schedules them.
 
 - **P2:** [#559](https://github.com/yicheng47/runner/issues/559) command palette; the existing quick switcher remains.
 - **P2:** [#577](https://github.com/yicheng47/runner/issues/577) per-role skills and MCP picks; the global catalogs already work.
 - **P2:** [#630](https://github.com/yicheng47/runner/issues/630) token ledger, re-runnable tasks and subscription quota.
-- **P2:** [#774](https://github.com/yicheng47/runner/issues/774) a `claude_status` test can hang the Windows CI test step; a hang blocks nightly and release gating until the run is cancelled and rerun.
 - **P3:** [#582](https://github.com/yicheng47/runner/issues/582) split files that outgrew the #478 audit; time it around feature work on those files.
 - **P3:** [#771](https://github.com/yicheng47/runner/issues/771) evaluate selective `gpui-base` adoption for shared UI controls; start with one ordinary field and resolve the Windows manifest dependency before integration.
