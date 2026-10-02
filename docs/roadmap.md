@@ -27,7 +27,7 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 | [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) | Shipped 2026-09-30: Start a chat and chat side panel redesigns, crew field removal, model defaults, usage visibility, pi multiline input and macOS kana fixes | #735, #756, #729, #762, #752, #755, #730 |
 | [0.12.6](https://github.com/yicheng47/runner/releases/tag/v0.12.6) | Shipped 2026-10-01: role and crew creation pages, Open role and the full prompt in the chat side panel, ⌘W closes the tab, sidebar label truncation, a bounded status watcher start, and the GPUI move to gpui-pre | #768, #731, #725, #769, #774, #733 |
 | [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: idle Codex message delivery, mission monitoring, keyboard-driven creation, and the runtime adapter refactor | #766, #748, #772, #777 |
-| [0.13](https://github.com/yicheng47/runner/milestone/3) | Mission coordination and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions and pi MCP management | #562, #704, #552, #701, #709, #723, #764 |
+| [0.13](https://github.com/yicheng47/runner/milestone/3) | Mission coordination and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions, pi MCP management and the session state model | #562, #704, #791, #552, #701, #709, #723, #764 |
 | [0.14](https://github.com/yicheng47/runner/milestone/4) | Session host, shell process status, 简体中文 | #645, #586, #565 |
 
 A minor is a change to the model or a new surface; a patch is fixes and follow-through. Patch releases have carried features before (0.8.4 to 0.8.8), which is fine for small ones, but #562 migrates every mission's roster, so it and the paired terminal layer #704 are planned for 0.13.
@@ -46,6 +46,7 @@ There are 19 open issues: four in 0.12, seven in 0.13, three in 0.14, and five u
 | 0.12 | [#772](https://github.com/yicheng47/runner/issues/772) keyboard-driven Start a chat, new terminal and new mission | P2; draft [spec](./features/772-keyboard-create.md) with open questions on initial focus and the new keys |
 | 0.13 | [#562](https://github.com/yicheng47/runner/issues/562) missions as containers | P1 headline; migrate the roster model and settle lifecycle contracts before the dependent UI |
 | 0.13 | [#704](https://github.com/yicheng47/runner/issues/704) session-to-session prompts | P1 release blocker; the terminal layer beside #562, with no bus or new tables |
+| 0.13 | [#791](https://github.com/yicheng47/runner/issues/791) session state model | P1; draft [spec](./features/791-session-state.md), starts after #777 PR 3: one reducer for status, drafts and conversation keys, runtime watchers as translators, and a recorded scenario corpus; its last phase fixes #781, #784, #785, #786 and #766 |
 | 0.13 | [#552](https://github.com/yicheng47/runner/issues/552) Activity / Needs you view | Consolidate working and waiting sessions across windows and missions |
 | 0.13 | [#701](https://github.com/yicheng47/runner/issues/701) desktop notifications | Offscreen waits, questions, completions and failures reach the user |
 | 0.13 | [#709](https://github.com/yicheng47/runner/issues/709) Alacritty PTY and event loop evaluation | Decide the terminal engine before extracting it into the session host |
