@@ -1,8 +1,8 @@
 # 791 — Session state: one model for agent status, drafts and conversation identity
 
 > Tracking issue: [#791](https://github.com/yicheng47/runner/issues/791)
-> Priority: P1, 0.13. Platforms: macOS and Windows. Unblocked: [#777](https://github.com/yicheng47/runner/issues/777) landed on 2026-10-03.
-> Status: decisions settled with Jason on 2026-10-03; PR 1 (phases 0 and 1) is next.
+> Priority: P1, 0.12 (moved from 0.13 on 2026-10-03; its phase 3 bugs are in 0.13). Platforms: macOS and Windows. Unblocked: [#777](https://github.com/yicheng47/runner/issues/777) landed on 2026-10-03.
+> Status: decisions settled with Jason on 2026-10-03; PR 1 (phases 0 and 1) is in progress.
 
 ## Motivation
 
