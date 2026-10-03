@@ -2,7 +2,7 @@
 
 > Tracking issue: [#791](https://github.com/yicheng47/runner/issues/791)
 > Priority: P1, 0.12 (moved from 0.13 on 2026-10-03, with the four bugs phase 3 fixes: all three PRs ship in 0.12). Platforms: macOS and Windows. Unblocked: [#777](https://github.com/yicheng47/runner/issues/777) landed on 2026-10-03.
-> Status: decisions settled with Jason on 2026-10-03; PR 1 (phases 0 and 1) is in progress.
+> Status: decisions settled with Jason on 2026-10-03. PR 1 (phases 0 and 1) merged on 2026-10-03 as [#796](https://github.com/yicheng47/runner/pull/796); PR 2 is next.
 
 ## Motivation
 
@@ -148,7 +148,7 @@ Phase 1 reproduces today's behavior exactly. These rules are read out of the cur
 
 ### A scenario corpus
 
-A scenario is one NDJSON file of timestamped inputs to a session: PTY output and titles, local input, hook feed lines, and the agent records a watcher reads. Scenarios are scripted from the rule rows and the bug evidence, with agent records copied from samples that already exist: the watchers' test fixtures, the hook-feed files Runner writes per session, and the CLIs' own transcripts and rollouts, with throwaway prompts and no account tokens. They live under `crates/runner-backend/src/session/fixtures/scenarios/<runtime>/`. A replay harness feeds a scenario through the adapter and the state code on a fake clock and asserts the published status and key timeline. No new recorder is built and no live session is recorded for the corpus; a real CLI's behavior is checked by the smoke test on each PR.
+A scenario is one NDJSON file of timestamped inputs to a session: PTY output and titles, local input, hook feed lines, and the agent records a watcher reads. Scenarios are scripted from the rule rows and the bug evidence, with agent records copied from samples that already exist: the watchers' test fixtures, the hook-feed files Runner writes per session, and the CLIs' own transcripts and rollouts, with throwaway prompts and no account tokens. They live under `crates/runner-backend/src/session/fixtures/scenarios/<runtime>/`, and their goldens under `fixtures/expectations/<runtime>/` as compact text: one line per step listing only what changed, the status as `lifecycle/activity/source` plus non-null extras, and one indented line per published row (the format is described in `fixtures/README.md`). PR 1 first wrote full pretty-printed JSON snapshots, 57,650 lines for 1,249 steps, which no reviewer could read; the compact form is 2,148 lines, proven equivalent to those snapshots, and a flipped golden reads as one changed line. A replay harness feeds a scenario through the adapter and the state code on a fake clock and asserts the published status and key timeline. No new recorder is built and no live session is recorded for the corpus; a real CLI's behavior is checked by the smoke test on each PR.
 
 Scenarios, for each runtime where the CLI supports them: a fresh first turn; tool use; an approval approved and one denied; a question answered; Esc mid-reply and mid-tool; Ctrl+C; approve then cancel; an API error; compaction; `/clear` or `/new` then resume; resume with missing history; a resume after a Runner relaunch; a crew message to an idle slot; a typed draft followed by a crew message; and a synthetic bridge failure. Each bug in the Motivation table maps to at least one scenario.
 
@@ -182,7 +182,7 @@ Proposed 2026-10-02, settled with Jason on 2026-10-03.
 
 1. **Adapters emit events and the reducer owns the snapshot.** The alternative keeps snapshots and only centralizes precedence. It is smaller, but it leaves every watcher re-implementing turn state, which is where most of the #783-style bugs came from.
 2. **The open bugs are fixed inside this program, in phase 3,** not as separate patches first, unless one becomes P0. Patching them now adds to the code that phase 1 has to reproduce.
-3. **No recording step; QA smoke-tests.** The corpus is scripted (see A scenario corpus), so phases 0 to 2 need no live sessions and run on the `codex duo` crew, coder and reviewer with no QA slot, with Jason's smoke test on each PR. Phase 3 changes real behavior, so its mission adds a QA slot for smoke and regression tests on the five runtimes, under live-test authorization in bounded test chats.
+3. **No recording step; QA smoke-tests.** The corpus is scripted (see A scenario corpus), so phases 0 to 2 need no live sessions and run on the `codex duo` crew, coder and reviewer with no QA slot, and a separate QA mission (the `codex qa` crew) smoke-tests in Jason's place. PR 1, the riskiest rewiring, got a short live smoke on Codex and Claude Code; every check passed except approval, which could not be triggered under the existing permission settings and was accepted on the scripted approval scenarios. PR 2 gets no live smoke. Phase 3 changes real behavior, so its mission adds QA for smoke and regression tests on the five runtimes, under live-test authorization in bounded test chats, before any 0.12 release that carries it.
 4. **Three PRs,** as in Phases.
 
 ## Verification
