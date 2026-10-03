@@ -1,11 +1,12 @@
 # Tech Notes
 
-Deep dives on the libraries Runner is built on, written for someone reading the code for the first time. `arch/` says how Runner is designed; these notes say how the machinery underneath actually works, with pointers into the pinned dependency sources so the reader can follow along in real code.
+Deep dives on Runner's internal machinery and the libraries it is built on, written for someone reading the code for the first time. `arch/` says how Runner is designed; these notes walk through how the machinery works, with pointers into Runner and the pinned dependency sources so the reader can follow along in real code.
 
-Each note names the crate version it was written against. When a dependency is bumped, re-read the note against the new source and fix what moved; a note that drifts from the pinned version is worse than none.
+Dependency notes name the crate version they were written against; internal code walkthroughs name the Runner revision or date. When a dependency is bumped, re-read the note against the new source and fix what moved; a note that drifts from the pinned version is worse than none.
 
 ## Notes
 
+- [`runtime-adapters.md`](./runtime-adapters.md) — a first walkthrough of the runtime adapter refactor: agent identity, adapters, session orchestration, and the PTY process layer, with a Mermaid launch diagram and a code reading path.
 - [`terminal-rendering.md`](./terminal-rendering.md) — the path from a PTY read to painted pixels inside Runner: the terminal model crate, the bridge, the GPUI element, and the four design decisions that shape it.
 - [`alacritty-terminal.md`](./alacritty-terminal.md) — `alacritty_terminal` 0.26 as an emulator without a window: the vte parser, the Handler vocabulary, the Term and its ring-buffer grid, cells, colors, modes, reflow, and the event channel back to the PTY.
 - [`gpui-rendering.md`](./gpui-rendering.md) — `gpui-pre` 0.3.7 (`zed@1a28cff`) as Runner uses it for the terminal: the frame lifecycle, the Element trait, the scene and its GPU batches, text shaping and the layout cache, paths, masks, hitboxes, IME input, and entities.
