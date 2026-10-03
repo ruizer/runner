@@ -1,8 +1,8 @@
 # 791 — Session state: one model for agent status, drafts and conversation identity
 
 > Tracking issue: [#791](https://github.com/yicheng47/runner/issues/791)
-> Priority: P1, 0.13. Platforms: macOS and Windows. Starts after [#777](https://github.com/yicheng47/runner/issues/777) PR 3 merges.
-> Status: draft, 2026-10-02. The decisions at the end are proposals awaiting Jason.
+> Priority: P1, 0.13. Platforms: macOS and Windows. Unblocked: [#777](https://github.com/yicheng47/runner/issues/777) landed on 2026-10-03.
+> Status: decisions settled with Jason on 2026-10-03; PR 1 (phases 0 and 1) is next.
 
 ## Motivation
 
@@ -14,7 +14,7 @@ Session state is the least reliable part of Runner. Here it means three things a
 | [#583](https://github.com/yicheng47/runner/issues/583) | An animated composer pinned the session Busy, because the idle detector counts bytes |
 | [#623](https://github.com/yicheng47/runner/issues/623), [#659](https://github.com/yicheng47/runner/issues/659), [#670](https://github.com/yicheng47/runner/issues/670), [#736](https://github.com/yicheng47/runner/issues/736) | Status unavailable: on the first turn, after a Claude `/clear`, after a relaunch, after a Codex rollback |
 | [#687](https://github.com/yicheng47/runner/issues/687) | Codex stayed Working at an untouched prompt |
-| [#753](https://github.com/yicheng47/runner/issues/753), [#766](https://github.com/yicheng47/runner/issues/766) | Crew deliveries piled up unsubmitted, or were held because an empty Codex composer read as a draft |
+| [#753](https://github.com/yicheng47/runner/issues/753), [#766](https://github.com/yicheng47/runner/issues/766) | Crew deliveries piled up unsubmitted, or were reported held at an empty Codex composer (#766 closed by #794 without a reproduction) |
 | [#783](https://github.com/yicheng47/runner/issues/783) | A cancel left Claude Code, Antigravity and Copilot Working |
 | [#781](https://github.com/yicheng47/runner/issues/781) (open) | Codex key capture ignores `CODEX_HOME`, so the chat is never keyed |
 | [#784](https://github.com/yicheng47/runner/issues/784) (open) | A pi cancel is reported as Response failed |
@@ -54,7 +54,7 @@ Because a watcher's output is a full snapshot, each watcher re-implements turn s
 
 ### Draft state
 
-Two signals decide whether the person has a draft. The first is a byte latch, `local_input_pending`: printable input and pastes set it, and Enter and Ctrl+C clear it. The second is `observed_input`, from the composer detector in `runner-terminal/src/input_state.rs`, which compares composer rows and cell styles before and after typing. `input_quiescent` and `reserve_delivery` combine the two with `last_local_input_at` and a recent-input window. The detector shipped without recorded evidence, and it reads an idle Codex composer as a draft (#766).
+Two signals decide whether the person has a draft. The first is a byte latch, `local_input_pending`: printable input and pastes set it, and Enter and Ctrl+C clear it. The second is `observed_input`, from the composer detector in `runner-terminal/src/input_state.rs`, which compares composer rows and cell styles before and after typing. `input_quiescent` and `reserve_delivery` combine the two with `last_local_input_at` and a recent-input window. The detector shipped without recorded evidence. #766 reported it reading an idle Codex composer as a draft; QA's live baseline for [#794](https://github.com/yicheng47/runner/pull/794) did not reproduce that, so #794 added hold and release logging and four recorded composer fixtures, and left the detector unchanged.
 
 ### Conversation identity
 
@@ -140,24 +140,24 @@ Phase 1 reproduces today's behavior exactly. These rules are read out of the cur
 
 ### Draft state
 
-`DraftState` (Idle, Drafting, Submitted) lives in the model, fed by `Input` and `Composer` events with one rule table. Phase 1 keeps today's combined rule. Phase 0 records each runtime's empty, typed, submitted and menu composers with `RUNNER_RECORD_INPUT_FIXTURE`, and phase 3 fixes #766 from those recordings rather than from reasoning.
+`DraftState` (Idle, Drafting, Submitted) lives in the model, fed by `Input` and `Composer` events with one rule table. Phase 1 keeps today's combined rule. The draft rows are pinned by the composer fixtures already in `crates/runner-terminal/fixtures/`, including #794's `input-codex-*` and `input-claude-control-submit` recordings. A draft bug that reproduces later is recorded with the existing `RUNNER_RECORD_INPUT_FIXTURE` before it is fixed, not reasoned about.
 
 ### Conversation identity
 
 `KeyState` in the model holds the current key, its origin (assigned, captured or rekeyed) and the spawn generation. Every capture source emits `ConversationChanged`. The reducer drops reports from an earlier spawn and returns a `PersistKey` effect, and one repository function writes it with one guard (the row plus its spawn generation). That replaces both `capture_agent_session_key` and `rekey_agent_session_key`. The adapter supplies capture locations from the runtime's own home settings (`CODEX_HOME`, Copilot's config home, `PI_CODING_AGENT_DIR`) instead of `home_dir()`. Resume probes canonicalize the cwd.
 
-### A recorded scenario corpus
+### A scenario corpus
 
-A dev-only recorder, `RUNNER_RECORD_SESSION_SCENARIO=<dir>`, writes one timestamped NDJSON file per session. It holds PTY output and titles, local input, hook feed lines, the agent records the watcher read, and the published status and key timeline. Recordings use throwaway prompts and scratch directories, and account tokens are stripped. They live under `crates/runner-backend/src/session/fixtures/scenarios/<runtime>/`. A replay harness feeds a recording through the adapter and the reducer on a fake clock, then asserts the timeline.
+A scenario is one NDJSON file of timestamped inputs to a session: PTY output and titles, local input, hook feed lines, and the agent records a watcher reads. Scenarios are scripted from the rule rows and the bug evidence, with agent records copied from samples that already exist: the watchers' test fixtures, the hook-feed files Runner writes per session, and the CLIs' own transcripts and rollouts, with throwaway prompts and no account tokens. They live under `crates/runner-backend/src/session/fixtures/scenarios/<runtime>/`. A replay harness feeds a scenario through the adapter and the state code on a fake clock and asserts the published status and key timeline. No new recorder is built and no live session is recorded for the corpus; a real CLI's behavior is checked by the smoke test on each PR.
 
 Scenarios, for each runtime where the CLI supports them: a fresh first turn; tool use; an approval approved and one denied; a question answered; Esc mid-reply and mid-tool; Ctrl+C; approve then cancel; an API error; compaction; `/clear` or `/new` then resume; resume with missing history; a resume after a Runner relaunch; a crew message to an idle slot; a typed draft followed by a crew message; and a synthetic bridge failure. Each bug in the Motivation table maps to at least one scenario.
 
 ## Phases
 
-0. **Corpus, recorded against current code.** The recorder, the replay harness, and goldens of today's timelines. Known-wrong timelines are marked with their bug number. The harness drives existing seams (`IdleDetector`'s `_at` methods, `drain_observations` over temp files, `note_forwarder_transition`, `publish_observation`). Where a timer reads the wall clock, phase 0 injects a clock first, a small change with no behavior effect.
+0. **Corpus and goldens of current behavior.** The replay harness, the scripted scenarios, and goldens produced by running today's code over them, with no live step. Known-wrong timelines are marked with their bug number. The harness drives existing seams (`IdleDetector`'s `_at` methods, `drain_observations` over temp files, `note_forwarder_transition`, `publish_observation`). Where a timer reads the wall clock, phase 0 injects a clock first, a small change with no behavior effect.
 1. **The reducer.** Every writer is routed through it, the twelve flags leave `SessionState`, `StatusSource` replaces the strings, and the cancel constants leave `claude_status.rs`. The goldens are identical.
 2. **Adapters translate.** Watchers emit `AgentEvent`s and shrink to parsing and correlation. The goldens are identical.
-3. **Fixes,** one bug per commit, each flipping its known-wrong golden: #784, #785, #786, #781 and #766.
+3. **Fixes,** one bug per commit, each flipping its known-wrong golden: #784, #785, #786 and #781.
 
 Phases 0 and 1 land as one PR, then phase 2, then phase 3, one mission each. Each PR leaves behavior identical except phase 3.
 
@@ -178,11 +178,11 @@ Phases 0 and 1 land as one PR, then phase 2, then phase 3, one mission each. Eac
 
 ## Decisions
 
-Proposed 2026-10-02, awaiting Jason.
+Proposed 2026-10-02, settled with Jason on 2026-10-03.
 
 1. **Adapters emit events and the reducer owns the snapshot.** The alternative keeps snapshots and only centralizes precedence. It is smaller, but it leaves every watcher re-implementing turn state, which is where most of the #783-style bugs came from.
 2. **The open bugs are fixed inside this program, in phase 3,** not as separate patches first, unless one becomes P0. Patching them now adds to the code that phase 1 has to reproduce.
-3. **Recording.** The codex pair QA slot records the corpus under live-test authorization in bounded test chats, and Jason records any scenario QA cannot drive, from a checklist with the recorder on. Codex computer use failed twice on #777 PR 3, so the checklist is the fallback, not an afterthought.
+3. **No recording step; QA smoke-tests.** The corpus is scripted (see A scenario corpus), so phases 0 to 2 need no live sessions and run on the `codex duo` crew, coder and reviewer with no QA slot, with Jason's smoke test on each PR. Phase 3 changes real behavior, so its mission adds a QA slot for smoke and regression tests on the five runtimes, under live-test authorization in bounded test chats.
 4. **Three PRs,** as in Phases.
 
 ## Verification

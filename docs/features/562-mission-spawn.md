@@ -1,7 +1,7 @@
 # 562 — Missions as containers: spawn roles into a running mission
 
 > Tracking issue: [#562](https://github.com/yicheng47/runner/issues/562)
-> Priority: P1 (raised from P3 on 2026-09-22), milestone 0.13. It moved from 0.12 after 0.12.0 shipped because it migrates every mission's roster and needs a minor release. With [704](./704-session-send.md) it is the headline of 0.13.
+> Priority: P1 (raised from P3 on 2026-09-22), milestone 0.13. It moved from 0.12 after 0.12.0 shipped because it migrates every mission's roster and needs a minor release. As of 2026-10-03 it remains scheduled alongside [704](./704-session-send.md), without gating 0.13.0; session host [#645](https://github.com/yicheng47/runner/issues/645) is the headline and sole release blocker.
 > Status: planned, design first.
 > Design: `design/specs/562-mission-spawn.pen`, frames to draw before Phase 4.
 > Identity decided with Jason on 2026-09-18 ([648](./archive/648-runner-cli.md) decision 7): a caller is the person at the app or a roster handle, never a location. 648 owns the `from` handle on the socket; this spec owns the seats an outside agent takes.
