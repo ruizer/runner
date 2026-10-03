@@ -2,7 +2,7 @@
 
 Use this procedure when Jason asks for a complete live smoke test before a major refactor or important release. The baseline suite exercises every accessible runtime through real Runner terminals: Codex, Claude Code, Antigravity CLI, Copilot and pi. Test TRAE when access is available; otherwise record it as Skipped with the access limitation. Add feature-specific checks when the change affects them. List the required runtimes and platforms before starting; an unavailable required account, CLI or machine is a blocked check, not a pass. This runtime suite complements automated tests and the release's feature checklists; it does not cover every Runner screen or installer flow.
 
-The first run is recorded in [#777 runtime adapter smoke](777-runtime-adapter-smoke.md). Its findings informed the canonical-path setup and use of a single lead slot for startup checks below.
+The first run is recorded in [#777 runtime adapter smoke](archive/777-runtime-adapter-smoke.md). Its findings informed the canonical-path setup and use of a single lead slot for startup checks below.
 
 ## Scope and setup
 

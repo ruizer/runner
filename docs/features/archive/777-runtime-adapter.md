@@ -2,7 +2,7 @@
 
 > Tracking issue: [#777](https://github.com/yicheng47/runner/issues/777)
 > Priority: P1, 0.12. Platforms: macOS and Windows; a refactor with no user-visible change.
-> Status: draft, 2026-10-01; decisions settled the same day. Lands as three PRs (see Decisions).
+> Status: merged to `main` in three PRs, [#779](https://github.com/yicheng47/runner/pull/779) (argv), [#780](https://github.com/yicheng47/runner/pull/780) (spawn hooks and status watchers) and [#792](https://github.com/yicheng47/runner/pull/792) (catalogs and the app), the last on 2026-10-03, unreleased; archived 2026-10-03. The original scope and dated design decisions follow.
 
 ## Motivation
 
@@ -17,7 +17,7 @@ Some places hard-code the set of runtimes outright, and a new runtime has to be 
 - Two runtime tables that repeat display name, command and fork support: `RUNTIME_DEFINITIONS` in `router/runtime.rs` and the catalog in `ops/runtime.rs`.
 - Copies outside the backend: the CLI's `runtime_command` in `runner-cli/src/command.rs`, `RUNNER_SKILL_ROOTS` in `runner-core`, and fixed lists such as `[ClaudeCode, Codex, Antigravity]` in `app_shell.rs`.
 
-[#723](https://github.com/yicheng47/runner/issues/723) (Grok Build, Cursor Agent) and [#764](https://github.com/yicheng47/runner/issues/764) (pi MCP management) both add to these surfaces, so the adapter lands first. The [runtime integration checklist](../arch/runtime-integration.md) stays the contract for what a runtime must do; this spec changes only where that code lives.
+[#723](https://github.com/yicheng47/runner/issues/723) (Grok Build, Cursor Agent) and [#764](https://github.com/yicheng47/runner/issues/764) (pi MCP management) both add to these surfaces, so the adapter lands first. The [runtime integration checklist](../../arch/runtime-integration.md) stays the contract for what a runtime must do; this spec changes only where that code lives.
 
 ## Proposal
 
@@ -129,7 +129,7 @@ The phases land as three PRs: phases 0 and 1, then phase 2, then phases 3 and 4.
 1. **Trait, registry and identity.** Add `runtimes/` with the trait, `NoAgent` and the six adapters. Move the identity data, the catalog merge, and every `router/runtime.rs` argv, permission, resume and fork function into adapters. `router/runtime.rs` keeps only shared types (`ResumePlan`, `ForkPlan`, `PermissionMode`, `MissionPermissionMode`) and helpers.
 2. **Spawn hooks.** Launch env and args, trust seeding, the launch gate, key capture and status hooks. `HookStatusWatcher` becomes `Box<dyn HookWatcher>`, and `SpawnSpec` carries what `PtyRuntime` needs to ask the adapter for a watcher instead of probing env-var pairs. The per-runtime `session/*` files move into their adapter folders. The mechanisms shared by two runtimes (`codex_capture.rs` for Codex and TRAE, `claude_rekey.rs` for Claude and pi) stay in `session/`, with `hook_feed.rs` and `status.rs`. `key_capture` returns an enum that names the mechanism rather than a trait object, because the four mechanisms take different spawn contexts and two are shared.
 3. **Catalog surfaces.** Native defaults, model discovery, versions, usage (`UsageSnapshot` becomes a map), skills and MCP (`McpClientId` becomes a thin wrapper over `Runtime` with the adapter's wire name).
-4. **App and docs.** Add the `runtime_ui` table; drive permission modes, usage lists and the effort rule from the catalog. Rewrite "Where the implementation lives" in [`runtime-integration.md`](../arch/runtime-integration.md) around `runtimes/<name>/`, and point `docs/arch/arch.md`'s references to the adapter in `router/runtime.rs` at `runtimes/`.
+4. **App and docs.** Add the `runtime_ui` table; drive permission modes, usage lists and the effort rule from the catalog. Rewrite "Where the implementation lives" in [`runtime-integration.md`](../../arch/runtime-integration.md) around `runtimes/<name>/`, and point `docs/arch/arch.md`'s references to the adapter in `router/runtime.rs` at `runtimes/`.
 
 ## Verification
 

@@ -64,7 +64,7 @@ Prefer the smallest check that covers the change. For native UI changes, run the
 
 ## Full Smoke Tests
 
-When Jason explicitly requests a complete smoke test for a major refactor or important release, follow [Full smoke test procedure](docs/tests/full-smoke-test.md). It covers live runtime lifecycle checks through the development Runner UI and CLI, with a result matrix and cleanup. Add the change's feature-specific checks and record platform or runtime gaps explicitly. Ordinary implementation and CI do not authorize launching real agents; an explicit live smoke-test request supplies that authorization for the bounded test chats and missions in the procedure. Use development data, preserve existing sessions, and archive only the test chats and missions you created. Record each run in `docs/tests/`; the [#777 run](docs/tests/777-runtime-adapter-smoke.md) is the first example.
+When Jason explicitly requests a complete smoke test for a major refactor or important release, follow [Full smoke test procedure](docs/tests/full-smoke-test.md). It covers live runtime lifecycle checks through the development Runner UI and CLI, with a result matrix and cleanup. Add the change's feature-specific checks and record platform or runtime gaps explicitly. Ordinary implementation and CI do not authorize launching real agents; an explicit live smoke-test request supplies that authorization for the bounded test chats and missions in the procedure. Use development data, preserve existing sessions, and archive only the test chats and missions you created. Record each run in `docs/tests/`; the [#777 run](docs/tests/archive/777-runtime-adapter-smoke.md) is the first example.
 
 ## Worktrees
 

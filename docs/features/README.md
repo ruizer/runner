@@ -7,11 +7,9 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 ## Active
 
 - [748 — Mission updates reach the chat that started the mission](./748-mission-watch-delivery.md) — Runner types a one-line notice into the starting chat for messages to the person, broadcasts, questions, failures and the end, through the slot delivery gate, so Codex chats watch missions with no host facility ([#748](https://github.com/yicheng47/runner/issues/748), P1, 0.12; spec under review).
-- [777 — Runtime adapter trait](./777-runtime-adapter.md) — each agent runtime becomes one module behind a `RuntimeAdapter` trait, registered in one `match`, so adding a runtime stops touching dozens of files; a refactor with byte-identical behavior, landing before #723 and #764 ([#777](https://github.com/yicheng47/runner/issues/777), P1, 0.12; spec settled, lands as three PRs).
-- [791 — Session state: one model for agent status, drafts and conversation identity](./791-session-state.md) — one reducer per session takes typed events from every status, input and key-capture source, runtime watchers become translators, and a recorded scenario corpus per runtime pins the behavior before the open status bugs are fixed ([#791](https://github.com/yicheng47/runner/issues/791), P1, 0.13; draft, starts after #777 PR 3).
+- [791 — Session state: one model for agent status, drafts and conversation identity](./791-session-state.md) — one reducer per session takes typed events from every status, input and key-capture source, runtime watchers become translators, and a recorded scenario corpus per runtime pins the behavior before the open status bugs are fixed ([#791](https://github.com/yicheng47/runner/issues/791), P1, 0.13; draft, decisions open; #777 has landed).
 - [562 — Missions as containers](./562-mission-spawn.md) — the mission owns its roster, a mission starts from a crew or a role, and the lead or an outside seat spawns, lists, waits on and stops slots ([#562](https://github.com/yicheng47/runner/issues/562), P1, 0.13 headline with 704; plan under review).
 - [704 — Send a prompt from one session to another](./704-session-send.md) — `runner session send` and `session wait`, the terminal layer beside 562's missions: types into a running chat or terminal when it is idle, with a reply line, and stays off the bus ([#704](https://github.com/yicheng47/runner/issues/704), P1, 0.13 release blocker and headline with 562; spec under review).
-- [772 — Start chats, terminals and missions from the keyboard](./772-keyboard-create.md) — ⌘↵ starts from anywhere in Start a chat and Start mission, Direct | Role on one tab stop with ⌘1/⌘2, and ⌘T and ⇧⌘M beside ⌘N rather than one merged form ([#772](https://github.com/yicheng47/runner/issues/772), P2, 0.12; mission on `feat/772-keyboard-create`).
 - [764 — Support MCP management for Pi](./764-pi-mcp-management.md) — proposed catalog, editing, multi-client sync and conflict detection for pi's user MCP servers; verify native config support and reconcile Runner registration with the shipped CLI-only coordination contract ([#764](https://github.com/yicheng47/runner/issues/764), P2, 0.13; spec under review).
 - [559 — Command palette on ⌘⇧P](./559-command-palette.md) — the ⌘K overlay in command mode over the keymap ([#559](https://github.com/yicheng47/runner/issues/559), P2, unscheduled).
 - [565 — i18n, 简体中文 first](./565-i18n.md) — a language setting, a compile-time catalog, a live switch ([#565](https://github.com/yicheng47/runner/issues/565), P2, 0.14).
@@ -20,7 +18,7 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Recently shipped
 
-Reconciled on 2026-10-01 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
+Reconciled on 2026-10-03 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
 
 | Spec | Shipped in |
 | --- | --- |
@@ -34,8 +32,10 @@ Reconciled on 2026-10-01 against closed issues and published releases. These spe
 | [644 — Antigravity CLI runtime](./archive/644-antigravity-runtime.md) | 0.12.3, 2026-09-29; native Windows smoke pending |
 | [735 — Start a chat modal redesign](./archive/735-start-chat-modal.md) | 0.12.5, 2026-09-30 |
 | [756 — Model and effort in the chat side panel](./archive/756-chat-side-panel-model-effort.md) | 0.12.5, 2026-09-30 |
-| [731 — Role side panel redesign](./archive/731-role-side-panel.md) | `main` ([PR #770](https://github.com/yicheng47/runner/pull/770)), 2026-10-01; next 0.12.x |
-| [768 — New role and New crew open their pages](./archive/768-new-role-crew-pages.md) | `main` ([PR #770](https://github.com/yicheng47/runner/pull/770)), 2026-10-01; next 0.12.x |
+| [731 — Role side panel redesign](./archive/731-role-side-panel.md) | 0.12.6, 2026-10-01 |
+| [768 — New role and New crew open their pages](./archive/768-new-role-crew-pages.md) | 0.12.6, 2026-10-01 |
+| [772 — Start chats, terminals and missions from the keyboard](./archive/772-keyboard-create.md) | `main` ([PR #776](https://github.com/yicheng47/runner/pull/776)), 2026-10-02; next 0.12.x |
+| [777 — Runtime adapter trait](./archive/777-runtime-adapter.md) | `main` ([PR #779](https://github.com/yicheng47/runner/pull/779), [#780](https://github.com/yicheng47/runner/pull/780), [#792](https://github.com/yicheng47/runner/pull/792)), 2026-10-03; next 0.12.x, no user-visible change |
 
 ## Dropped
 

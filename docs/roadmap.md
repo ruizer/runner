@@ -1,12 +1,12 @@
 # Runner roadmap
 
-Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://github.com/yicheng47/runner/milestones), [open issues](https://github.com/yicheng47/runner/issues), and [published releases](https://github.com/yicheng47/runner/releases); this file mirrors them so the state of the project is readable from the repo without a browser. Issue state, milestone assignments and release-blocker labels take precedence over milestone descriptions, which can lag. Update it when an issue changes milestone, a release is cut, or a mission lands, and move the date.
+Snapshot as of 2026-10-03. The live sources are [GitHub milestones](https://github.com/yicheng47/runner/milestones), [open issues](https://github.com/yicheng47/runner/issues), and [published releases](https://github.com/yicheng47/runner/releases); this file mirrors them so the state of the project is readable from the repo without a browser. Issue state, milestone assignments and release-blocker labels take precedence over milestone descriptions, which can lag. Update it when an issue changes milestone, a release is cut, or a mission lands, and move the date.
 
 ## Where the project is
 
-- **Latest release:** [0.12.6](https://github.com/yicheng47/runner/releases/tag/v0.12.6) on 2026-10-01: creating roles and crews on their own pages, Open role and the full role prompt in the chat side panel, ⌘W closing the tab instead of the window (⇧⌘W for the window; Ctrl+Shift+W and Alt+F4 on Windows), sidebar label truncation, and a bounded status watcher start. It also carries the GPUI move to `gpui-pre =0.3.7`. Earlier 0.12.x patches shipped the Start a chat redesign, Antigravity CLI and Codex Speed.
-- **Merged since that release:** nothing user-facing yet. The nightly feed builds from `main`.
-- **In flight:** keyboard-driven Start a chat, new terminal and new mission ([#772](https://github.com/yicheng47/runner/issues/772)) has a crew mission running. Mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12, and the runtime adapter refactor ([777](./features/777-runtime-adapter.md)) is a settled P1 spec in 0.12, landing as three PRs.
+- **Latest release:** [0.12.7](https://github.com/yicheng47/runner/releases/tag/v0.12.7) on 2026-10-02: cancelling a turn with Esc or Ctrl+C in Claude Code, Antigravity or Copilot shows Interrupted again instead of staying Working, and a Copilot approval clears when you approve a tool and then cancel it. 0.12.6 on 2026-10-01 shipped creating roles and crews on their own pages, ⌘W closing the tab instead of the window, and the GPUI move to `gpui-pre =0.3.7`.
+- **Merged since that release:** keyboard-driven creation ([#772](https://github.com/yicheng47/runner/issues/772)): ⌘↵ starts from anywhere in Start a chat and Start mission, Direct | Role is one tab stop with ⌘1/⌘2, and ⌘T and ⇧⌘M open a new terminal and a new mission. The runtime adapter refactor ([#777](https://github.com/yicheng47/runner/issues/777)) landed in three PRs with no behavior change: each agent runtime is now one module behind a `RuntimeAdapter` trait. Its last PR also fixes Enter in the model chooser, which now opens the list or picks the highlighted model instead of submitting the form. The nightly feed builds from `main`.
+- **In flight:** no crew mission is running. Mission monitoring from a Runner chat ([748](./features/748-mission-watch-delivery.md)) remains a P1 spec under review in 0.12. The session state model ([791](./features/791-session-state.md)) is a draft P1 spec in 0.13 with its decisions open; #777, which it depended on, has landed. Four bugs from the #780 runtime smoke are open in 0.12: [#786](https://github.com/yicheng47/runner/issues/786), [#787](https://github.com/yicheng47/runner/issues/787), [#784](https://github.com/yicheng47/runner/issues/784) and [#785](https://github.com/yicheng47/runner/issues/785).
 - **Next minor:** missions as containers ([562](./features/562-mission-spawn.md)) and session-to-session prompts ([704](./features/704-session-send.md)) remain the 0.13 headline specs. #704 currently carries the `release-blocker` label.
 
 ## Releases
@@ -26,7 +26,8 @@ Snapshot as of 2026-10-01. The live sources are [GitHub milestones](https://gith
 | [0.12.4](https://github.com/yicheng47/runner/releases/tag/v0.12.4) | Shipped 2026-09-29: submit Codex inbox nudges correctly after Windows paste bursts | #753 |
 | [0.12.5](https://github.com/yicheng47/runner/releases/tag/v0.12.5) | Shipped 2026-09-30: Start a chat and chat side panel redesigns, crew field removal, model defaults, usage visibility, pi multiline input and macOS kana fixes | #735, #756, #729, #762, #752, #755, #730 |
 | [0.12.6](https://github.com/yicheng47/runner/releases/tag/v0.12.6) | Shipped 2026-10-01: role and crew creation pages, Open role and the full prompt in the chat side panel, ⌘W closes the tab, sidebar label truncation, a bounded status watcher start, and the GPUI move to gpui-pre | #768, #731, #725, #769, #774, #733 |
-| [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: idle Codex message delivery, mission monitoring, keyboard-driven creation, and the runtime adapter refactor | #766, #748, #772, #777 |
+| [0.12.7](https://github.com/yicheng47/runner/releases/tag/v0.12.7) | Shipped 2026-10-02: cancelling a turn shows Interrupted again in Claude Code, Antigravity and Copilot, and Copilot approvals clear after approve-then-cancel | #783 |
+| [0.12](https://github.com/yicheng47/runner/milestone/2) | Remaining patch follow-through: mission monitoring, idle Codex message delivery, and the status and resume bugs from the #780 runtime smoke | #748, #766, #786, #787, #784, #785 |
 | [0.13](https://github.com/yicheng47/runner/milestone/3) | Mission coordination and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions, pi MCP management and the session state model | #562, #704, #791, #552, #701, #709, #723, #764 |
 | [0.14](https://github.com/yicheng47/runner/milestone/4) | Session host, shell process status, 简体中文 | #645, #586, #565 |
 
@@ -36,17 +37,19 @@ A minor is a change to the model or a new surface; a patch is fixes and follow-t
 
 ## Open work by release
 
-There are 19 open issues: four in 0.12, seven in 0.13, three in 0.14, and five unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
+There are 25 open issues: six in 0.12, eight in 0.13, three in 0.14, and eight unscheduled. The 0.11 milestone is closed. The remaining 0.12 milestone is for patch follow-through and has no open release blockers; #704 is the only open issue currently labeled `release-blocker`, in 0.13. The session host stays in 0.14 so the PTY evaluation can inform its process boundary. A milestone is a release track, not a promise that every issue gates its first release.
 
 | Release | Issue | Reason and ordering |
 | --- | --- | --- |
-| 0.12 | [#766](https://github.com/yicheng47/runner/issues/766) idle Codex message delivery | P1; fix crew messages held at an empty composer in this patch cycle |
+| 0.12 | [#766](https://github.com/yicheng47/runner/issues/766) idle Codex message delivery | P1; fix crew messages held at an empty composer in this patch cycle; #791's last phase also targets it |
 | 0.12 | [#748](https://github.com/yicheng47/runner/issues/748) mission monitoring from Codex | P1; spec under review for Runner-delivered mission notices in the starting chat, with idle delivery still to verify |
-| 0.12 | [#777](https://github.com/yicheng47/runner/issues/777) runtime adapter trait | P1; settled [spec](./features/777-runtime-adapter.md), three PRs: one module per agent runtime behind a `RuntimeAdapter` trait, with no behavior change; lands before #723 and #764 add runtimes and MCP clients |
-| 0.12 | [#772](https://github.com/yicheng47/runner/issues/772) keyboard-driven Start a chat, new terminal and new mission | P2; draft [spec](./features/772-keyboard-create.md) with open questions on initial focus and the new keys |
+| 0.12 | [#786](https://github.com/yicheng47/runner/issues/786) Copilot `/clear` keeps the old conversation | P1; resume after `/clear` reopens the pre-clear history because Copilot has no key capture after spawn; #791's last phase also targets it |
+| 0.12 | [#787](https://github.com/yicheng47/runner/issues/787) Antigravity mission tools run in the hooks folder | P1; an Antigravity mission's tool commands run in Runner's `antigravity-hooks` directory instead of the requested cwd |
+| 0.12 | [#784](https://github.com/yicheng47/runner/issues/784) pi cancellation shows Response failed | P2; pi reports a user abort as an error, so Runner shows Failed instead of Interrupted; #791's last phase also targets it |
+| 0.12 | [#785](https://github.com/yicheng47/runner/issues/785) Claude resume through a symlinked cwd | P2; a chat started in `/tmp` resumes fresh because the transcript probe uses the literal cwd, not the canonical one; #791's last phase also targets it |
 | 0.13 | [#562](https://github.com/yicheng47/runner/issues/562) missions as containers | P1 headline; migrate the roster model and settle lifecycle contracts before the dependent UI |
 | 0.13 | [#704](https://github.com/yicheng47/runner/issues/704) session-to-session prompts | P1 release blocker; the terminal layer beside #562, with no bus or new tables |
-| 0.13 | [#791](https://github.com/yicheng47/runner/issues/791) session state model | P1; draft [spec](./features/791-session-state.md), starts after #777 PR 3: one reducer for status, drafts and conversation keys, runtime watchers as translators, and a recorded scenario corpus; its last phase fixes #781, #784, #785, #786 and #766 |
+| 0.13 | [#791](https://github.com/yicheng47/runner/issues/791) session state model | P1; draft [spec](./features/791-session-state.md) with its decisions open, unblocked now that #777 has landed: one reducer for status, drafts and conversation keys, runtime watchers as translators, and a recorded scenario corpus; its last phase fixes #781, #784, #785, #786 and #766 |
 | 0.13 | [#552](https://github.com/yicheng47/runner/issues/552) Activity / Needs you view | Consolidate working and waiting sessions across windows and missions |
 | 0.13 | [#701](https://github.com/yicheng47/runner/issues/701) desktop notifications | Offscreen waits, questions, completions and failures reach the user |
 | 0.13 | [#709](https://github.com/yicheng47/runner/issues/709) Alacritty PTY and event loop evaluation | Decide the terminal engine before extracting it into the session host |
@@ -60,6 +63,7 @@ There are 19 open issues: four in 0.12, seven in 0.13, three in 0.14, and five u
 
 - **Runner is not an agent development environment.** Worktree isolation ([#403](https://github.com/yicheng47/runner/issues/403)) and the project tree with a read-only diff viewer ([#634](https://github.com/yicheng47/runner/issues/634)) were closed as not planned on 2026-09-22. Checkouts, file trees and diffs belong to git, the agents and the editor; Runner stays what sits between agents.
 - **The README is the front door.** The landing page ([#468](https://github.com/yicheng47/runner/issues/468)) was closed as not planned the same day: visitors arrive on GitHub, and the README already explains roles, crews and missions in both languages.
+- **Each agent runtime is one module.** Since #777 (2026-10-03), a runtime's argv, spawn hooks, status watcher, models, usage, skills and MCP entry live under `runtimes/<name>/` behind the `RuntimeAdapter` trait, registered in one `match`; the app's per-runtime icons and labels are one table in `runtime_ui.rs`. New runtimes ([#723](https://github.com/yicheng47/runner/issues/723)) and MCP clients ([#764](https://github.com/yicheng47/runner/issues/764)) start there.
 - **OpenCode is no longer scheduled.** [#592](https://github.com/yicheng47/runner/issues/592) was closed as not planned on 2026-09-28; it is not shipped runtime support. New runtimes follow the [integration checklist](./arch/runtime-integration.md), with platform verification recorded separately from CI.
 - **One `runner` binary, two modes.** Inside a mission the commands are unchanged and `--mission` defaults to the caller's own; outside, `--mission` is a flag. No second control binary, and no scoping by packaging: a mission agent's shell runs anything on `PATH`. A limit, if ever wanted, is an authorization check on the app side of `mcp.sock`.
 - **A caller is the person at the app or a roster handle, never a location.** `human` on the bus means only the person at the app UI. Inside a mission the handle comes from `RUNNER_HANDLE`; outside, `--as <handle>` names a seat the caller holds, and no handle means the person at a terminal. An outside agent that drives a mission takes a seat first. The socket's post and signal tools carry a `from` handle validated against the roster. Seats without a Runner-spawned session are #562's.
@@ -69,10 +73,13 @@ There are 19 open issues: four in 0.12, seven in 0.13, three in 0.14, and five u
 
 ## Backlog
 
-These five open issues have no release commitment; setting a milestone schedules them.
+These eight open issues have no release commitment; setting a milestone schedules them.
 
 - **P2:** [#559](https://github.com/yicheng47/runner/issues/559) command palette; the existing quick switcher remains.
 - **P2:** [#577](https://github.com/yicheng47/runner/issues/577) per-role skills and MCP picks; the global catalogs already work.
 - **P2:** [#630](https://github.com/yicheng47/runner/issues/630) token ledger, re-runnable tasks and subscription quota.
-- **P3:** [#582](https://github.com/yicheng47/runner/issues/582) split files that outgrew the #478 audit; time it around feature work on those files.
+- **P2:** [#781](https://github.com/yicheng47/runner/issues/781) Codex conversation capture ignores `CODEX_HOME`, so such a chat is never keyed; #791's last phase also targets it.
+- **P2:** [#782](https://github.com/yicheng47/runner/issues/782) a long handle on a mission rail session card overlaps the slot controls and the LEAD badge.
+- **P3:** [#582](https://github.com/yicheng47/runner/issues/582) split files that outgrew the #478 audit; time it around feature work on those files. The next pass waited on #777, which has landed.
 - **P3:** [#771](https://github.com/yicheng47/runner/issues/771) evaluate selective `gpui-base` adoption for shared UI controls; start with one ordinary field and resolve the Windows manifest dependency before integration.
+- **Untriaged:** [#790](https://github.com/yicheng47/runner/issues/790) on Windows, updating Codex from Settings → Agents asks you to stop running Codex sessions first, which the reporter says is unnecessary.

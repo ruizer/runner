@@ -6,7 +6,7 @@ Candidate: `86e66e8a7f47657e0a65d83fb216409a711ab3b2`, branch `refactor/777-runt
 
 ## Authorization and environment
 
-The mission brief originally prohibited launching the app or real agents. Jason explicitly overrode that restriction by answering **“Yes — authorize live smoke tests”** to launching real agents and testing Runner chats/missions with existing accounts and conversation-history writes. He then requested computer use, the reusable [procedure](full-smoke-test.md), and archiving all test chats/missions. No production chats or missions were modified and no Runner SQLite database was opened directly.
+The mission brief originally prohibited launching the app or real agents. Jason explicitly overrode that restriction by answering **“Yes — authorize live smoke tests”** to launching real agents and testing Runner chats/missions with existing accounts and conversation-history writes. He then requested computer use, the reusable [procedure](../full-smoke-test.md), and archiving all test chats/missions. No production chats or missions were modified and no Runner SQLite database was opened directly.
 
 The test used macOS, Runner `0.12.6 (dev)`, this worktree's debug binary built through `make run`, and the absolute CLI under `~/Library/Application Support/com.wycstudios.runner-dev/bin/runner`. Its endpoint was in the same development namespace. Native computer use became available after the app restart; running inside a Runner mission did not prevent native control once that tool was enabled.
 

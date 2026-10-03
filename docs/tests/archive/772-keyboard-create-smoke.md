@@ -6,7 +6,7 @@ Candidate: `ffa345780bad8bc8bb863475638ce7f0e6881a46`, branch `feat/772-keyboard
 
 ## Authorization and environment
 
-Jason requested rebasing onto latest main and following the smoke-test instructions using computer use. That explicit live request supplies the bounded existing-account/conversation-history authorization in [the full smoke procedure](full-smoke-test.md), overriding the original mission's app-launch prohibition for this run. The run used development data only and did not open a Runner SQLite database directly or change authentication, global agent configuration or permission settings.
+Jason requested rebasing onto latest main and following the smoke-test instructions using computer use. That explicit live request supplies the bounded existing-account/conversation-history authorization in [the full smoke procedure](../full-smoke-test.md), overriding the original mission's app-launch prohibition for this run. The run used development data only and did not open a Runner SQLite database directly or change authentication, global agent configuration or permission settings.
 
 macOS 26.6.2 (25G83); Runner 0.12.7 (dev), built with `make run` from this worktree. The absolute development CLI reported `/Users/jason/Library/Application Support/com.wycstudios.runner-dev/mcp.sock` and the development sidecar. Native Windows was unavailable. TRAE was Skipped: its CLI was not installed, and the prior smoke record reports no account access.
 

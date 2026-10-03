@@ -2,7 +2,7 @@
 
 > Tracking issue: [#772](https://github.com/yicheng47/runner/issues/772)
 > Priority: P2, 0.12. Platforms: macOS and Windows.
-> Status: drafted 2026-10-01; open questions settled the same day with the recommended answers (see Decisions), and handed to a codex pair mission on `feat/772-keyboard-create`.
+> Status: merged to `main` in [PR #776](https://github.com/yicheng47/runner/pull/776) on 2026-10-02, unreleased; archived 2026-10-03. Open questions were settled on 2026-10-01 with the recommended answers (see Decisions). The original scope and dated design decisions follow.
 
 ## Motivation
 
