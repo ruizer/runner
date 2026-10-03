@@ -78,9 +78,9 @@ Both platforms update in place, macOS through Sparkle and Windows through the up
 
 ## Demo
 
-A three-agent crew — two players and a referee — playing a game of tic-tac-toe against each other over the mission feed, from the [`tic-tac-toe`](./examples/tic-tac-toe/) example crew.
+A quick tour of reusable roles, crew setup, split terminals, and coder/reviewer/QA coordination in a live mission.
 
-https://github.com/user-attachments/assets/fb3669a4-010d-42d0-9555-2a3ba3223c75
+https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 
 ## Features
 

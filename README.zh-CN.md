@@ -78,9 +78,9 @@ Runner 是一个原生桌面应用，用来让命令行编码 agent **一起**�
 
 ## 演示
 
-一个三人 crew（两名玩家加一名裁判）通过 mission feed 互相对弈井字棋，来自示例 crew [`tic-tac-toe`](./examples/tic-tac-toe/)。
+快速展示可复用角色、crew 配置、终端分屏，以及 mission 中 coder、reviewer 和 QA 的协作。
 
-https://github.com/user-attachments/assets/fb3669a4-010d-42d0-9555-2a3ba3223c75
+https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 
 ## 功能
 
