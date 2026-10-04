@@ -2,7 +2,7 @@
 
 > Tracking issue: [#791](https://github.com/yicheng47/runner/issues/791)
 > Priority: P1, 0.12 (moved from 0.13 on 2026-10-03, with the four bugs phase 3 fixes: all three PRs ship in 0.12). Platforms: macOS and Windows. Unblocked: [#777](https://github.com/yicheng47/runner/issues/777) landed on 2026-10-03.
-> Status: decisions settled with Jason on 2026-10-03. PR 1 (phases 0 and 1) merged on 2026-10-03 as [#796](https://github.com/yicheng47/runner/pull/796); PR 2 is next.
+> Status: merged to `main` in three PRs, [#796](https://github.com/yicheng47/runner/pull/796) (phases 0 and 1, the scenario corpus and the reducer), [#798](https://github.com/yicheng47/runner/pull/798) (phase 2, watchers emit events) and [#800](https://github.com/yicheng47/runner/pull/800) (phase 3, four commits that closed [#784](https://github.com/yicheng47/runner/issues/784), [#785](https://github.com/yicheng47/runner/issues/785) and [#786](https://github.com/yicheng47/runner/issues/786)), the last on 2026-10-04, unreleased; archived 2026-10-04. [#781](https://github.com/yicheng47/runner/issues/781)'s fix shipped in #800, but the issue stays open until a live check with a separately signed-in `CODEX_HOME`. The full QA regression found no new regressions; [#799](https://github.com/yicheng47/runner/issues/799) (pi draft) and [#787](https://github.com/yicheng47/runner/issues/787) (Antigravity tool cwd) predate this work. The [test record](../../tests/archive/791-session-state-reducer.md) holds every PR's checks and QA matrices. The original scope and dated design decisions follow.
 
 ## Motivation
 
@@ -191,7 +191,7 @@ Proposed 2026-10-02, settled with Jason on 2026-10-03.
 - The reducer has one test per rule row.
 - The goldens are unchanged across phases 1 and 2.
 - Jason's smoke test on each PR, on Codex, Claude Code, Antigravity, Copilot and pi: a turn with a tool, an approval, Esc and Ctrl+C mid-reply, `/clear` then resume, a crew message to an idle slot, and a typed draft held against a delivery.
-- The [full smoke test](../tests/full-smoke-test.md) before the release that carries phase 3.
+- The [full smoke test](../../tests/full-smoke-test.md) before the release that carries phase 3.
 
 ## Relevant code
 
@@ -206,4 +206,4 @@ Proposed 2026-10-02, settled with Jason on 2026-10-03.
 - `crates/runner-backend/src/repo/session.rs`: `rekey_agent_session_key`, `capture_agent_session_key`.
 - `crates/runner-backend/src/router/mod.rs`, `router/handlers.rs`: the busy/idle projection and the wake.
 - `crates/runner-terminal/src/input_state.rs`: the composer detector.
-- [`docs/arch/arch.md` §5.10](../arch/arch.md#510-busy--idle-inference) and §8.5, and [`docs/arch/runtime-integration.md`](../arch/runtime-integration.md) P0.7 and P0.8, which phase 1 updates to describe the reducer.
+- [`docs/arch/arch.md` §5.10](../../arch/arch.md#510-busy--idle-inference) and §8.5, and [`docs/arch/runtime-integration.md`](../../arch/runtime-integration.md) P0.7 and P0.8, which phase 1 updates to describe the reducer.

@@ -187,7 +187,7 @@ Ok(RuntimeOutput::AgentObservation(observation)) => {
 
 #777 improves where behavior lives and deliberately preserves existing runtime behavior. The authorized model-chooser Enter fix in #792 is the documented exception. Moving status watchers into adapter directories does not centralize how session status is decided: shared code and watchers still contain several producers and precedence rules.
 
-The separate [#791 session-state refactor](../features/791-session-state.md) is intended to centralize decisions about status, draft state, and conversation identity. That work is not part of the adapter refactor described here.
+The separate [#791 session-state refactor](../features/archive/791-session-state.md), merged on 2026-10-04, centralizes decisions about status, draft state, and conversation identity in one reducer under `session/state/`. That work is not part of the adapter refactor described here.
 
 ## Reading path
 

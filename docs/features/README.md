@@ -9,11 +9,10 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 - [797 — Replace hook-status file feeds with local IPC](./797-hook-status-ipc.md) — native hooks report through a Runner-owned callback using local IPC, with bounded acknowledgment and listener ownership aligned with the session host; cmux and Orca references included ([#797](https://github.com/yicheng47/runner/issues/797), P2, 0.13; implementation design pending).
 - [795 — Separate shell lifecycle from agent orchestration](./795-shell-agent-boundary.md) — shell sessions traverse agent launch and conversation policy through no-op adapters; keep shared process lifecycle while making the shell/agent boundary explicit ([#795](https://github.com/yicheng47/runner/issues/795), P1, 0.12; implementation design pending).
 - [748 — Mission updates reach the chat that started the mission](./748-mission-watch-delivery.md) — Runner types a one-line notice into the starting chat for messages to the person, broadcasts, questions, failures and the end, through the slot delivery gate, so Codex chats watch missions with no host facility ([#748](https://github.com/yicheng47/runner/issues/748), P1, 0.13; spec under review).
-- [791 — Session state: one model for agent status, drafts and conversation identity](./791-session-state.md) — one reducer per session takes typed events from every status, input and key-capture source, runtime watchers become translators, and a scripted scenario corpus per runtime pins the behavior before the open status bugs are fixed ([#791](https://github.com/yicheng47/runner/issues/791), P1, 0.12; decisions settled 2026-10-03, PR 1 in progress).
 - [562 — Missions as containers](./562-mission-spawn.md) — the mission owns its roster, a mission starts from a crew or a role, and the lead or an outside seat spawns, lists, waits on and stops slots ([#562](https://github.com/yicheng47/runner/issues/562), P1, 0.13, non-blocking; plan under review).
 - [704 — Send a prompt from one session to another](./704-session-send.md) — `runner session send` and `session wait`, the terminal layer beside 562's missions: types into a running chat or terminal when it is idle, with a reply line, and stays off the bus ([#704](https://github.com/yicheng47/runner/issues/704), P1, 0.13, non-blocking; spec under review).
 - [764 — Support MCP management for Pi](./764-pi-mcp-management.md) — proposed catalog, editing, multi-client sync and conflict detection for pi's user MCP servers; verify native config support and reconcile Runner registration with the shipped CLI-only coordination contract ([#764](https://github.com/yicheng47/runner/issues/764), P2, 0.13; spec under review).
-- [559 — Command palette on ⌘⇧P](./559-command-palette.md) — the ⌘K overlay in command mode over the keymap ([#559](https://github.com/yicheng47/runner/issues/559), P2, unscheduled).
+- [559 — Command palette on ⌘⇧P](./559-command-palette.md) — the ⌘K overlay in command mode over the keymap ([#559](https://github.com/yicheng47/runner/issues/559), P2, 0.14).
 - [565 — i18n, 简体中文 first](./565-i18n.md) — a language setting, a compile-time catalog, a live switch ([#565](https://github.com/yicheng47/runner/issues/565), P2, 0.14).
 - [586 — Shell status: process detection first](./586-shell-status-detection.md) — foreground-process detection for shell panes before semantic shell integration ([#586](https://github.com/yicheng47/runner/issues/586), P2, 0.14).
 - [701 — Desktop notifications](./701-desktop-notifications.md) — a popup Runner draws itself, following Zed's agent notification, when a session off screen waits on you, finishes or fails ([#701](https://github.com/yicheng47/runner/issues/701), P2, 0.13).
@@ -21,7 +20,7 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Recently shipped
 
-Reconciled on 2026-10-03 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
+Reconciled on 2026-10-04 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
 
 | Spec | Shipped in |
 | --- | --- |
@@ -39,6 +38,7 @@ Reconciled on 2026-10-03 against closed issues and published releases. These spe
 | [768 — New role and New crew open their pages](./archive/768-new-role-crew-pages.md) | 0.12.6, 2026-10-01 |
 | [772 — Start chats, terminals and missions from the keyboard](./archive/772-keyboard-create.md) | `main` ([PR #776](https://github.com/yicheng47/runner/pull/776)), 2026-10-02; next 0.12.x |
 | [777 — Runtime adapter trait](./archive/777-runtime-adapter.md) | `main` ([PR #779](https://github.com/yicheng47/runner/pull/779), [#780](https://github.com/yicheng47/runner/pull/780), [#792](https://github.com/yicheng47/runner/pull/792)), 2026-10-03; next 0.12.x, no user-visible change |
+| [791 — Session state: one model for agent status, drafts and conversation identity](./archive/791-session-state.md) | `main` ([PR #796](https://github.com/yicheng47/runner/pull/796), [#798](https://github.com/yicheng47/runner/pull/798), [#800](https://github.com/yicheng47/runner/pull/800)), 2026-10-04; next 0.12.x; fixes #784, #785 and #786, #781 open pending a live check |
 
 ## Dropped
 
