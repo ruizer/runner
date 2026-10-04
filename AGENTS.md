@@ -106,11 +106,19 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 
 A crew mission ends in an open pull request by default. The crew works on its own branch in its own worktree, commits, pushes, opens the PR against `main`, and drives CI green on both platforms; then it stops. Jason reviews the PR and does the final merge, or explicitly asks the crew to merge after review and CI are clean. Crews do not cut a nightly or release without explicit authorization. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
 
-An explicit merge request includes GitHub's configured automatic deletion of the merged remote branch; no separate confirmation is needed. Local branch and worktree cleanup still requires explicit authorization.
+An explicit merge request includes GitHub's configured automatic deletion of the merged remote branch; no separate confirmation is needed. Local branch and worktree cleanup still requires explicit authorization; see Post-mission cleanup.
 
 A mission runs in its worktree. Before starting it, create the worktree as described under Worktrees and commit the brief on its branch; then start the mission with the worktree as its directory, `runner mission start --crew <crew> --cwd <repo>/.worktrees/<flattened-branch> …`, not `--project runner`. Every slot's agent and shell then start in the worktree instead of the root checkout, the mission still lands under the runner project because the project is inferred from the directory, and the brief names the same path.
 
 A mission lands as a single commit. Before pushing, the crew squashes everything on its branch, the brief commit included, into one commit on top of `main`, with a subject that names the change rather than the brief. Fixes after the push, from review or CI, are folded into that commit with `git commit --amend` and pushed with `git push --force-with-lease`, so the pull request always shows one commit. Split into more than one commit only when the mission covers changes that are unrelated to each other, such as a fix and an independent cleanup that could each be reverted alone, and say why in the pull request body. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
+
+### Post-mission cleanup
+
+When Jason asks for the post-mission cleanup, usually together with the merge, it covers three steps, in this order, once the PR has merged:
+
+1. **Archive the mission.** Stop it if a session is still live (`runner mission stop <id>`), then `runner mission archive <id>`.
+2. **Remove the worktree and branches.** `git worktree remove .worktrees/<flattened-branch>`, then delete the local branch. Squash and rebase merges leave the branch unmerged by ancestry, so confirm the PR merged with `gh pr view` rather than `git branch --merged`. GitHub deletes the remote branch on merge; delete it by hand only if it is still there.
+3. **Archive the docs**, in one doc-only commit on `main`. Move the test record to `docs/tests/archive/`. Prune the mission briefs (git history keeps them) unless [`docs/impls/briefs/README.md`](docs/impls/briefs/README.md) keeps one as a reference. When the tracking issue closes, which for a multi-PR feature means after its last PR, move the spec to `docs/features/archive/` and its [`docs/features/README.md`](docs/features/README.md) entry to Shipped. Repoint every link to the moved files and update [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Notes For Agent Runtimes
 
