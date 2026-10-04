@@ -24,6 +24,8 @@
 </p>
 
 <p align="center">
+  <a href="https://runnersh.dev/"><strong>Official website</strong></a>
+  ·
   <a href="https://github.com/yicheng47/runner/releases/latest"><strong>Download Runner</strong></a>
 </p>
 
