@@ -26,7 +26,7 @@
 <p align="center">
   <a href="https://runnersh.dev/"><strong>Official website</strong></a>
   ·
-  <a href="https://github.com/yicheng47/runner/releases/latest"><strong>Download Runner</strong></a>
+  <a href="https://runnersh.dev/downloads/"><strong>Download Runner</strong></a>
 </p>
 
 <p align="center">
@@ -67,7 +67,7 @@ Written in Rust on [Zed](https://zed.dev)'s GPUI through [gpui-pre](https://gith
 
 ## Download
 
-Grab the latest build from the [releases page](https://github.com/yicheng47/runner/releases/latest): a signed and notarized `.dmg` for macOS on Apple Silicon, and a signed `Runner-Setup-…-x64.exe` installer for Windows 10 version 1809 or later. Intel Macs, Windows ARM64, and Linux are not supported.
+Grab the latest build from the [downloads page](https://runnersh.dev/downloads/): a signed and notarized `.dmg` for macOS on Apple Silicon, and a signed `Runner-Setup-…-x64.exe` installer for Windows 10 version 1809 or later. Intel Macs, Windows ARM64, and Linux are not supported.
 
 Both platforms update in place, macOS through Sparkle and Windows through the update icon beside Settings, and keep your settings, chats, and missions. On Windows, SmartScreen may still warn on a fresh release while the certificate builds reputation; **More info → Run anyway** continues.
 

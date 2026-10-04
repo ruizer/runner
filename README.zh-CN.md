@@ -26,7 +26,7 @@
 <p align="center">
   <a href="https://runnersh.dev/"><strong>官方网站</strong></a>
   ·
-  <a href="https://github.com/yicheng47/runner/releases/latest"><strong>下载 Runner</strong></a>
+  <a href="https://runnersh.dev/downloads/"><strong>下载 Runner</strong></a>
 </p>
 
 <p align="center">
@@ -67,7 +67,7 @@ Runner 是一个原生桌面应用，用来让命令行编码 agent **一起**�
 
 ## 下载
 
-在[发布页](https://github.com/yicheng47/runner/releases/latest)获取最新版本：macOS（Apple Silicon）是已签名并完成公证的 `.dmg`，Windows 10 1809 或更高版本是已签名的 `Runner-Setup-…-x64.exe` 安装包。Intel Mac、Windows ARM64 和 Linux 暂不支持。
+在[下载页](https://runnersh.dev/downloads/)获取最新版本：macOS（Apple Silicon）是已签名并完成公证的 `.dmg`，Windows 10 1809 或更高版本是已签名的 `Runner-Setup-…-x64.exe` 安装包。Intel Mac、Windows ARM64 和 Linux 暂不支持。
 
 两个平台都支持原地更新，macOS 走 Sparkle，Windows 走 Settings 旁边的更新图标，设置、对话和 mission 都会保留。在 Windows 上，证书积累信誉之前，新版本可能仍会触发 SmartScreen 警告，点 **更多信息 → 仍要运行** 即可继续。
 
