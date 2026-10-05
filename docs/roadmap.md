@@ -1,6 +1,6 @@
 # Runner roadmap
 
-Snapshot as of 2026-10-04. The live sources are [GitHub milestones](https://github.com/yicheng47/runner/milestones), [open issues](https://github.com/yicheng47/runner/issues), and [published releases](https://github.com/yicheng47/runner/releases); this file mirrors them so the state of the project is readable from the repo without a browser. Issue state, milestone assignments and release-blocker labels take precedence over milestone descriptions, which can lag. Update it when an issue changes milestone, a release is cut, or a mission lands, and move the date.
+Snapshot as of 2026-10-05. The live sources are [GitHub milestones](https://github.com/yicheng47/runner/milestones), [open issues](https://github.com/yicheng47/runner/issues), and [published releases](https://github.com/yicheng47/runner/releases); this file mirrors them so the state of the project is readable from the repo without a browser. Issue state, milestone assignments and release-blocker labels take precedence over milestone descriptions, which can lag. Update it when an issue changes milestone, a release is cut, or a mission lands, and move the date.
 
 ## Where the project is
 
@@ -30,7 +30,7 @@ Snapshot as of 2026-10-04. The live sources are [GitHub milestones](https://gith
 | [0.12.8](https://github.com/yicheng47/runner/releases/tag/v0.12.8) | Shipped 2026-10-04: keyboard creation of chats, terminals and missions, Enter in the model chooser, pi cancel status, Claude Code resume through symlinked directories, Copilot resume after `/clear`, Codex capture from a custom `CODEX_HOME`, and no late inbox nudge for a read message; the runtime adapter and session state refactors | #772, #777, #791, #784, #785, #786, #781, #766 |
 | [0.12.9](https://github.com/yicheng47/runner/releases/tag/v0.12.9) | Shipped 2026-10-04: crew messages wait for an unsent pi draft, and Antigravity commands run in the session's folder | #799, #787 |
 | [0.12](https://github.com/yicheng47/runner/milestone/2) | Patch follow-through; no open issues | |
-| [0.13](https://github.com/yicheng47/runner/milestone/3) | Session host as the sole release blocker, with the shell and agent boundary folded into its design; mission coordination, mission monitoring from a chat and session-to-session prompts, Activity and notifications, PTY evaluation, runtime additions, pi MCP management, hook status over local IPC, the liquid glass appearance and a mission rail layout bug remain scheduled | #645, #795, #562, #704, #748, #552, #701, #709, #723, #764, #797, #793, #782 |
+| [0.13](https://github.com/yicheng47/runner/milestone/3) | Session host as the sole release blocker, with the shell and agent boundary folded into its design; mission coordination, mission monitoring from a chat and session-to-session prompts, Activity and notifications, runtime additions, pi MCP management, hook status over local IPC, the liquid glass appearance and a mission rail layout bug remain scheduled | #645, #795, #562, #704, #748, #552, #701, #723, #764, #797, #793, #782 |
 | [0.14](https://github.com/yicheng47/runner/milestone/4) | Shell process status, 简体中文, the command palette and per-role skills and MCP picks | #586, #565, #559, #577 |
 
 A minor is a change to the model or a new surface; a patch is fixes and follow-through. Session hosting changes process ownership and is the gate for 0.13.0. #562 and the paired terminal layer #704 remain on the 0.13 track; their roster migration and terminal contracts still need settling, but they no longer determine when the session-host release ships.
@@ -39,18 +39,17 @@ A minor is a change to the model or a new surface; a patch is fixes and follow-t
 
 ## Open work by release
 
-There are 21 open issues: none in 0.12, thirteen in 0.13, four in 0.14, and four unscheduled. The 0.11 milestone is closed. The 0.12 milestone has no open issues; #645 is the only open issue currently labeled `release-blocker`, in 0.13. Jason brought session hosting forward on 2026-10-03 and removed #704's blocker label so session survival sets the next minor's release gate. A milestone is a release track, not a promise that every issue gates its first release.
+There are 21 open issues: none in 0.12, twelve in 0.13, four in 0.14, and five unscheduled. #709 closed on 2026-10-05 as answered by the #645 design. The 0.11 milestone is closed. The 0.12 milestone has no open issues; #645 is the only open issue currently labeled `release-blocker`, in 0.13. Jason brought session hosting forward on 2026-10-03 and removed #704's blocker label so session survival sets the next minor's release gate. A milestone is a release track, not a promise that every issue gates its first release.
 
 | Release | Issue | Reason and ordering |
 | --- | --- | --- |
-| 0.13 | [#645](https://github.com/yicheng47/runner/issues/645) session host | P1 headline and sole release blocker, brought forward from 0.14; local host first, then ssh remotes and the Windows host; use #709's PTY evaluation |
+| 0.13 | [#645](https://github.com/yicheng47/runner/issues/645) session host | P1 headline and sole release blocker, brought forward from 0.14; [spec](./features/645-session-host.md) and [plan](./impls/645-runnerd/plan.md) 2026-10-05: a daemon, `runnerd`, owns the state and the app is a client; the local daemon first (the 0.13.0 gate), then remote machines over ssh and the Windows PC |
 | 0.13 | [#795](https://github.com/yicheng47/runner/issues/795) separate shell lifecycle from agent orchestration | P1; [spec](./features/795-shell-agent-boundary.md); moved from 0.12 on 2026-10-04 into #645's design: launch steps that read or write local files (trust, the system prompt file, shell integration, hook paths, key capture) must run where the process runs |
 | 0.13 | [#562](https://github.com/yicheng47/runner/issues/562) missions as containers | P1, non-blocking; migrate the roster model and settle lifecycle contracts before the dependent UI |
 | 0.13 | [#704](https://github.com/yicheng47/runner/issues/704) session-to-session prompts | P1, non-blocking; the terminal layer beside #562, with no bus or new tables |
 | 0.13 | [#748](https://github.com/yicheng47/runner/issues/748) mission monitoring from Codex | P1, moved from 0.12 on 2026-10-03; spec under review for Runner-delivered mission notices in the starting chat, with idle delivery still to verify |
 | 0.13 | [#552](https://github.com/yicheng47/runner/issues/552) Activity / Needs you view | Consolidate working and waiting sessions across windows and missions |
 | 0.13 | [#701](https://github.com/yicheng47/runner/issues/701) desktop notifications | Offscreen waits, questions, completions and failures reach the user |
-| 0.13 | [#709](https://github.com/yicheng47/runner/issues/709) Alacritty PTY and event loop evaluation | Decide the terminal engine before extracting it into the session host |
 | 0.13 | [#723](https://github.com/yicheng47/runner/issues/723) Grok Build and Cursor Agent runtimes | P2; evaluate against the [runtime integration checklist](./arch/runtime-integration.md) |
 | 0.13 | [#764](https://github.com/yicheng47/runner/issues/764) pi MCP management | P2; proposed Settings → MCP integration; verify the native config contract and align the spec with Runner's CLI-only coordination |
 | 0.13 | [#797](https://github.com/yicheng47/runner/issues/797) hook status over local IPC | P2; [spec](./features/797-hook-status-ipc.md): hooks report through a Runner-owned callback instead of file feeds, with listener ownership aligned with the session host |
@@ -76,9 +75,9 @@ There are 21 open issues: none in 0.12, thirteen in 0.13, four in 0.14, and four
 
 ## Backlog
 
-These four open issues have no release commitment; setting a milestone schedules them.
+These five open issues have no release commitment; setting a milestone schedules them.
 
 - **P2:** [#630](https://github.com/yicheng47/runner/issues/630) token ledger, re-runnable tasks and subscription quota.
 - **P3:** [#582](https://github.com/yicheng47/runner/issues/582) split files that outgrew the #478 audit; time it around feature work on those files. The next pass waited on #777, which has landed.
 - **P3:** [#771](https://github.com/yicheng47/runner/issues/771) evaluate selective `gpui-base` adoption for shared UI controls; start with one ordinary field and resolve the Windows manifest dependency before integration.
-- **Untriaged:** [#790](https://github.com/yicheng47/runner/issues/790) on Windows, updating Codex from Settings → Agents asks you to stop running Codex sessions first, which the reporter says is unnecessary.
+- **Untriaged:** [#790](https://github.com/yicheng47/runner/issues/790) on Windows, updating Codex from Settings → Agents asks you to stop running Codex sessions first, which the reporter says is unnecessary. [#803](https://github.com/yicheng47/runner/issues/803), filed 2026-10-04: running pi sessions break after a pi update.
