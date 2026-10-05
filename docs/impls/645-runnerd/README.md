@@ -4,7 +4,7 @@ Implementation record for [feature 645](../../features/645-session-host.md) ([#6
 
 ## Status (2026-10-05)
 
-Planning. The spec and this plan landed on `main` on 2026-10-05, after Jason's review. No mission has started. Next, on `main`: the channel infrastructure and the downgrade guard. Then the umbrella branch is cut and 1a starts.
+Mission 1a (`01M45EWTDY0KW5MH0PRQMCHXNG`, codex duo) has been running since 2026-10-05, in `.worktrees/refactor-645-m1-request-surface`, with its PR against the umbrella `feat/645-runnerd`, which was cut the same day. Before the first `nightly-runnerd` cut, the channel infrastructure and the downgrade guard land on `main`.
 
 The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) updates leave agents running; (3) remote machines over ssh; (4) the Windows PC.
 
@@ -20,6 +20,6 @@ The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) updates
 
 ## Open
 
-- Whether 1a lands on `main` (proposed) or on the umbrella, and how long the daily-driving gate runs (proposed: one week).
+- How long the daily-driving gate runs (proposed: one week).
 - Whether to close #795 as covered by the spec. #709 was closed on 2026-10-05.
 - The issue body's Shape section and title predate `runnerd`. The spec file is still named `645-session-host.md`.

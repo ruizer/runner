@@ -4,7 +4,7 @@ Plan for [feature 645](../../features/645-session-host.md) ([#645](https://githu
 
 ## Status (2026-10-05)
 
-The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. No mission has started. Next, on `main`: the channel infrastructure and the downgrade guard. Then the umbrella branch is cut and 1a starts.
+The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. The umbrella branch `feat/645-runnerd` was cut the same day, and mission 1a (codex duo) is running against it. The rest of the channel infrastructure and the downgrade guard land on `main` before the first `nightly-runnerd` cut.
 
 ## Phases
 
@@ -33,7 +33,7 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 - **Docs stay on `main`.** The spec, this plan and the log are doc-only changes and go straight to `main`. A mission's brief goes on its mission branch, as AGENTS.md requires, and travels with its commit.
 - **Landing.** When phase 1 meets its gate (below), the umbrella reaches `main` as one PR, rebase-merged so the four mission commits stay separate, as #800 was. 0.13.0 is then cut from `main`.
 
-**Proposed exception, awaiting Jason: 1a lands on `main`.** 1a changes no behaviour (an in-process transport, guarded by a test), and it touches 82 app files. On the umbrella, every app change made on `main` during the umbrella's life (#793, #562 and #704's UI, #782, #701) conflicts with it at each rebase and has to be converted by hand. On `main`, new app code is written against `DaemonClient` from the start. 1b to 1d, where the risk is, stay on the umbrella either way.
+**1a goes on the umbrella too (Jason, 2026-10-05).** He first chose `main` for 1a, because it changes no behaviour and touches the 82 app files every other app change would conflict with. He moved it to the umbrella the same day, so that no change reaches `main` before QA's regression on the umbrella covers it, and so 1a needs no separate smoke test. The cost: app changes that land on `main` while the umbrella lives must be converted to `DaemonClient` at each rebase. The 1a guard test flags every direct core call such a change brings, so none slips through.
 
 ### The `nightly-runnerd` channel
 
@@ -51,7 +51,7 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 - `script/bundle-mac --channel nightly-runnerd` writes `SUFeedURL` as `…/releases/download/nightly-runnerd/appcast.xml` and names the DMG `Runner-Nightly-runnerd-<sha>.<stamp>-arm64.dmg`.
 - `release_urls` in `updater/windows.rs` maps `RUNNER_RELEASE_CHANNEL=nightly-runnerd` to that tag.
 - The publish job's checks and `script/verify-nightly-appcast.py` take the tag as a parameter.
-- `ci.yaml` runs on pushes to the umbrella and on PRs against it, so mission PRs get both platforms and the channel's CI gate has a run to wait for.
+- `ci.yaml` runs on pushes to the umbrella and on PRs against it, so mission PRs get both platforms and the channel's CI gate has a run to wait for. This trigger is already in place as the umbrella's own first commit (2026-10-05), and that commit is dropped when the umbrella lands.
 - The `nightly` skill gains `run --channel runnerd`, which requires the umbrella's head instead of `main`'s.
 - The downgrade guard above, with a test that holds `runnerd.lock` and checks that the app refuses to start without touching the database.
 
