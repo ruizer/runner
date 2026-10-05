@@ -114,13 +114,14 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 - **Who starts it.** The app at launch, when nothing answers on `runnerd.sock`. The CLI, when a socket command finds nothing listening. A connection the sandbox blocks (Codex's default sandbox) still exits 5 as today and starts nothing. The CLI never starts a daemon from an ssh session (`SSH_CONNECTION` set); it says to open Runner on that machine. A daemon started there would run its agents inside the ssh logon, where macOS may keep the login keychain locked, so Claude Code could not read its credentials, and Windows may kill the session's processes when it closes.
 - **Detached.** On macOS it gets its own session (`setsid`) with closed stdio. On Windows it starts with `CREATE_NO_WINDOW`, `CREATE_NEW_PROCESS_GROUP` and `CREATE_BREAKAWAY_FROM_JOB`, but not `DETACHED_PROCESS`. That gives it a hidden console of its own, which the console programs it starts inherit; with no console at all, any console child started without `CREATE_NO_WINDOW` would open a visible window. Its working directory is the home directory, and it logs to `runnerd.log` in the log directory with the same panic hook as the app.
 - **A clean environment.** When started from a terminal or an agent, the daemon drops the `RUNNER_*` variables and the mission-shim and sidecar `PATH` entries it inherited. Spawns compose `PATH` from the process `PATH` (arch §5.3), and an agent's environment must not leak into the next spawn.
-- **Lifetime.** The daemon stays up while any session is live, unlisted ones such as the agent-update terminal included, or any client is connected. It exits 60 s after neither is true. There is no login item and no launchd agent, so the daemon does not survive logout or reboot.
+- **Ending when the OS asks.** At logout, restart or shutdown, `runnerd` does what Stop Sessions does before it exits, so sessions resume after a reboot as they do today (see When something dies). This applies only to the OS's request to end (SIGTERM on macOS; the logoff, shutdown and close events on Windows), never to a crash.
+- **Lifetime: once started, it keeps running** (Jason, 2026-10-05, after comparing Paseo, Zeron and Docker). `runnerd` has no idle exit. It stops on four things: quitting with Stop Sessions, `runner daemon stop`, logout or restart (see Ending when the OS asks), and an update restart. Nothing starts it at login in phase 1. While no client is connected, it pauses work that exists only for a UI, plan-usage polling and agent-discovery refreshes, and resumes it when a client connects. So `runner` commands answer at once, the router and the CLI socket are always there, and an idle daemon costs almost nothing.
 - **Startup is `boot_core` without GPUI:** install nothing (the app or CLI already did), open the database, mount routers for running missions, demote stale rows, sweep orphans, resume stamped sessions at their persisted sizes, start the MCP server and `runnerd.sock`, then start discovery and usage. These steps all run at app launch today, so first launch is no slower. A relaunch that finds the daemon running skips them all.
 - **`runner daemon status`** prints the pid, build, uptime, live sessions and connected clients. **`runner daemon stop`** stops every session the way Stop sessions does (below) and exits.
 
 ### Quitting
 
-- **With no live sessions,** quit is as today, and the daemon exits after its idle grace.
+- **With no live sessions,** quitting just closes the app, and `runnerd` keeps running.
 - **With live sessions,** Settings → General gets "When Runner quits": Ask (the default), Keep sessions running, or Stop sessions. Ask shows a dialog that names how many sessions are running and how many are working, with Keep Running, Stop Sessions and Cancel, plus "Don't ask again".
 - **Keep running** disconnects the app. The daemon keeps everything.
 - **Stop sessions** is today's quit, performed by the daemon: stamp `resume_on_launch`, `kill_many`, exit.
@@ -142,7 +143,7 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 | `runnerd` crashes | Their PTYs close: SIGHUP on macOS, the job object's kill-on-close on Windows. The next daemon's orphan sweep catches stragglers. | The app reports that `runnerd` stopped and starts a new one. Rows are demoted to stopped, as after an app crash today, and resume from their Resume buttons. |
 | `runnerd` crashes 3 times in 5 minutes | — | The app stops restarting it and shows the path to `runnerd.log`. |
 | The machine sleeps | paused | Nothing. Work continues on wake. |
-| Logout or reboot | stop | The next daemon start demotes their rows, as today. |
+| Logout or reboot | stop | `runnerd` treats the OS's request to end as Stop Sessions: it marks running sessions to resume, stops them and exits. That is SIGTERM on macOS, and on Windows the logoff and shutdown events its hidden console receives. With resume on launch on, the next daemon start resumes them, which is what today's app does when the OS quits it at logout. |
 
 ### Windows
 
@@ -231,6 +232,9 @@ Proposed 2026-10-04 and reviewed with Jason on 2026-10-05. He settled 4 and 9 in
 7. **0.13.0 ships phase 1 on both platforms.** Phases 2 to 4 follow in later releases and do not gate 0.13.0. The order is updates (2), then remote machines (3), then the Windows PC (4).
 8. **#795 closes when this spec lands,** with its launch steps carried by phase 3.
 9. **#709 does not go first.** Jason closed it on 2026-10-05 as answered by this spec; its audit moves into 1b.
+10. **Alacritty gets a read-only accessor patch** (Jason, 2026-10-05). The snapshot needs state alacritty keeps private. The patch is vendored during phase 1, and a fork follows only if the accessors go upstream (plan, Mission 1b).
+11. **`runnerd` keeps running once started** (Jason, 2026-10-05). There is no idle exit; see Lifetime under Starting, finding and stopping the daemon.
+12. **When the OS ends `runnerd`, it stops sessions the way Stop Sessions does,** so a reboot resumes them as today's quit at logout does.
 
 ## Implementation phases
 
@@ -272,7 +276,7 @@ Phase 1, on macOS and on Windows:
 - Kill `runnerd` mid-turn: the app reports it and starts a new daemon, rows are demoted to stopped, and no agent process survives.
 - Install an update with live sessions: the prompt names the working ones, they resume after the relaunch with their conversations, and none is duplicated.
 - Run `make run` twice with a live development chat: the second build restarts the development daemon without asking and resumes the chat. The production app and the development app run side by side, each with its own daemon.
-- With the app closed, `runner mission list` starts the daemon, `runner daemon status` shows it, it exits 60 s after nothing runs, and `runner daemon stop` stops everything.
+- With the app closed, `runner mission list` starts the daemon, `runner daemon status` shows it, it keeps running after the command and after the last session ends, its usage polling pauses while no app is connected, and `runner daemon stop` stops everything.
 - Activity Monitor and Task Manager list the daemon as `runnerd`.
 - In CI, every recording in `runner-terminal/fixtures` round-trips: replayed into one `Term`, serialized, and fed into a fresh one, it gives the same grid, scrollback, cursor and modes.
 - **The split-point test,** in CI: for every recording, a snapshot is taken at every chunk boundary and at random byte offsets, including inside escape sequences and synchronized updates. The rest of the recording is then fed to both the original `Term` and the restored one, and their final grids, scrollback, cursor and modes must be identical. This is the test #157 never had.

@@ -4,7 +4,7 @@ Implementation record for [feature 645](../../features/645-session-host.md) ([#6
 
 ## Status (2026-10-05)
 
-Mission 1a (`01M45EWTDY0KW5MH0PRQMCHXNG`, codex duo) has been running since 2026-10-05, in `.worktrees/refactor-645-m1-request-surface`, with its PR against the umbrella `feat/645-runnerd`, which was cut the same day. Before the first `nightly-runnerd` cut, the channel infrastructure and the downgrade guard land on `main`.
+1a merged into the umbrella on 2026-10-05 as `24e1e78b` ([#805](https://github.com/yicheng47/runner/pull/805)). 1b (`01M45RGVN80BAPFDD2N9BH1DME`, codex trio) is running, with QA authorized for live tests on development data. Its Stage 0 passed 1a's regression on the Mac (sidebar drag waived by Jason) and added five fresh terminal recordings. Before the first `nightly-runnerd` cut: the channel infrastructure and the downgrade guard on `main`.
 
 The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) updates leave agents running; (3) remote machines over ssh; (4) the Windows PC.
 
@@ -13,6 +13,8 @@ The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) updates
 - **The state owner runs without the UI.** `runnerd` runs `AppCore`, and the app, the CLI and any later client are its clients (spec decision 1).
 - **The live terminal path is unchanged.** The agent's bytes reach the app untouched, the mirror parses them with the same `alacritty_terminal` code the daemon uses, and everything except input and output stays local to the app. Snapshots happen only on reconnect.
 - **The upstream alacritty event loop is not the engine**, because a daemon must forward raw bytes and it does not expose them (plan, "#709 does not go first").
+- **Alacritty gets a read-only accessor patch** (Jason, 2026-10-05), on a vendored copy during phase 1, so the snapshot reads the exact state. A fork comes only if the accessors go upstream.
+- **`runnerd` keeps running once started.** There is no idle exit, and with no client connected it pauses UI-only background work.
 - **The boundary is a crate boundary.** A new `protocol` module in `runner-core` holds everything that crosses the socket (1a). The app loses its normal dependency on the backend (1c), and `runner-backend` is renamed `runner-daemon` (1d).
 - **The four phase 1 missions run in order.** 1a and 1b run with no other `runner-app` mission in flight.
 - **No downgrade, fix forward.** Jason's Mac takes every `nightly-runnerd` cut from the first one, with his data directory backed up first. Problems are fixed on the umbrella. Every build he could go back to refuses to start while `runnerd` runs. Checks A to E (plan, "The checks before landing") gate the landing on `main`, not the install.

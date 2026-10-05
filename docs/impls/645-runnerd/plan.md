@@ -70,7 +70,7 @@ They run while Jason daily-drives the channel, and all of them pass on both plat
   - force-quitting the app;
   - killing `runnerd` (`kill -9` on macOS, ending its process tree on Windows);
   - the restart cap after repeated crashes;
-  - idle exit;
+  - keeps running after the last session and client, with usage polling paused;
   - `runner daemon status` and `stop`;
   - the CLI starting the daemon, and refusing to over ssh;
   - a rebuild while sessions are live, which restarts the development daemon.
@@ -184,7 +184,7 @@ Brief `645-m1-request-surface.md`. Crew: codex duo (coder and reviewer), with no
 3. **Events.** `DaemonClient::subscribe()` yields `AppEvent`s. In-process it maps the broadcast receiver, and the app's `native-app-events` thread consumes it as before. On the client side, event names become `String`.
 4. **What stays a library call:** model types, `runtimes::for_key`, `app_paths`, constants such as `cli_install::runner_command_name` and `SKILL_MARKER`, and pure formatting. The rule: a call that reads or writes the database, `SessionManager`, a router, a bus, usage, discovery or the window registry is a request.
 5. **What stays in the app until later missions:** `boot_core` and `NativeMcpServer`, because the app still runs the core in-process in 1a (1c moves them); the terminal (`TerminalBridge`, `TerminalSession`, and the agent-update modal's `UpdateTerminalEvents`), which 1b moves; and the skill and command defaults, which are file changes in the user's home and read discovery results through requests.
-6. **The main-thread rule.** No request from `render`, `prepaint` or `paint`. A main-thread event handler may make a request only for an op marked `fast` in the table (a read of in-memory state or a single-row query). Everything else (spawn, kill, resume, writes, discovery refreshes) moves into `background_spawn`. The PR includes a table of the roughly 100 main-thread call sites and what each became.
+6. **The thread rule, as corrected during the mission (2026-10-05).** Every call stays on the thread it ran on before, and a `fast` request replaces a direct read of in-memory state. The brief first moved non-`fast` calls into `background_spawn`. In-process that buys nothing, and the reviewer found it created ordering races (a drawer spawn persisting one mission's layout into another, runtime forms reading a lagging cache, out-of-order window writes), so the rule was relaxed. No request runs from `render`, `prepaint` or `paint`. The 87 non-`fast` requests still on the main thread are listed in [`mission-1a.md`](mission-1a.md), and 1c decides each one, with timeouts, when the socket arrives.
 7. **A guard test.** It scans `runner-app/src` outside test modules and fails on any `runner_backend::` path outside `bootstrap.rs`, on `.db.get(`, and on the `AppCore` fields above. 1c replaces it with the Cargo dependency (see Crates). App tests build a client over an in-process core through one helper. The eight test helpers that build an `AppCore` by hand today use it: `bootstrap.rs`, `app_store/skill_defaults.rs`, `app_store/command_default.rs`, `terminal/element.rs`, `settings_page.rs`, `app_shell.rs`, `agent_update.rs` and `start_chat.rs`.
 
 **Verification.**
@@ -223,7 +223,7 @@ Brief `645-m2-terminal-split.md`. Crew: codex trio. The QA slot records fixtures
 2. **Two types, one parse.** `TerminalModel`, on the daemon side, holds the `Term`, the parser, the synchronized-update flush, the colour-scheme and OSC 7 scans, the input tracker and the fixture recorder, and writes replies to the PTY. `TerminalMirror`, on the app side, holds the `Term`, the parser, the synchronized-update flush, viewers and the waker, selection, scrolling, links and key encoding. It drops its replies and has no input tracker. Both call one shared parse function, so they cannot parse differently.
 3. **The model lives in the session layer.** `SessionManager` feeds it from the forwarder, in place of `SessionEvents::output`, so draft observations, replies, the live title and the live cwd all happen next to the delivery gate, with or without a client. `SessionEvents::output` goes away; the other callbacks remain as `AppEvent`s.
 4. **Frames and attach.** For each session, one lock covers assigning the sequence number, pushing an `Output` frame onto every subscriber's bounded queue, and parsing into the model, in that order. `attach(session_id)` takes the same lock, serializes the snapshot and registers the subscriber. A full queue drops that subscriber and pushes `Resync`. `Resized` frames go to every subscriber except the one that resized.
-5. **The snapshot.** `runner_terminal::snapshot::serialize(&Term, unfinished: &[u8]) -> Vec<u8>` writes, in order:
+5. **The snapshot.** It reads alacritty's private state (the inactive grid, scroll region, title and title stack, tab stops, keyboard mode stacks, active charset) through read-only accessors added to a vendored copy of the pinned crate: `vendor/alacritty_terminal/`, wired in with `[patch.crates-io]` and documented in `RUNNER_PATCH.md`. Jason chose this on 2026-10-05 over Runner tracking that state itself, which would be a second tracker that must agree with alacritty and still could not recover the inactive grid. It reverses the GPUI rewrite's "upstream only" rule for this one crate. The copy is vendored during phase 1; if the accessors are offered upstream, it moves to a fork pinned by commit, as Zed does. `runner_terminal::snapshot::serialize(&Term, unfinished: &[u8]) -> Vec<u8>` writes, in order:
    - a reset;
    - the primary scrollback and screen, as SGR runs with wide characters and zero-width marks;
    - the alternate screen, when active (`?1049h`, then its content);
@@ -276,13 +276,14 @@ Brief `645-m3-daemon-process.md`. Crew: codex trio. The QA slot runs live checks
    `runnerd` takes `runnerd.lock` (`flock`, or `LockFileEx` on Windows) before it binds, and a second starter exits 0.
 6. **A clean environment.** At start, `runnerd` removes `RUNNER_*` variables, and `PATH` entries under `<app data>/bin` and the mission shim tree, from its own environment.
 7. **The handshake.** `Hello { exe_sha256, client }` gets `Welcome { exe_sha256, pid, started_at }` or `Mismatch`. `runnerd` hashes its own executable at start, and the app hashes its bundled sidecar (found through `locate_source`) once at launch, off the main thread. In 1c, a mismatch stops the old daemon with `Shutdown { stop_sessions: true }` and starts the new one without asking; the dialog comes in 1d.
-8. **Lifetime.** `runnerd` exits 60 s after the last live session (unlisted ones included) and the last client are gone. A test-only flag shortens the grace.
+8. **Lifetime.** `runnerd` keeps running once started, with no idle exit. It stops only on Stop Sessions, `runner daemon stop`, the OS ending it (item 10), or an update restart. With no client connected, it pauses usage polling and discovery refreshes, and resumes them on the next connection. Tests stop their daemon explicitly.
 9. **Quit, unchanged.** `on_app_quit` sends `Shutdown { stop_sessions: true }`: stamp `resume_on_launch`, `kill_many`, exit. What is new is that an app crash or force-quit leaves `runnerd` and every session running.
-10. **Reattach.** At launch the app restores its windows, loads `AppStore` through requests, and attaches every live session: snapshot first, then the mirror.
-11. **Crash recovery.** If the connection drops, the app shows a notice and reconnects or spawns a new daemon. After three restarts in five minutes it stops and points to `runnerd.log`.
-12. **The CLI.** When a socket command gets `NotRunning`, the CLI spawns `runnerd` from its own directory, canonicalized so that a `~/.local/bin` link resolves to the sidecar. It then waits up to 10 s for `mcp.sock` and continues. It never spawns one when `SSH_CONNECTION` is set, and says to open Runner on that machine instead (see Phase 3). `runner daemon status` and `runner daemon stop` use `runnerd.sock`.
-13. **The app stops depending on the backend.** `runner-backend` moves to `runner-app`'s `[dev-dependencies]`, and the 1a guard test is deleted (see Crates).
-14. **Logs.** `runnerd.log` sits beside `runner.log`, with the same rotation and panic hook; the setup in `runner-app/src/logging.rs` moves somewhere both can share.
+10. **The OS ending `runnerd`.** On SIGTERM (macOS logout or restart), and on `CTRL_LOGOFF_EVENT`, `CTRL_SHUTDOWN_EVENT` and `CTRL_CLOSE_EVENT` (Windows, through its hidden console), `runnerd` runs the same Stop sessions path before exiting. Otherwise a reboot would bring sessions back stopped instead of resumed, which would be a regression: today macOS quits the app at logout, and its quit handler stamps the sessions. Test it by sending SIGTERM to a test daemon and checking the stamps, and add a logout-and-login check to QA's list.
+11. **Reattach.** At launch the app restores its windows, loads `AppStore` through requests, and attaches every live session: snapshot first, then the mirror.
+12. **Crash recovery.** If the connection drops, the app shows a notice and reconnects or spawns a new daemon. After three restarts in five minutes it stops and points to `runnerd.log`.
+13. **The CLI.** When a socket command gets `NotRunning`, the CLI spawns `runnerd` from its own directory, canonicalized so that a `~/.local/bin` link resolves to the sidecar. It then waits up to 10 s for `mcp.sock` and continues. It never spawns one when `SSH_CONNECTION` is set, and says to open Runner on that machine instead (see Phase 3). `runner daemon status` and `runner daemon stop` use `runnerd.sock`.
+14. **The app stops depending on the backend.** `runner-backend` moves to `runner-app`'s `[dev-dependencies]`, and the 1a guard test is deleted (see Crates).
+15. **Logs.** `runnerd.log` sits beside `runner.log`, with the same rotation and panic hook; the setup in `runner-app/src/logging.rs` moves somewhere both can share.
 
 **Verification.**
 
@@ -291,7 +292,7 @@ Brief `645-m3-daemon-process.md`. Crew: codex trio. The QA slot runs live checks
   - spawn a `shell` session running `cat` and get the echo back;
   - disconnect and reattach, getting an identical snapshot;
   - kill `runnerd` and confirm the child has gone, on both platforms;
-  - idle exit;
+  - `runnerd` keeps running after the last session and client, with usage polling and discovery paused until a client connects;
   - a second starter loses the lock;
   - the CLI starts the daemon.
 - The benchmark again, now across the socket.
