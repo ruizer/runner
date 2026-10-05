@@ -4,7 +4,7 @@ Implementation record for [feature 645](../../features/645-session-host.md) ([#6
 
 ## Status (2026-10-05)
 
-1a merged into the umbrella on 2026-10-05 as `24e1e78b` ([#805](https://github.com/yicheng47/runner/pull/805)). 1b (`01M45RGVN80BAPFDD2N9BH1DME`, codex trio) is running, with QA authorized for live tests on development data. Its Stage 0 passed 1a's regression on the Mac (sidebar drag waived by Jason) and added five fresh terminal recordings. Before the first `nightly-runnerd` cut: the channel infrastructure and the downgrade guard on `main`.
+1a and 1b are on the umbrella: 1a as `625df01f` ([#805](https://github.com/yicheng47/runner/pull/805), rebased onto `main`'s docs since its merge) and 1b as `a1c2a300` ([#806](https://github.com/yicheng47/runner/pull/806)), both merged on 2026-10-05. The first nightly from the umbrella was dispatched the same day, to the regular `nightly` release; Jason tests it on the Windows PC on 2026-10-06. Next: the downgrade guard on `main` before the 1c cut, and the 1c brief.
 
 The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) updates leave agents running; (3) remote machines over ssh; (4) the Windows PC.
 
@@ -17,8 +17,8 @@ The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) updates
 - **`runnerd` keeps running once started.** There is no idle exit, and with no client connected it pauses UI-only background work.
 - **The boundary is a crate boundary.** A new `protocol` module in `runner-core` holds everything that crosses the socket (1a). The app loses its normal dependency on the backend (1c), and `runner-backend` is renamed `runner-daemon` (1d).
 - **The four phase 1 missions run in order.** 1a and 1b run with no other `runner-app` mission in flight.
-- **No downgrade, fix forward.** Jason's Mac takes every `nightly-runnerd` cut from the first one, with his data directory backed up first. Problems are fixed on the umbrella. Every build he could go back to refuses to start while `runnerd` runs. Checks A to E (plan, "The checks before landing") gate the landing on `main`, not the install.
-- **Phase 1 lives on `feat/645-runnerd` and ships on `nightly-runnerd`.** Missions merge into the umbrella; the umbrella follows `main` by rebase, adds no schema change, and lands on `main` once, after the daily-driving gate. Channel infrastructure lands on `main` first.
+- **No downgrade, fix forward.** Jason's Mac takes every umbrella cut from the first one, with his data directory backed up first. Problems are fixed on the umbrella. Every build he could go back to refuses to start while `runnerd` runs. Checks A to E (plan, "The checks before landing") gate the landing on `main`, not the install.
+- **Phase 1 lives on `feat/645-runnerd` and ships on the regular `nightly`.** Missions merge into the umbrella; the umbrella follows `main` by rebase, adds no schema change, and lands on `main` once, after the daily-driving gate. There are no other nightly users, so the umbrella's cuts go to `nightly` and no separate channel is built (Jason, 2026-10-05); while the umbrella lives, every nightly is cut from it. Its mission briefs and test records stay on it until it lands.
 
 ## Open
 

@@ -6,7 +6,7 @@ A plan stays here while its work is in flight and moves to [`archive/`](./archiv
 
 ## Active
 
-- [`645-runnerd/`](./645-runnerd/plan.md) — `runnerd`, the daemon that owns sessions and state so they outlive the app ([#645](https://github.com/yicheng47/runner/issues/645), 0.13): four phases, phase 1 in four missions; planning, not started.
+- [`645-runnerd/`](./645-runnerd/plan.md) — `runnerd`, the daemon that owns sessions and state so they outlive the app ([#645](https://github.com/yicheng47/runner/issues/645), 0.13): four phases, phase 1 in four missions on the umbrella branch `feat/645-runnerd`; 1a and 1b merged.
 
 ## Archive
 
