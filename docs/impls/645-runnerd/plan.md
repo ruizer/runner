@@ -322,6 +322,26 @@ Brief `645-m4-lifecycle.md`. Design comes first: the spec's Design list, drawn i
 
 **Verification:** the spec's phase 1 list, then the [full smoke test](../../tests/full-smoke-test.md), then 0.13.0.
 
+## After phase 1 — the CLI moves to the client protocol
+
+Added on 2026-10-05 at Jason's request. One mission, on `main` after the umbrella lands, before phase 3 begins. It does not gate 0.13.0.
+
+**Why.** Through phase 1, `runnerd` serves two protocols over one core: MCP on `mcp.sock` for the `runner` CLI, unchanged on purpose, and the client protocol on `runnerd.sock` for the app. Since 0.11 the CLI is MCP's only client, because no agent registers Runner's MCP server, so the MCP layer is an internal transport that can be swapped. Keeping both costs three things:
+- Every operation is registered twice, as an MCP tool and as a request in the table.
+- MCP's framing lacks what is coming: pushed events (`mission feed --follow`), the caller's identity on the connection, and a plain byte stream that can be forwarded over ssh. The 648 program record flagged this when it shipped.
+- Phase 3 needs one protocol. A `runner` command run by an agent on a remote machine reaches its mission through that machine's daemon and the ssh link.
+
+**What changes.**
+
+- The CLI's socket commands become `DaemonClient` calls over `runnerd.sock`. `mission feed --follow` becomes a subscription.
+- The MCP server, `mcp.sock`, the tool registry and both `rmcp` dependencies go.
+- The CLI's exhaustive recorder test checks against the request table, in place of the shared tool-name list.
+- Inside a mission, `msg post`, `msg read`, `signal` and `ask` still append to the event log directly with no socket, as they do today.
+
+**What must not change.** The CLI's output, including every `--json` shape, stays byte-identical, because agents' skills and scripts read it. Its exit codes stay the same: 3 for not running, 5 for blocked by a sandbox, and 4 reserved for #562's `wait`. So do the caller-identity rules (arch §9.3). The one intended difference is that `runner status` reports `runnerd.sock` instead of `mcp.sock`. Golden tests capture the CLI's output on `main` before the change and compare it after.
+
+**Crew:** codex duo. Live checks run against `make run` on the development data, under live-test authorization.
+
 ## Phase 2 — updates leave agents running
 
 This is an outline. The detail is written after 1c, before the phase's first mission.

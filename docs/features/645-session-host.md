@@ -203,7 +203,7 @@ Phase 3's host picker and disconnected pane get designed with phase 3.
 ## Rules
 
 - Agents see no change: argv, prompts and first turns are identical, and the environment differs only in the cleaned `PATH` described above.
-- `events.ndjson`, `sessions` rows, MCP tools and CLI output keep their shape. The CLI gains only `runner daemon status` and `runner daemon stop`.
+- `events.ndjson`, `sessions` rows, MCP tools and CLI output keep their shape. The CLI gains only `runner daemon status` and `runner daemon stop`. After phase 1, the CLI moves onto the client protocol, and `mcp.sock` and the MCP server go, with the CLI's output unchanged ([plan](../impls/645-runnerd/plan.md#after-phase-1--the-cli-moves-to-the-client-protocol)).
 - Tests never start a daemon in real app data. They use temporary app-data directories and endpoints, with every root passed in rather than resolved from `$HOME` (the lesson of the #648 skill leak).
 - Every PR leaves both platforms working, with Windows-only paths covered on Windows CI.
 
