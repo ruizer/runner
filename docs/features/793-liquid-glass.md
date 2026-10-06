@@ -2,6 +2,8 @@
 
 Tracking issue: [#793](https://github.com/yicheng47/runner/issues/793). Priority: P2. Status: draft; design decisions open.
 
+Design: [Liquid glass exploration](../../design/specs/793-liquid-glass.pen). Selected direction: A · Frosted chrome. Primary frames: `DJM0c` (dark) and `P1ZnQS` (light); shared sidebar: `N4yXC`.
+
 ## Motivation
 
 Give Runner a coherent liquid glass feel inspired by [Diri](https://github.com/cristicretu/diri): blurred backdrops, layered translucent chrome, subtle edge highlights and polished floating surfaces, while keeping terminal text easy to read.
