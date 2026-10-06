@@ -19,6 +19,7 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 - [586 — Shell status: process detection first](./586-shell-status-detection.md) — foreground-process detection for shell panes before semantic shell integration ([#586](https://github.com/yicheng47/runner/issues/586), P2, 0.14).
 - [701 — Desktop notifications](./701-desktop-notifications.md) — a popup Runner draws itself, following Zed's agent notification, when a session off screen waits on you, finishes or fails ([#701](https://github.com/yicheng47/runner/issues/701), P2, 0.13).
 - [793 — Liquid glass appearance](./793-liquid-glass.md) — Diri-inspired layered glass chrome and floating controls, with readable terminal surfaces, a solid appearance option and Pencil design before implementation ([#793](https://github.com/yicheng47/runner/issues/793), P2, 0.13; draft).
+- [809 — User documentation](./809-user-docs.md) — a user guide in `docs/guide/`, in four sections (getting started, concepts, guides, reference), that runnersh.dev renders from the latest release tag; plain Markdown that reads on GitHub, a CLI reference generated from `runner help`, and a rule that behavior changes update the guide in the same PR ([#809](https://github.com/yicheng47/runner/issues/809), P2; draft structure).
 
 ## Recently shipped
 
