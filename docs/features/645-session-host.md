@@ -2,7 +2,7 @@
 
 > Tracking issue: [#645](https://github.com/yicheng47/runner/issues/645)
 > Priority: P1, 0.13, the sole release blocker (phase 1). Platforms: macOS and Windows.
-> Status: drafted 2026-10-04 and reviewed with Jason on 2026-10-05, when it landed on `main`; no mission has started. It starts from the archived [466 spec](./archive/466-sessions-outlive-the-app.md) and the issue body. Decision 1 changes the issue's shape: the daemon owns the state, not only the processes, following the lesson Jason took from Paseo and Orca on 2026-10-04. The issue calls the process the session host; on 2026-10-05 Jason named it `runnerd`, which leaves "host" to mean a machine in phase 3. The implementation plan is in [`docs/impls/645-runnerd/`](../impls/645-runnerd/plan.md). The Remote machines section covers the launch steps [#795](https://github.com/yicheng47/runner/issues/795) asked for, so #795 can close once this spec lands.
+> Status: drafted 2026-10-04 and reviewed with Jason on 2026-10-05, when it landed on `main`. Missions 1a to 1c are on the umbrella branch; on 2026-10-06 the 1d design was drawn and phase 2 was dropped (decision 13). It starts from the archived [466 spec](./archive/466-sessions-outlive-the-app.md) and the issue body. Decision 1 changes the issue's shape: the daemon owns the state, not only the processes, following the lesson Jason took from Paseo and Orca on 2026-10-04. The issue calls the process the session host; on 2026-10-05 Jason named it `runnerd`, which leaves "host" to mean a machine in phase 3. The implementation plan is in [`docs/impls/645-runnerd/`](../impls/645-runnerd/plan.md). The Remote machines section covers the launch steps [#795](https://github.com/yicheng47/runner/issues/795) asked for, so #795 can close once this spec lands.
 
 ## Motivation
 
@@ -55,7 +55,7 @@ What it costs:
 | The authoritative terminal: `Term`, parser, synchronized-update flush, query replies, colour-scheme reports, OSC 7 cwd, draft observations, fixture recorder | app (`TerminalSession`) | daemon |
 | Painting, selection, scrollback viewing, links, key, IME and mouse encoding | app | app, against a mirror `Term` |
 | `AppStore` snapshots, windows, tabs and layout | app | app, filled by requests and events |
-| Settings the core reads (resume on launch, enabled runtimes, the Runner skill switch, mission permission mode) | pushed into `AppCore` in-process | the daemon reads them at start; the app pushes changes |
+| Settings the core reads (resume on launch, enabled runtimes, the Runner skill switch) | pushed into `AppCore` in-process | the daemon reads them at start; the app pushes changes |
 | macOS wake observer (needs AppKit) | app | app, forwarded to the daemon as a request |
 | Sparkle and the Windows updater | app | app; they stop the daemon before installing |
 
@@ -122,7 +122,8 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 ### Quitting
 
 - **With no live sessions,** quitting just closes the app, and `runnerd` keeps running.
-- **With live sessions,** Settings → General gets "When Runner quits": Ask (the default), Keep sessions running, or Stop sessions. Ask shows a dialog that names how many sessions are running and how many are working, with Keep Running, Stop Sessions and Cancel, plus "Don't ask again".
+- **With live sessions,** Settings → General has one row, "When Runner quits": Ask (the default), Keep running, or Stop sessions, with the live session count in its description. Ask shows a dialog with two choices, Keep them running and Stop them, the second naming any agent that is mid-turn, then Cancel and Quit. The last choice is preselected, Enter quits, and "Don't ask again" saves the selected choice into the setting (design, 2026-10-06).
+- **⌥⌘Q is Quit and Stop Sessions,** whatever the setting, following the macOS convention for an alternate quit. It is how someone who chose Keep running stops everything; `runner daemon stop` does the same from a terminal.
 - **Keep running** disconnects the app. The daemon keeps everything.
 - **Stop sessions** is today's quit, performed by the daemon: stamp `resume_on_launch`, `kill_many`, exit.
 - **On Windows,** closing the last window quits, and gets the same choice.
@@ -131,9 +132,9 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 ### Updates and version skew
 
 - **Identity is the binary, not the version string.** The daemon reports the content hash of its own executable, and the app compares it with the hash of the sidecar it ships. They must match exactly. Version strings alone are not enough, because development builds share one across rebuilds.
-- **On a mismatch,** after an update, a manual install or a rebuild, the app says that N sessions are running in the previous Runner build, and offers Restart Them (the old daemon's `Shutdown` with stamping, then the new sidecar, a new daemon, and resume) or Quit (the old daemon keeps running). Debug builds restart without asking, so `make run` keeps working.
-- **Installing an update** with live sessions first asks to stop the daemon, naming any working sessions. After the relaunch, the new daemon resumes them and their agents restore their conversations. An update therefore still costs any in-flight turn, as it does today.
-- **Phase 2 removes this.** Local sessions move into a separate session daemon that an update does not restart, which speaks a session protocol kept stable across releases. `runnerd` and the app restart on an update, and reattach. The 2026-08-18 record of this direction in the [GPUI rewrite plan](../impls/archive/gpui-rewrite/plan.md) named updates as the motivator, so this is a phase of its own rather than a later idea. It comes before remote machines, which reuse the same protocol over ssh.
+- **On a mismatch,** after an update, a manual install or a rebuild, the app restarts the daemon itself: the old daemon's `Shutdown` with stamping, then the new sidecar, a new daemon, and resume. It then shows a notice, "Restarted 3 sessions in Runner 0.13.1". There is no dialog, because whoever installed the build has already chosen to.
+- **Installing an update** with live sessions uses the normal update dialog, which says the sessions restart with it. When agents are mid-turn, a small note beside the buttons says how many ("1 agent working"), because their turns are lost; Later waits. After the relaunch, the new daemon resumes the sessions and their agents restore their conversations.
+- **An update always restarts the sessions** (Jason, 2026-10-06; decision 13). Keeping agents running through an update would need a second local process that holds the PTYs, speaking a session protocol kept stable across releases. What that saves is one in-flight turn per update, which the update dialog already flags, while restarting carries every fix to the whole stack, terminal and session code included. Remote machines still need the stable session protocol, because their Runner can be a different build, so it is built in phase 3.
 
 ### When something dies
 
@@ -141,7 +142,7 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 | --- | --- | --- |
 | The app crashes or is force-quit | keep running | Relaunch reattaches everything. |
 | `runnerd` crashes | Their PTYs close: SIGHUP on macOS, the job object's kill-on-close on Windows. The next daemon's orphan sweep catches stragglers. | The app reports that `runnerd` stopped and starts a new one. Rows are demoted to stopped, as after an app crash today, and resume from their Resume buttons. |
-| `runnerd` crashes 3 times in 5 minutes | — | The app stops restarting it and shows the path to `runnerd.log`. |
+| `runnerd` crashes 3 times in 5 minutes | — | The app stops restarting it and shows the path to `runnerd.log`, with an Open log button. |
 | The machine sleeps | paused | Nothing. Work continues on wake. |
 | Logout or reboot | stop | `runnerd` treats the OS's request to end as Stop Sessions: it marks running sessions to resume, stops them and exits. That is SIGTERM on macOS, and on Windows the logoff and shutdown events its hidden console receives. With resume on launch on, the next daemon start resumes them, which is what today's app does when the OS quits it at logout. |
 
@@ -164,7 +165,7 @@ This replaces 466's rule that the router is offline while the app is closed. Ope
 
 ### Remote machines (phase 3)
 
-- **A machine reached over ssh runs phase 2's session daemon:** PTYs, authoritative `Term`s, hook feeds and watchers, key capture and conversation probes, with no database, routers or missions. The local daemon stays the mission's owner.
+- **A machine reached over ssh runs a session daemon,** built in phase 3: PTYs, authoritative `Term`s, hook feeds and watchers, key capture and conversation probes, with no database, routers or missions. The local daemon stays the mission's owner.
 - **The transport is `ssh <host> runnerd --stdio`,** a thin proxy that connects to the remote's own daemon over its local socket and never starts one. The remote daemon runs in the user's own logon on that machine: Runner open there, `runner daemon start` from a terminal there, or an opt-in start at login. If none is running, the pane says to open Runner on that host. Paseo works the same way: its ssh transport is `ssh -W 127.0.0.1:<port>`, and its docs say to start the daemon on the remote first. Agents therefore never run inside an ssh logon, which settles two Windows questions by construction: OpenSSH killing a session's processes when it closes, and credentials stored with DPAPI or Credential Manager that a key-based ssh logon may not be able to read. The proxy dies with the connection; the daemon and its agents do not. A dropped connection or a sleeping laptop leaves the agents running, and reconnecting reattaches with a snapshot. There is no listening port, no relay and nothing hosted; sshd is the transport.
 - **Locally, `RemoteRuntime` implements `SessionRuntime`** over the session protocol: spawn with a launch spec, stop, input, resize, status, and output frames carrying bytes, agent events and draft observations.
 - **The launch spec is structured:** argv, environment and working directory. The remote resolves the executable on its own login-shell `PATH`, so a Windows machine needs no quoting layer.
@@ -191,13 +192,14 @@ The Windows PC runs a crew slot for a Mac's mission: OpenSSH Server, `runnerd --
 
 ## Design
 
-Before the phase 1d mission, these get frames in `design/specs/645-session-host.pen`:
+Drawn on 2026-10-06 in `design/specs/645-session-host.pen`:
 
-- The quit dialog.
-- The "When Runner quits" row in Settings → General, with a `runnerd` status line (running since, live sessions, Stop).
-- The build mismatch dialog and the update prompt that names working sessions.
-- The notice that `runnerd` stopped.
-- A pane waiting for its snapshot, shown only if the snapshot takes longer than 300 ms.
+- The quit dialog: two choices, Keep them running and Stop them, then Cancel and Quit, with "Don't ask again".
+- The "When Runner quits" row in Settings → General, with its menu open.
+- The update dialog, with the note beside the buttons shown when agents are working.
+- The notice after the app restarts the daemon into a different build.
+
+Dropped in that review: a `runnerd` status row with a Stop button in Settings (⌥⌘Q and `runner daemon stop` cover it), the build-mismatch dialog (the app restarts the daemon itself), and a pane waiting for its snapshot (no slow snapshot has been seen; add it if one appears). The notice that `runnerd` stopped uses the app's existing error notice, with an Open log button after three crashes.
 
 Phase 3's host picker and disconnected pane get designed with phase 3.
 
@@ -210,7 +212,7 @@ Phase 3's host picker and disconnected pane get designed with phase 3.
 
 ## Non-goals
 
-- Updates that keep agents running, in phase 1. Phase 2 delivers them.
+- Updates that keep agents running. An update restarts every session (decision 13).
 - Surviving logout or reboot. Phase 1 has no login item or launchd agent; an opt-in start at login arrives with remote machines in phase 3, so a remote machine has a daemon waiting.
 - A menu bar or tray item while the app is closed.
 - Notifications while the app is closed, and a phone or web client. The protocol allows both later.
@@ -224,32 +226,33 @@ Phase 3's host picker and disconnected pane get designed with phase 3.
 Proposed 2026-10-04 and reviewed with Jason on 2026-10-05. He settled 4 and 9 in that review and asked for the spec to be committed; the others stand unless he changes them. The branch, channel, crate and no-downgrade plans settled the same day are in the [plan](../impls/645-runnerd/plan.md).
 
 1. **The daemon owns the state, not only the processes.** Two alternatives were weighed. (B) The issue's original split, in which the app owns state and a background process owns the PTYs. It has a smaller protocol, and an app update would not touch the agents. But nothing coordinates while the app is closed, the CLI still needs the app, and the boundary would have to carry a stream of draft observations from that process's `Term` to the app's delivery gate on every keystroke. (C) Keeping the app process alive in the background after its windows close. It is the cheapest, but every GPUI crash still kills every agent, and remote machines still need a session protocol. Jason's 2026-10-04 lesson from Paseo and Orca, that the state owner must run without the UI, picks this option.
-2. **Exact build match, so an update restarts the daemon and its agents in v1.** The daemon is most of the backend, and every release changes it. A protocol kept stable across Runner's release pace is a discipline worth taking on once, for the smaller session protocol, not for every core request. Phase 2 uses that protocol to keep agents running through an update.
+2. **Exact build match, so an update restarts the daemon and its agents in v1.** The daemon is most of the backend, and every release changes it. A protocol kept stable across Runner's release pace is a discipline worth taking on once, for the smaller session protocol, not for every core request. Remote machines use that protocol (phase 3); a local update restarts the agents (decision 13).
 3. **The authoritative terminal lives in the daemon, with a mirror in the app and a VT snapshot on attach.** The reasons are under The terminal.
 4. **The daemon is `runnerd`, the bundled CLI binary under a second name** (Jason, 2026-10-05). It shows as its own process, and "host" stays free to mean a machine.
 5. **The CLI starts the daemon when none is running.** This makes the CLI work with the app closed, the practical half of decision 1.
 6. **The default quit behaviour is Ask,** with "Don't ask again" leading to the Settings row.
-7. **0.13.0 ships phase 1 on both platforms.** Phases 2 to 4 follow in later releases and do not gate 0.13.0. The order is updates (2), then remote machines (3), then the Windows PC (4).
+7. **0.13.0 ships phase 1 on both platforms.** Phases 3 and 4 follow in later releases and do not gate 0.13.0: remote machines (3), then the Windows PC (4). Phase 2 was dropped (decision 13).
 8. **#795 closes when this spec lands,** with its launch steps carried by phase 3.
 9. **#709 does not go first.** Jason closed it on 2026-10-05 as answered by this spec; its audit moves into 1b.
 10. **Alacritty gets a read-only accessor patch** (Jason, 2026-10-05). The snapshot needs state alacritty keeps private. The patch is vendored during phase 1, and a fork follows only if the accessors go upstream (plan, Mission 1b).
 11. **`runnerd` keeps running once started** (Jason, 2026-10-05). There is no idle exit; see Lifetime under Starting, finding and stopping the daemon.
 12. **When the OS ends `runnerd`, it stops sessions the way Stop Sessions does,** so a reboot resumes them as today's quit at logout does.
+13. **An update restarts every session, permanently** (Jason, 2026-10-06). Phase 2, a second local process that would have kept agents running through updates, is dropped. Agents resume their conversations after the restart, the update dialog shows when agents are working before their turns are lost, and every update reaches the whole stack. Phases 3 and 4 keep their numbers so earlier records still match.
 
 ## Implementation phases
 
 The [implementation plan](../impls/645-runnerd/plan.md) has the detail: each mission's design, the files it touches, its verification, and the sequencing with the rest of 0.13.
 
-**Phase 1: the local daemon, the 0.13.0 gate.** Four PRs, one mission each, in order, each leaving the app fully working. They merge into an umbrella branch, `feat/645-runnerd`, not into `main`. Each one ships on a separate `nightly-runnerd` channel. Jason's Mac install takes every cut and never moves back; problems are fixed forward. Builds without `runnerd` gain a guard that refuses to start while `runnerd` runs. The umbrella lands on `main` once, after Jason has daily-driven it (plan, Branch and channel). Phase 2 gets the same treatment.
+**Phase 1: the local daemon, the 0.13.0 gate.** Four PRs, one mission each, in order, each leaving the app fully working. They merge into an umbrella branch, `feat/645-runnerd`, not into `main`. Each one ships on a separate `nightly-runnerd` channel. Jason's Mac install takes every cut and never moves back; problems are fixed forward. There is no downgrade guard; `runnerd` shuts down cleanly if an older app takes its sockets (plan, Branch and channel). The umbrella lands on `main` once, after Jason has daily-driven it (plan, Branch and channel).
 
 1. **1a, one request surface.** Every app call into the core goes through `DaemonClient` over an in-process transport. Behaviour is identical.
 2. **1b, the terminal moves below the session seam.** The daemon-side model, the app's mirror, frames and the snapshot, all still in one process. Behaviour is identical.
 3. **1c, the daemon process.** `runnerd`, the socket, reattach, crash recovery, and the CLI starting it. Quit still stops sessions.
-4. **1d, lifecycle.** The quit choice, the mismatch and update flows, and the docs.
+4. **1d, lifecycle.** The quit choice, the update dialog, the restart notice, and the docs.
 
-**Phase 2: updates leave agents running.** A session daemon holds the PTYs and speaks a session protocol kept stable across releases; an update restarts only the app and `runnerd`.
+**Phase 2: dropped** (decision 13). It would have kept agents running through updates.
 
-**Phase 3: remote machines over ssh.** Phase 2's session daemon on another machine, reached through `ssh <host> runnerd --stdio`, with the #795 launch steps and the host picker. Supersedes [510](./archive/510-remote-ssh-session.md).
+**Phase 3: remote machines over ssh.** A session daemon on another machine, speaking a session protocol kept stable across releases, reached through `ssh <host> runnerd --stdio`, with the #795 launch steps and the host picker. Supersedes [510](./archive/510-remote-ssh-session.md).
 
 **Phase 4: the Windows PC as a remote machine** for a crew slot.
 
@@ -274,7 +277,7 @@ Phase 1, on macOS and on Windows:
 - Quit with Stop Sessions behaves exactly like today's quit, including resume on the next launch, and leaves no agent process running.
 - Force-quit the app mid-turn: the turn completes, and relaunch reattaches.
 - Kill `runnerd` mid-turn: the app reports it and starts a new daemon, rows are demoted to stopped, and no agent process survives.
-- Install an update with live sessions: the prompt names the working ones, they resume after the relaunch with their conversations, and none is duplicated.
+- Install an update with live sessions: the update dialog shows that an agent is working, the sessions resume after the relaunch with their conversations, and none is duplicated. Launching a manually installed build restarts them the same way and shows the notice.
 - Run `make run` twice with a live development chat: the second build restarts the development daemon without asking and resumes the chat. The production app and the development app run side by side, each with its own daemon.
 - With the app closed, `runner mission list` starts the daemon, `runner daemon status` shows it, it keeps running after the command and after the last session ends, its usage polling pauses while no app is connected, and `runner daemon stop` stops everything.
 - Activity Monitor and Task Manager list the daemon as `runnerd`.
@@ -285,8 +288,6 @@ Phase 1, on macOS and on Windows:
 - **A terminal benchmark gates 1b and 1c,** run on both platforms against `main` before each change: keystroke-to-echo latency through a shell session (p50 and p99), throughput replaying a 50 MB output burst, and a drag-resize of a busy pane side by side with `main`. It passes when p99 echo latency is no more than 1 ms above `main`'s, burst throughput is at least `main`'s, and the resize shows no added stutter. For scale, a local Unix socket round trip measured 7 µs p50 and 27 µs p99 on Jason's Mac on 2026-10-05, at 1.2 GB/s, both through Python, so the real cost is lower. Windows named pipes are measured on the PC before 1c starts.
 - An agent in a daemon the app started can read a file in `~/Documents` after the app quits, with no new prompt.
 - The [full smoke test](../tests/full-smoke-test.md) passes before 0.13.0.
-
-Phase 2: install an update while an agent is mid-turn, and the turn continues; the panes reattach after the relaunch.
 
 Phases 3 and 4, from the issue:
 

@@ -4,7 +4,7 @@ Plan for [feature 645](../../features/645-session-host.md) ([#645](https://githu
 
 ## Status (2026-10-05)
 
-The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. The umbrella branch `feat/645-runnerd` was cut the same day. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)) and 1b ([#806](https://github.com/yicheng47/runner/pull/806)) merged into it on 2026-10-05, and its first nightly went to the regular `nightly` release (see the note under "The `nightly-runnerd` channel"). The downgrade guard lands on `main` before the 1c cut.
+The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. The umbrella branch `feat/645-runnerd` was cut the same day. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)) and 1b ([#806](https://github.com/yicheng47/runner/pull/806)) merged into it on 2026-10-05, and its first nightly went to the regular `nightly` release (see the note under "The `nightly-runnerd` channel"). Mission 1c ([#807](https://github.com/yicheng47/runner/pull/807)) followed on 2026-10-06. The same day the 1d design was drawn and phase 2 was dropped: an update restarts every session (spec decision 13). There is no downgrade guard (Jason, 2026-10-06).
 
 ## Phases
 
@@ -13,11 +13,11 @@ There are four phases, and only phase 1 gates 0.13.0.
 | Phase | What the user gets | Missions | Ships in |
 | --- | --- | --- | --- |
 | 1. The local daemon | Quitting or crashing the app no longer stops agents; missions keep coordinating and the CLI works with the app closed | 4 (1a–1d) | 0.13.0, the gate |
-| 2. Updates leave agents running | An update restarts the app and `runnerd` but not the agents | about 2 | 0.13.x or 0.14 |
+| 2. Dropped (2026-10-06) | An update restarts every session (spec decision 13) | — | — |
 | 3. Remote machines over ssh | A chat or a crew slot on another Mac | about 2 | later |
 | 4. The Windows PC | A crew slot on the Windows PC, such as a tester | 1 | later |
 
-**Why this order.** The 2026-08-18 record of this direction in the [GPUI rewrite plan](../archive/gpui-rewrite/plan.md) ("Post-cutover direction: session daemon") named updates as the motivator: "every update restarts the app and kills running agents; a daemon makes updates and crashes invisible to live missions." Phase 1 makes quit and crash invisible. Updates need a second process that holds the PTYs and speaks a protocol kept stable across releases, because `runnerd` itself changes with every release. Remote machines need that same protocol, carried over ssh. Building it on one machine first (phase 2) is much easier to test than building it over ssh, so phase 3 reuses it. The spec drafted on 2026-10-04 had remote machines as phase 2 and updates as "later", and it now follows this order.
+**Why this order.** The 2026-08-18 record of this direction in the [GPUI rewrite plan](../archive/gpui-rewrite/plan.md) ("Post-cutover direction: session daemon") named updates as the motivator: "every update restarts the app and kills running agents; a daemon makes updates and crashes invisible to live missions." Phase 1 makes quit and crash invisible. Phase 2 was to make updates invisible too, with a second process holding the PTYs and a protocol kept stable across releases. Jason dropped it on 2026-10-06 (spec decision 13): agents resume their conversations after an update, the update dialog shows when agents are working before their turns are lost, and restarting carries every fix to the whole stack. Remote machines still need the stable session protocol, so phase 3 builds it.
 
 ## Branch and channel
 
@@ -37,13 +37,13 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 
 ### The `nightly-runnerd` channel
 
-**Not built (Jason, 2026-10-05).** There are no nightly users besides Jason, so the umbrella's cuts go to the regular `nightly` release, dispatched with `gh workflow run nightly.yml --ref feat/645-runnerd`, and the channel infrastructure below is not built. While the umbrella lives, every nightly is cut from it: a cut from `main` would replace it, and from 1c on would be a downgrade for an install running `runnerd`. The downgrade guard still lands on `main`, before the first cut that carries `runnerd` (1c). The rest of this section is the original design, kept in case a separate channel is needed later.
+**Not built (Jason, 2026-10-05).** There are no nightly users besides Jason, so the umbrella's cuts go to the regular `nightly` release, dispatched with `gh workflow run nightly.yml --ref feat/645-runnerd`, and the channel infrastructure below is not built. While the umbrella lives, every nightly is cut from it: a cut from `main` would replace it, and from 1c on would be a downgrade for an install running `runnerd`. There is no downgrade guard (Jason, 2026-10-06): the answer to going back is 0.13.x being good enough that nobody wants to, and `runnerd` shuts down cleanly if an older app takes its sockets. The rest of this section is the original design, kept in case a separate channel is needed later.
 
 - **A rolling public prerelease, tagged `nightly-runnerd`,** beside `nightly`. It is cut from the umbrella's head, keeps two builds per platform, and is never published as a normal release, so `releases/latest` and the production feeds never see it.
 - **The same app identity as every other channel.** It is `com.wycstudios.runner`, `Runner.app` and the same app-data directory. Installing a `nightly-runnerd` build over Runner switches that install to its feed, and installing any other build switches back; this is the install-to-switch rule the unified nightly already follows. Jason daily-drives it on his real roles, crews and missions, which a separate data directory could not test.
 - **No downgrade, fix forward (Jason, 2026-10-05).** Jason's Mac install takes every cut from the first one and does not go back. A problem found there is fixed on the umbrella and shipped in the next cut. Before the first install, his data directory is backed up, including `runner.db` with its `-wal` and `-shm` files: fixing forward repairs code but cannot bring back a damaged database.
-- **Every build he could still go back to refuses to start while `runnerd` runs.** A build without `runnerd` knows nothing about it: it would take over `mcp.sock`, and its startup sweep would kill `runnerd`'s agents. So a **downgrade guard** lands on `main` with the channel infrastructure, and from then on is in every `nightly` and every 0.12.x patch. At startup, before it opens the database, a build without `runnerd` checks whether `runnerd.lock` is held. If it is, the build does not start, and says that a newer Runner is running its sessions in the background and to quit them with `runner daemon stop` or reinstall the newer build. Checking the lock needs no protocol, so the guard is about thirty lines and can ship now.
-- **`runnerd` defends itself as well.** Every few seconds it checks that `mcp.sock` and `runnerd.sock` are still its own files. If an app older than the guard has replaced them, it stops its sessions and exits, so two processes never own one database. This belongs to 1c.
+- **No downgrade guard** (Jason, 2026-10-06). The original design added a guard to every build without `runnerd`, so it would refuse to start while `runnerd` runs. It was dropped: the answer is making 0.13.x good enough that nobody goes back, and `runnerd`'s self-defence below covers an older app that starts anyway.
+- **`runnerd` defends itself as well.** Every few seconds it checks that `mcp.sock` and `runnerd.sock` are still its own files. If an older app has replaced them, it stops its sessions and exits, so two processes never own one database. This belongs to 1c.
 - **The build says which channel it is.** About and Settings show `Nightly runnerd (<sha>)`.
 - **Cuts happen after each mission merges into the umbrella** (1b, 1c, 1d) and after umbrella-only fixes. They are dispatched by hand, like `nightly`, and never cancel a `nightly` cut. Every cut goes to Jason's Mac and to the Windows PC. Development builds (`make run`), which have their own data directory and daemon, are still where each mission is tested before its PR merges into the umbrella.
 
@@ -55,7 +55,6 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 - The publish job's checks and `script/verify-nightly-appcast.py` take the tag as a parameter.
 - `ci.yaml` runs on pushes to the umbrella and on PRs against it, so mission PRs get both platforms and the channel's CI gate has a run to wait for. This trigger is already in place as the umbrella's own first commit (2026-10-05), and that commit is dropped when the umbrella lands.
 - The `nightly` skill gains `run --channel runnerd`, which requires the umbrella's head instead of `main`'s.
-- The downgrade guard above, with a test that holds `runnerd.lock` and checks that the app refuses to start without touching the database.
 
 ### The checks before landing
 
@@ -104,11 +103,11 @@ This catches problems that only real data shows, without touching the real data.
 - On the Mac, these run on Jason's own install. Jason, 2026-10-05: no separate account is needed, and his production build being affected is acceptable.
 - On the Windows PC, the same checks run, plus the Windows list in 1c.
 
-**E. The downgrade guard.** With `runnerd` running, launching a `nightly` build refuses to start. After `runner daemon stop` it starts normally.
+**E. Dropped:** the downgrade guard (Jason, 2026-10-06).
 
 ### The gate to land on `main`
 
-- Checks A to E (above) all passed on 1d's build.
+- Checks A to D (above) all passed on 1d's build.
 - At least one week of Jason daily-driving 1d's build on the Mac, with no fallback to an older build.
 - The phase 1 checks on the Windows PC.
 - The spec's phase 1 verification list and the [full smoke test](../../tests/full-smoke-test.md) passed on the last cut.
@@ -121,7 +120,7 @@ Jason can shorten or lengthen the week. When the gate passes:
 
 ### Later phases
 
-Phase 2 changes process ownership again, so it gets the same treatment: an umbrella cycle and a channel of its own, reusing `nightly-runnerd`. Phases 3 and 4 decide when they are planned.
+Phases 3 and 4 decide their branch and channel when they are planned.
 
 ## Crates
 
@@ -269,7 +268,7 @@ Brief `645-m3-daemon-process.md`. Crew: codex trio. The QA slot runs live checks
    - `consume_resume_on_launch`, which sizes sessions from the persisted columns.
 
    The app's bootstrap keeps the paths, the sidecar install, connect-or-spawn and the handshake.
-3. **Settings.** `runnerd` reads what it needs from `ui-settings.json` at start: the enabled runtimes (for usage and model discovery), resume on launch, and the mission permission mode. The app keeps pushing changes as requests; `usage_set_enabled` replaces `core.usage.set_enabled`, for example. Each setting has one owner, and the PR carries the inventory.
+3. **Settings.** `runnerd` reads what it needs from `ui-settings.json` at start: the enabled runtimes (for usage and model discovery), and resume on launch. The mission permission mode setting is retired, so 1c keeps the session manager's default and reads no key for it. The app keeps pushing changes as requests; `usage_set_enabled` replaces `core.usage.set_enabled`, for example. Each setting has one owner, and the PR carries the inventory.
 4. **Transport.** `runnerd.sock`, or `\\.\pipe\com.wycstudios.runnerd` (`-dev` for debug builds), through `IpcListener`, owner-only. On Windows that takes an explicit security descriptor, because a pipe created without one grants read access to Everyone; the existing CLI pipe gets the same fix, and both keep rejecting remote clients. A frame is a u32 length, a u8 kind and a payload: JSON for control frames, binary for terminal frames. `runnerd` serves on the existing tokio IPC runtime. The app uses one blocking reader thread and one writer per connection, as the rest of its I/O does, feeding the event thread and the mirror registry.
 5. **Connect or spawn.** Connect with a 500 ms limit.
    - Nothing running: spawn `runnerd` detached (on macOS `setsid` in `pre_exec`, null stdio and the home directory as cwd; on Windows `CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB` and deliberately not `DETACHED_PROCESS`, so `runnerd` has a hidden console its console children inherit), then retry the connection for up to 10 s. On Windows, when breakaway is refused: the CLI refuses to start a daemon (it is inside another Runner session's job, which would take the daemon down with it) and tells the user to open Runner; the app retries without the flag and logs it.
@@ -311,10 +310,10 @@ Brief `645-m4-lifecycle.md`. Design comes first: the spec's Design list, drawn i
 
 **Design.**
 
-1. **Settings → General.** A "When Runner quits" row (`quitBehavior`: `ask`, `keep` or `stop`; default `ask`) and a `runnerd` status line with Stop.
-2. **The quit dialog.** It appears when sessions are live, on ⌘Q, on the Quit menu item and when the last window closes on Windows. "Don't ask again" writes the setting. A quit the OS starts (logout, restart) follows the setting without a dialog; `runnerd` ends with the login session anyway.
-3. **The mismatch dialog:** Restart Them or Quit. Debug builds restart without asking.
-4. **Updates.** When sessions are live, before Sparkle relaunches (through its delegate) and before the Windows updater runs the installer, the app asks, naming any working sessions. It then sends `Shutdown { stop_sessions: true }`, and the new build resumes the sessions.
+1. **Settings → General.** One "When Runner quits" row (`quitBehavior`: `ask`, `keep` or `stop`; default `ask`), a menu, with the live session count in its description. There is no `runnerd` status row and no Stop button (design review, 2026-10-06).
+2. **The quit dialog.** Two choices, Keep them running and Stop them, the second naming any agent that is mid-turn, then Cancel and Quit. The last choice is preselected and Enter quits. It appears when sessions are live, on ⌘Q, on the Quit menu item and when the last window closes on Windows. "Don't ask again" writes the selected choice into the setting. ⌥⌘Q, and the Quit menu item with Option held, is Quit and Stop Sessions, without a dialog. A quit the OS starts (logout, restart) follows the setting without a dialog; `runnerd` ends with the login session anyway.
+3. **A different build restarts without asking.** As 1c already does, the app stops the old daemon with stamping, installs the new sidecar, starts a new daemon and resumes. 1d adds the notice "Restarted N sessions in Runner <version>". There is no mismatch dialog. The notice that `runnerd` stopped gets proper wording, and after three crashes an Open log button.
+4. **Updates.** The normal update dialog says the sessions restart with it; when agents are mid-turn, a small note beside the buttons says how many ("1 agent working"). Before Sparkle relaunches (through its delegate) and before the Windows updater runs the installer, the app sends `Shutdown { stop_sessions: true }`, and the new build resumes the sessions.
 5. **The rename.** `runner-backend` becomes `runner-daemon`, in its directory, its package name and every `runner_backend::` path. By now those are only in the CLI, the crate's own tests and the docs.
 6. **Docs.**
    - Arch §1, §5.5, §5.8, §11, and bets 3, 10 and 12.
@@ -345,19 +344,17 @@ Added on 2026-10-05 at Jason's request. One mission, on `main` after the umbrell
 
 **Crew:** codex duo. Live checks run against `make run` on the development data, under live-test authorization.
 
-## Phase 2 — updates leave agents running
+## Phase 2 — dropped
 
-This is an outline. The detail is written after 1c, before the phase's first mission.
-
-- **A session daemon** holds everything below the `SessionRuntime` seam after 1b: the PTYs and children, the authoritative `TerminalModel`, the hook watchers and key capture.
-- **`runnerd` talks to it over the session protocol:** spawn with a launch spec, stop, input, resize, status, terminal frames, agent events, draft observations and exits. On reattach the session daemon sends a status snapshot so `runnerd`'s reducer can rebuild.
-- **An update restarts the app and `runnerd`, but not the session daemon.** The session daemon restarts into the new build only once it has no live sessions; Zeron's engine does the same.
-- **The session protocol is versioned and compatible across releases.** Changes are additive, and an incompatible change bumps the version. `runnerd` refuses a session daemon it cannot speak to; the agents keep running and their panes say an update is pending.
-- **Open questions:** what the two processes are called, since both would be `runnerd` today; and how each recovers when the other crashes.
+Phase 2 was to keep agents running through updates: a session daemon holding the PTYs below the `SessionRuntime` seam, which an update would not restart, speaking a session protocol kept compatible across releases. Jason dropped it on 2026-10-06 (spec decision 13). An update restarts every session, the agents resume their conversations, and the update dialog shows when agents are working before their turns are lost. The session daemon and its versioned protocol move to phase 3, which needs them for remote machines.
 
 ## Phase 3 — remote machines over ssh
 
-This is an outline, detailed before its first mission. Phase 2's session daemon runs on another machine and is reached through `ssh <host> runnerd --stdio`.
+This is an outline, detailed before its first mission. A session daemon runs on another machine and is reached through `ssh <host> runnerd --stdio`. This phase builds it, with what was outlined for phase 2:
+
+- **The session daemon** holds everything below the `SessionRuntime` seam: the PTYs and children, the authoritative `TerminalModel`, the hook watchers and key capture.
+- **The local `runnerd` talks to it over the session protocol:** spawn with a launch spec, stop, input, resize, status, terminal frames, agent events, draft observations and exits. On reattach the session daemon sends a status snapshot so the local reducer can rebuild.
+- **The session protocol is versioned and compatible across releases,** because the remote's Runner can be a different build. Changes are additive, an incompatible change bumps the version, and a mismatch shows "Update Runner on <host>".
 
 **ssh never starts the remote daemon** (2026-10-05, from Paseo). Paseo's ssh transport is `ssh -T -o BatchMode=yes -W 127.0.0.1:<daemonPort> <host>` (`packages/protocol/src/ssh-transport.ts`), a pipe to a daemon that is already running. Its connectivity docs say "It does not install, start, or configure Paseo on the remote host", and list "start the Paseo daemon on the remote host" as a prerequisite. Runner does the same. `runnerd --stdio` only connects, and the remote daemon runs in the user's own logon there: Runner open on that machine, `runner daemon start` from a terminal there, or an opt-in start at login (a LaunchAgent on macOS, a logon task on Windows). This phase designs that option. Agents then never run inside an ssh logon, so ssh session cleanup cannot kill them, and Keychain, DPAPI and Credential Manager behave as they do at the desk. The same rule applies on Macs, where a daemon started over ssh could leave Claude Code unable to read its credentials from a locked login keychain.
 
@@ -382,7 +379,7 @@ What remains specific to this phase: the user stays logged in on the PC (a test 
 
 ## Decisions that bind
 
-- The spec's decisions 1–8.
+- The spec's decisions 1–13.
 - Every mission is one PR with one commit, and its brief's authorization section says so ([AGENTS.md](../../../AGENTS.md), Crew Missions).
 - Phase 1 missions branch from `feat/645-runnerd`, open their PRs against it, and never merge into `main` on their own; only the umbrella lands on `main` (Branch and channel).
 - **No test starts a daemon in real app data.** A test that spawns `runnerd` uses a temporary app-data directory and endpoint, passes every root in rather than resolving `$HOME`, and kills the daemon on drop.
