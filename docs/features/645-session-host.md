@@ -2,7 +2,7 @@
 
 > Tracking issue: [#645](https://github.com/yicheng47/runner/issues/645)
 > Priority: P1, 0.13, the sole release blocker (phase 1). Platforms: macOS and Windows.
-> Status: drafted 2026-10-04 and reviewed with Jason on 2026-10-05, when it landed on `main`. Missions 1a to 1c are on the umbrella branch; on 2026-10-06 the 1d design was drawn and phase 2 was dropped (decision 13). It starts from the archived [466 spec](./archive/466-sessions-outlive-the-app.md) and the issue body. Decision 1 changes the issue's shape: the daemon owns the state, not only the processes, following the lesson Jason took from Paseo and Orca on 2026-10-04. The issue calls the process the session host; on 2026-10-05 Jason named it `runnerd`, which leaves "host" to mean a machine in phase 3. The implementation plan is in [`docs/impls/645-runnerd/`](../impls/645-runnerd/plan.md). The Remote machines section covers the launch steps [#795](https://github.com/yicheng47/runner/issues/795) asked for, so #795 can close once this spec lands.
+> Status: drafted 2026-10-04 and reviewed with Jason on 2026-10-05, when it landed on `main`. Phase 1's four missions landed on `main` on 2026-10-06 through the umbrella branch ([#811](https://github.com/yicheng47/runner/pull/811)); 0.13.0 is tagged when the plan's gate passes. Phase 2 was dropped (decision 13), and the later phases are tracked in [#808](https://github.com/yicheng47/runner/issues/808). It starts from the archived [466 spec](./archive/466-sessions-outlive-the-app.md) and the issue body. Decision 1 changes the issue's shape: the daemon owns the state, not only the processes, following the lesson Jason took from Paseo and Orca on 2026-10-04. The issue calls the process the session host; on 2026-10-05 Jason named it `runnerd`, which leaves "host" to mean a machine in phase 3. The implementation plan is in [`docs/impls/645-runnerd/`](../impls/645-runnerd/plan.md). The Remote machines section covers the launch steps [#795](https://github.com/yicheng47/runner/issues/795) asked for, so #795 can close once this spec lands.
 
 ## Motivation
 
@@ -142,7 +142,7 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 | --- | --- | --- |
 | The app crashes or is force-quit | keep running | Relaunch reattaches everything. |
 | `runnerd` crashes | Their PTYs close: SIGHUP on macOS, the job object's kill-on-close on Windows. The next daemon's orphan sweep catches stragglers. | The app reports that `runnerd` stopped and starts a new one. Rows are demoted to stopped, as after an app crash today, and resume from their Resume buttons. |
-| `runnerd` crashes 3 times in 5 minutes | — | The app stops restarting it and shows the path to `runnerd.log`, with an Open log button. |
+| `runnerd` crashes 3 times in 5 minutes | — | The app stops restarting it and shows a banner with Open log and Try again. |
 | The machine sleeps | paused | Nothing. Work continues on wake. |
 | Logout or reboot | stop | `runnerd` treats the OS's request to end as Stop Sessions: it marks running sessions to resume, stops them and exits. That is SIGTERM on macOS, and on Windows the logoff and shutdown events its hidden console receives. With resume on launch on, the next daemon start resumes them, which is what today's app does when the OS quits it at logout. |
 
@@ -164,6 +164,8 @@ The router keeps running. Messages nudge inboxes, `session_status` flows, and de
 This replaces 466's rule that the router is offline while the app is closed. Opening the app does not remount any router, because no router stopped, so there is nothing to deliver twice. Routers mount only when a daemon starts, with the replay rules of arch §7.2 unchanged.
 
 ### Remote machines (phase 3)
+
+Tracked in [#808](https://github.com/yicheng47/runner/issues/808) since 2026-10-06, apart from #645, which covers phase 1.
 
 - **A machine reached over ssh runs a session daemon,** built in phase 3: PTYs, authoritative `Term`s, hook feeds and watchers, key capture and conversation probes, with no database, routers or missions. The local daemon stays the mission's owner.
 - **The transport is `ssh <host> runnerd --stdio`,** a thin proxy that connects to the remote's own daemon over its local socket and never starts one. The remote daemon runs in the user's own logon on that machine: Runner open there, `runner daemon start` from a terminal there, or an opt-in start at login. If none is running, the pane says to open Runner on that host. Paseo works the same way: its ssh transport is `ssh -W 127.0.0.1:<port>`, and its docs say to start the daemon on the remote first. Agents therefore never run inside an ssh logon, which settles two Windows questions by construction: OpenSSH killing a session's processes when it closes, and credentials stored with DPAPI or Credential Manager that a key-based ssh logon may not be able to read. The proxy dies with the connection; the daemon and its agents do not. A dropped connection or a sleeping laptop leaves the agents running, and reconnecting reattaches with a snapshot. There is no listening port, no relay and nothing hosted; sshd is the transport.
@@ -198,8 +200,9 @@ Drawn on 2026-10-06 in `design/specs/645-session-host.pen`:
 - The "When Runner quits" row in Settings → General, with its menu open.
 - The update dialog, with the note beside the buttons shown when agents are working.
 - The notice after the app restarts the daemon into a different build.
+- The banner after the third crash in five minutes: a strip under the tab bar of each window's main area, "Runner's background service keeps crashing. Sessions are stopped until it runs again.", with Open log and Try again (1d review, 2026-10-06). Try again resets the restart count and starts the daemon once more. A crash the app recovers from by itself shows a one-line toast instead.
 
-Dropped in that review: a `runnerd` status row with a Stop button in Settings (⌥⌘Q and `runner daemon stop` cover it), the build-mismatch dialog (the app restarts the daemon itself), and a pane waiting for its snapshot (no slow snapshot has been seen; add it if one appears). The notice that `runnerd` stopped uses the app's existing error notice, with an Open log button after three crashes.
+Dropped in that review: a `runnerd` status row with a Stop button in Settings (⌥⌘Q and `runner daemon stop` cover it), the build-mismatch dialog (the app restarts the daemon itself), and a pane waiting for its snapshot (no slow snapshot has been seen; add it if one appears).
 
 Phase 3's host picker and disconnected pane get designed with phase 3.
 
@@ -243,7 +246,7 @@ Proposed 2026-10-04 and reviewed with Jason on 2026-10-05. He settled 4 and 9 in
 
 The [implementation plan](../impls/645-runnerd/plan.md) has the detail: each mission's design, the files it touches, its verification, and the sequencing with the rest of 0.13.
 
-**Phase 1: the local daemon, the 0.13.0 gate.** Four PRs, one mission each, in order, each leaving the app fully working. They merge into an umbrella branch, `feat/645-runnerd`, not into `main`. Each one ships on a separate `nightly-runnerd` channel. Jason's Mac install takes every cut and never moves back; problems are fixed forward. There is no downgrade guard; `runnerd` shuts down cleanly if an older app takes its sockets (plan, Branch and channel). The umbrella lands on `main` once, after Jason has daily-driven it (plan, Branch and channel).
+**Phase 1: the local daemon, the 0.13.0 gate.** Four PRs, one mission each, in order, each leaving the app fully working. They merge into an umbrella branch, `feat/645-runnerd`, not into `main`. Each one ships on a separate `nightly-runnerd` channel. Jason's Mac install takes every cut and never moves back; problems are fixed forward. There is no downgrade guard; `runnerd` shuts down cleanly if an older app takes its sockets (plan, Branch and channel). The umbrella lands on `main` once, as soon as 1d merges into it, and 0.13.0 is tagged after Jason has daily-driven the nightlies from `main` (plan, Branch and channel).
 
 1. **1a, one request surface.** Every app call into the core goes through `DaemonClient` over an in-process transport. Behaviour is identical.
 2. **1b, the terminal moves below the session seam.** The daemon-side model, the app's mirror, frames and the snapshot, all still in one process. Behaviour is identical.
@@ -255,6 +258,8 @@ The [implementation plan](../impls/645-runnerd/plan.md) has the detail: each mis
 **Phase 3: remote machines over ssh.** A session daemon on another machine, speaking a session protocol kept stable across releases, reached through `ssh <host> runnerd --stdio`, with the #795 launch steps and the host picker. Supersedes [510](./archive/510-remote-ssh-session.md).
 
 **Phase 4: the Windows PC as a remote machine** for a crew slot.
+
+Phases 3 and 4, and the CLI's move to the client protocol before them, are tracked in [#808](https://github.com/yicheng47/runner/issues/808) (2026-10-06); #645 closes with phase 1.
 
 ## Risks
 

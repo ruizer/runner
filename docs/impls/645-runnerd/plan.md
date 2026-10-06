@@ -4,7 +4,7 @@ Plan for [feature 645](../../features/645-session-host.md) ([#645](https://githu
 
 ## Status (2026-10-05)
 
-The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. The umbrella branch `feat/645-runnerd` was cut the same day. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)) and 1b ([#806](https://github.com/yicheng47/runner/pull/806)) merged into it on 2026-10-05, and its first nightly went to the regular `nightly` release (see the note under "The `nightly-runnerd` channel"). Mission 1c ([#807](https://github.com/yicheng47/runner/pull/807)) followed on 2026-10-06. The same day the 1d design was drawn and phase 2 was dropped: an update restarts every session (spec decision 13). There is no downgrade guard (Jason, 2026-10-06).
+The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. The umbrella branch `feat/645-runnerd` was cut the same day. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)) and 1b ([#806](https://github.com/yicheng47/runner/pull/806)) merged into it on 2026-10-05, and its first nightly went to the regular `nightly` release (see the note under "The `nightly-runnerd` channel"). Mission 1c ([#807](https://github.com/yicheng47/runner/pull/807)) followed on 2026-10-06, and 1d ([#810](https://github.com/yicheng47/runner/pull/810)) the same day. The umbrella landed on `main` on 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)), and the gate now protects the 0.13.0 tag. Phase 2 and the downgrade guard were dropped (spec decision 13; Branch and channel).
 
 ## Phases
 
@@ -21,7 +21,7 @@ There are four phases, and only phase 1 gates 0.13.0.
 
 ## Branch and channel
 
-Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is built on an umbrella branch, shipped to a separate nightly channel, and reaches `main` once, when it has been lived with. The GPUI rewrite did the same with `gpui-nightly`.
+Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is built on an umbrella branch, shipped to a separate nightly channel, and reaches `main` once. The GPUI rewrite did the same with `gpui-nightly`. On 2026-10-06 Jason moved the landing forward: the umbrella lands on `main` as soon as 1d merges into it, and the gate below protects the 0.13.0 tag instead, since nobody else runs nightlies and stable releases are cut deliberately.
 
 ### The umbrella branch
 
@@ -31,7 +31,7 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 - **Fixes to code the umbrella also touches go to `main` first.** A session or terminal bug found on `main` is fixed there, and reaches the umbrella at its next rebase. A fix for something only the umbrella has stays on the umbrella.
 - **One rule keeps the two lines interchangeable: no schema change on the umbrella.** It adds no migration, changes no event-log shape and changes no CLI output. New settings are new keys that older builds ignore. If a migration becomes necessary, it lands on `main` first in a form both lines can read, as the GPUI rewrite required.
 - **Docs stay on `main`.** The spec, this plan and the log are doc-only changes and go straight to `main`. A mission's brief goes on its mission branch, as AGENTS.md requires, and travels with its commit. Briefs and mission test records stay on the umbrella until it lands, because later missions read them; the landing's cleanup archives them.
-- **Landing.** When phase 1 meets its gate (below), the umbrella reaches `main` as one PR, rebase-merged so the four mission commits stay separate, as #800 was. 0.13.0 is then cut from `main`.
+- **Landing** (Jason, 2026-10-06). When 1d has merged into the umbrella, the umbrella reaches `main` as one PR, rebase-merged so the mission commits stay separate, as #800 was. The umbrella's two CI-only commits are dropped first. Nightlies are cut from `main` again from then on, and 0.13.0 is tagged from `main` when the gate below passes. Once the umbrella lands, `main` can no longer produce a 0.12.x patch; an urgent fix for 0.12 users goes on a branch from the `v0.12.9` tag.
 
 **1a goes on the umbrella too (Jason, 2026-10-05).** He first chose `main` for 1a, because it changes no behaviour and touches the 82 app files every other app change would conflict with. He moved it to the umbrella the same day, so that no change reaches `main` before QA's regression on the umbrella covers it, and so 1a needs no separate smoke test. The cost: app changes that land on `main` while the umbrella lives must be converted to `DaemonClient` at each rebase. The 1a guard test flags every direct core call such a change brings, so none slips through.
 
@@ -58,7 +58,7 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 
 ### The checks before landing
 
-They run while Jason daily-drives the channel, and all of them pass on both platforms before the umbrella lands on `main`. They are recorded in `docs/tests/645-runnerd-switch.md`, which is written when the first run starts, with each row's result, build and date. A failure is fixed on the umbrella and its row runs again on the next cut.
+They run while Jason daily-drives the channel, and all of them pass on both platforms before 0.13.0 is tagged. They are recorded in `docs/tests/645-runnerd-switch.md`, which is written when the first run starts, with each row's result, build and date. A failure is fixed on the umbrella and its row runs again on the next cut.
 
 **A. Automated, in CI on both platforms.**
 - The workspace tests, including the daemon integration tests from 1c.
@@ -105,18 +105,17 @@ This catches problems that only real data shows, without touching the real data.
 
 **E. Dropped:** the downgrade guard (Jason, 2026-10-06).
 
-### The gate to land on `main`
+### The gate to tag 0.13.0
 
-- Checks A to D (above) all passed on 1d's build.
-- At least one week of Jason daily-driving 1d's build on the Mac, with no fallback to an older build.
+- Checks A to D (above) all passed on a build from `main` with 1d.
+- At least one week of Jason daily-driving nightlies from `main` on the Mac, with no fallback to an older build.
 - The phase 1 checks on the Windows PC.
 - The spec's phase 1 verification list and the [full smoke test](../../tests/full-smoke-test.md) passed on the last cut.
 
 Jason can shorten or lengthen the week. When the gate passes:
 
-1. The umbrella lands on `main`, and 0.13.0 is cut from it.
-2. Installs on the channel move back by installing the 0.13.0 or a `nightly` DMG; there is no bridge build.
-3. The `nightly-runnerd` release and tag are deleted by hand, with Jason's authorization, as `nightly-win` was.
+1. 0.13.0 is tagged from `main`.
+2. Nightly installs move to the release by installing the 0.13.0 DMG or through the updater; there is no bridge build.
 
 ### Later phases
 
@@ -325,6 +324,8 @@ Brief `645-m4-lifecycle.md`. Design comes first: the spec's Design list, drawn i
 **Verification:** the spec's phase 1 list, then the [full smoke test](../../tests/full-smoke-test.md), then 0.13.0.
 
 ## After phase 1 — the CLI moves to the client protocol
+
+This and phases 3 and 4 are tracked in [#808](https://github.com/yicheng47/runner/issues/808) since 2026-10-06; #645 closes with phase 1.
 
 Added on 2026-10-05 at Jason's request. One mission, on `main` after the umbrella lands, before phase 3 begins. It does not gate 0.13.0.
 

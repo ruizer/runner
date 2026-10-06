@@ -5644,6 +5644,399 @@
           }
         }
       ]
+    },
+    {
+      "type": "frame",
+      "id": "K3o0Fi",
+      "x": 0,
+      "y": 3300,
+      "name": "Crash notice — banner in the chat area (chosen)",
+      "clip": true,
+      "width": 1440,
+      "height": 900,
+      "fill": "$bg",
+      "children": [
+        {
+          "id": "Oe8kN",
+          "type": "ref",
+          "ref": "N4yXC",
+          "name": "Sidebar",
+          "width": 240,
+          "height": 900
+        },
+        {
+          "type": "frame",
+          "id": "N166k",
+          "name": "Main",
+          "width": "fill_container",
+          "height": "fill_container",
+          "fill": "$bg",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "frame",
+              "id": "lyb2Z",
+              "name": "TabBar",
+              "width": "fill_container",
+              "height": 44,
+              "stroke": "$hairline",
+              "strokeWidth": {
+                "bottom": 1
+              },
+              "strokeAlignment": "inner",
+              "gap": 12,
+              "padding": [
+                0,
+                16
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "Rs5qK",
+                  "name": "tb_left",
+                  "width": "fill_container",
+                  "gap": 10,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "xaEBY",
+                      "name": "layout_ic",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "terminal",
+                      "library": "lucide",
+                      "fill": "$text-mid"
+                    },
+                    {
+                      "type": "text",
+                      "id": "I0e4fk",
+                      "name": "tab_title",
+                      "fill": "$text-hi",
+                      "content": "Claude Code",
+                      "fontFamily": "$font-ui",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "iVOG5",
+                      "name": "kebab",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$text-low"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "FYnmc",
+                      "name": "stop_all",
+                      "width": 12,
+                      "height": 12,
+                      "icon": "square",
+                      "library": "lucide",
+                      "fill": "#E5484D"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "xM2SZ",
+                      "name": "fork_ic",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "git-fork",
+                      "library": "lucide",
+                      "fill": "$text-mid"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "OLzS5",
+                  "name": "tb_right",
+                  "gap": 14,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "Q3kfdW",
+                      "name": "split_ic",
+                      "width": 14,
+                      "height": 14,
+                      "icon": "columns-2",
+                      "library": "lucide",
+                      "fill": "$text-mid"
+                    },
+                    {
+                      "id": "wNox7",
+                      "type": "ref",
+                      "ref": "N0ip6X",
+                      "name": "drawer_ic",
+                      "width": 14,
+                      "height": 14,
+                      "descendants": {
+                        "B64xr": {
+                          "stroke": "$text-mid"
+                        }
+                      }
+                    },
+                    {
+                      "id": "T0YlTh",
+                      "type": "ref",
+                      "ref": "PaUtp",
+                      "enabled": false,
+                      "name": "panel_ic",
+                      "width": 14,
+                      "height": 14,
+                      "descendants": {
+                        "Szlu1": {
+                          "stroke": "$text-mid"
+                        }
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "m8qgil",
+              "name": "Body",
+              "width": "fill_container",
+              "height": "fill_container",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "OMtmB",
+                  "name": "Pane Claude Code",
+                  "clip": true,
+                  "width": "fill_container",
+                  "height": "fill_container",
+                  "fill": "$bg",
+                  "layout": "vertical",
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "O1zGe",
+                      "name": "body",
+                      "clip": true,
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "layout": "vertical",
+                      "gap": 6,
+                      "padding": 16,
+                      "children": [
+                        {
+                          "type": "frame",
+                          "id": "bm6PP",
+                          "name": "claude_box",
+                          "width": "fill_container",
+                          "cornerRadius": 4,
+                          "stroke": "#B56A4C",
+                          "strokeWidth": 1,
+                          "layout": "vertical",
+                          "gap": 8,
+                          "padding": [
+                            14,
+                            16
+                          ],
+                          "children": [
+                            {
+                              "type": "text",
+                              "id": "h6X1o",
+                              "name": "l0",
+                              "fill": "#E0876B",
+                              "content": "Claude Code v2.1.240",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "oozDu",
+                              "name": "l1",
+                              "fill": "$text-hi",
+                              "content": "Welcome back Sihan Yue!",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "600"
+                            },
+                            {
+                              "type": "text",
+                              "id": "Bkpk4",
+                              "name": "l2",
+                              "fill": "$text-mid",
+                              "content": "Fable 5 with xhigh effort · Claude Max · yuesihan@gmail.com's Organization",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            },
+                            {
+                              "type": "text",
+                              "id": "pT1sC",
+                              "name": "l3",
+                              "fill": "$text-mid",
+                              "content": "~/repos",
+                              "fontFamily": "$font-mono",
+                              "fontSize": 12,
+                              "fontWeight": "normal"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "frame",
+                          "id": "wKnae",
+                          "name": "gap",
+                          "width": "fill_container",
+                          "height": "fill_container",
+                          "layout": "vertical"
+                        },
+                        {
+                          "type": "text",
+                          "id": "ZJeqz",
+                          "name": "prompt",
+                          "fill": "$text-hi",
+                          "content": "❯ ▏",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "iWVtt",
+                          "name": "status",
+                          "fill": "#7AA2F7",
+                          "content": "~/repos | Fable 5 · xhigh | US SJC",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        },
+                        {
+                          "type": "text",
+                          "id": "vgtte",
+                          "name": "mode",
+                          "fill": "$warn",
+                          "content": "▸▸ auto mode on (shift+tab to cycle) · ← for agents",
+                          "fontFamily": "$font-mono",
+                          "fontSize": 12,
+                          "fontWeight": "normal"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "KF1fA",
+          "type": "ref",
+          "ref": "WlZj2",
+          "name": "Chat side panel",
+          "height": "fill_container"
+        },
+        {
+          "type": "frame",
+          "id": "G81tWZ",
+          "layoutPosition": "absolute",
+          "x": 240,
+          "y": 44,
+          "name": "crash_banner",
+          "width": 880,
+          "fill": "#22161A",
+          "stroke": "#4A2226",
+          "strokeWidth": {
+            "bottom": 1
+          },
+          "strokeAlignment": "inner",
+          "gap": 10,
+          "padding": [
+            8,
+            12,
+            8,
+            16
+          ],
+          "alignItems": "center",
+          "children": [
+            {
+              "type": "icon",
+              "id": "w2h7Cu",
+              "name": "icon",
+              "width": 15,
+              "height": 15,
+              "icon": "circle-x",
+              "library": "lucide",
+              "fill": "$danger"
+            },
+            {
+              "type": "text",
+              "id": "xYyTB",
+              "name": "message",
+              "fill": "$text-1",
+              "content": "Runner's background service keeps crashing. Sessions are stopped until it runs again.",
+              "fontFamily": "$font-ui",
+              "fontSize": 12,
+              "fontWeight": "normal"
+            },
+            {
+              "type": "frame",
+              "id": "ZOzp1",
+              "name": "sp",
+              "width": "fill_container",
+              "height": 1
+            },
+            {
+              "type": "frame",
+              "id": "d2pUnX",
+              "name": "btn_Open log",
+              "cornerRadius": 7,
+              "padding": [
+                5,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "RuC9c",
+                  "name": "label",
+                  "fill": "$text-2",
+                  "content": "Open log",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 12,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "TD7np",
+              "name": "btn_Try again",
+              "fill": "$raised",
+              "cornerRadius": 7,
+              "padding": [
+                5,
+                10
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "text",
+                  "id": "Jlivd",
+                  "name": "label",
+                  "fill": "$text-1",
+                  "content": "Try again",
+                  "fontFamily": "$font-ui",
+                  "fontSize": 12,
+                  "fontWeight": "500"
+                }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ],
   "themes": {
