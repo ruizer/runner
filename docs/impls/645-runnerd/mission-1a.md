@@ -1,6 +1,6 @@
 # Mission 1a: one request surface
 
-Implementation record for [the brief](../briefs/645-m1-request-surface.md), dated 2026-10-05. Branch `refactor/645-m1-request-surface` lands on `feat/645-runnerd`, per Jason’s feed update. No app or real agent was launched for validation.
+Implementation record for the brief `docs/impls/briefs/645-m1-request-surface.md` (pruned on 2026-10-06; in git history), dated 2026-10-05. Branch `refactor/645-m1-request-surface` lands on `feat/645-runnerd`, per Jason’s feed update. No app or real agent was launched for validation.
 
 ## Request surface
 
