@@ -38,6 +38,8 @@
   ·
   <a href="#功能">功能</a>
   ·
+  <a href="#runner-关闭后-agent-照样工作">后台运行</a>
+  ·
   <a href="#支持的-agent">Agent</a>
   ·
   <a href="#在一个地方管理-mcp-服务与技能">MCP</a>
@@ -63,13 +65,13 @@ Runner 是一个原生桌面应用，用来让命令行编码 agent **一起**�
 - **Chat** — 单个 agent 跑在一个真实终端里，不需要 mission；标签页可以一直分栏到窗口放不下为止。
 - **CLI** — 上面的一切也都有对应命令，agent、脚本和终端前的人都可以自己驱动 Runner。
 
-用 Rust 写成，通过 [gpui-pre](https://github.com/longbridge/gpui-kit) 使用 [Zed](https://zed.dev) 的 GPUI，终端网格用 `alacritty_terminal`，状态存在 SQLite。没有 webview。一切都在你自己的机器上运行和保存。
+用 Rust 写成，通过 [gpui-pre](https://github.com/longbridge/gpui-kit) 使用 [Zed](https://zed.dev) 的 GPUI，终端网格用 `alacritty_terminal`，状态存在 SQLite。没有 webview。会话由后台服务 `runnerd` 持有，所以应用关闭后 agent 照样继续工作；应用和 `runner` 命令都是它的客户端。一切都在你自己的机器上运行和保存。
 
 ## 下载
 
 在[下载页](https://runnersh.dev/downloads/)获取最新版本：macOS（Apple Silicon）是已签名并完成公证的 `.dmg`，Windows 10 1809 或更高版本是已签名的 `Runner-Setup-…-x64.exe` 安装包。Intel Mac、Windows ARM64 和 Linux 暂不支持。
 
-两个平台都支持原地更新，macOS 走 Sparkle，Windows 走 Settings 旁边的更新图标，设置、对话和 mission 都会保留。在 Windows 上，证书积累信誉之前，新版本可能仍会触发 SmartScreen 警告，点 **更多信息 → 仍要运行** 即可继续。
+两个平台都支持原地更新，macOS 走 Sparkle，Windows 走 Settings 旁边的更新图标，设置、对话和 mission 都会保留。更新会重启正在运行的 agent，每个 agent 都会接着自己原来的对话。在 Windows 上，证书积累信誉之前，新版本可能仍会触发 SmartScreen 警告，点 **更多信息 → 仍要运行** 即可继续。
 
 ## 社区
 
@@ -109,7 +111,7 @@ https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 
 ### Mission — 一个 crew 围绕一个目标
 
-启动 mission 会为每个槽位拉起一个实时 PTY，放进一个带标签页的工作区。**feed** 是 crew 协作的地方：一条只追加的事件日志，每条信号都持久化、可回放，所以 mission 能扛住退出或崩溃，`ask_human` 的问题也会在这里等你回答。每个**槽位**都是隔壁标签页里的一个真实终端，跑着 agent 自己的 TUI，你可以看、可以输入，也可以单独停止、恢复或重启这个会话。
+启动 mission 会为每个槽位拉起一个实时 PTY，放进一个带标签页的工作区。**feed** 是 crew 协作的地方：一条只追加的事件日志，每条信号都持久化、可回放，`ask_human` 的问题也会在这里等你回答。Runner 关闭期间 crew 照样干活，它们的问题会留在 feed 里等你回来。每个**槽位**都是隔壁标签页里的一个真实终端，跑着 agent 自己的 TUI，你可以看、可以输入，也可以单独停止、恢复或重启这个会话。
 
 [架构 →](./docs/arch/arch.md)
 
@@ -136,7 +138,7 @@ https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 
 ### 多窗口
 
-macOS 上按 `⇧⌘N`、Windows 上按 `Ctrl+Shift+N` 可以打开更多系统窗口，比如一块屏幕放 mission，另一块放一整墙的 chat。窗口之间会协调共享会话的归属：主窗口持有 PTY，其他显示同一会话的窗口会看到一个接管浮层，而不是一个错乱的终端。
+macOS 上按 `⇧⌘N`、Windows 上按 `Ctrl+Shift+N` 可以打开更多系统窗口，比如一块屏幕放 mission，另一块放一整墙的 chat。窗口之间会协调由谁操作共享会话：同一时间只有一个窗口操作它的终端，其他显示同一会话的窗口会看到只读视图和一个接管浮层，而不是一个错乱的终端。
 
 </td>
 </tr>
@@ -171,12 +173,15 @@ Carbon 和 Runner Light 是 Runner 自己的主题，Catppuccin Mocha 和 Latte 
 </tr>
 </table>
 
+### Runner 关闭后 agent 照样工作
+
+每个 chat 和 mission 都跑在 Runner 的后台服务 `runnerd` 里，而不是应用窗口里。退出 Runner，或者应用崩溃，agent 都会继续干活：crew 成员照样互发消息，给你的问题留在 feed 里等你。重新打开 Runner 会接回同一批正在运行的终端，输出原样都在。**Settings → General → When Runner quits** 可以设为每次询问、让 agent 继续运行，或者停止它们；停止的 agent 会在下次启动时回来，各自接着原来的对话（**Resume running agents on launch**）。在 macOS 上，⌥⌘Q 一步退出并停止会话。应用关闭时 `runner` 命令会自己拉起后台服务，`runner daemon status` 和 `runner daemon stop` 用来查看和停止它。
+
 ### 还有这些
 
-- **重启后 agent 接着干** — 退出会停止所有 agent；下次启动时，退出前还在运行的 chat 和 mission agent 会重新打开，各自接着原来的对话（**Settings → General → Resume running agents on launch**）。崩溃之后，可以在会话所在的面板里手动恢复。应用关闭期间 agent 继续运行的能力已在计划中（[#645](https://github.com/yicheng47/runner/issues/645)）。
 - **项目** — 绑定一次工作目录；在项目里发起的 chat 和 mission 都会继承它的 cwd，并归在侧边栏里自己的分组下。agent 也可以通过 CLI 创建、重命名、归档和删除项目。
 - **Mission 控制** — 停止、恢复或重启单个槽位，不用重启整个 mission；重启的会话会带着最初的任务简报重新开始。mission 固定使用 Bypass 权限，避免无人值守的槽位卡在工具授权提示上。
-- **真实终端** — 每一栏都是跑在 GPU 绘制的 `alacritty_terminal` 网格上的真实 PTY：agent 自己的配色、鼠标上报、输入法（包括拼音）、复制、文件路径粘贴、10,000 行回滚。点击文件路径可在编辑器里打开；选中一段输出可以在侧线程里追问；⌘+ 和 ⌘− 把整个应用从 60% 缩放到 200%。
+- **真实终端** — 每一栏都是跑在 GPU 绘制的 `alacritty_terminal` 网格上的真实 PTY：agent 自己的配色、鼠标上报、输入法（包括拼音）、复制、文件路径粘贴、10,000 行回滚。点击文件路径可在编辑器里打开；⌘+ 和 ⌘− 把整个应用从 60% 缩放到 200%。
 - **终端抽屉** — 每个 chat 和每个 mission 下面都有一个 shell，一个快捷键就能打开，工作目录和上面的 agent 相同：跑一下 agent 刚写的测试、看看 `git status`、tail 一个日志，不用离开当前面板，也不用另开一个终端应用。抽屉里想开几个 shell 都行，下次回来还在原处。
 
 ## 让你的 agent 来驱动 Runner
@@ -189,6 +194,7 @@ runner — operate Runner from a shell or a mission session
 
 USAGE
   runner status
+  runner daemon status|stop
   runner project list|show|create|rename|delete
   runner role list|show|create|update|delete
   runner crew list|show|create|update|delete|add|set|remove|lead|order
@@ -226,7 +232,7 @@ runner mission stop "$mission"
 runner mission archive "$mission"
 ```
 
-agent 使用 `--json`；不加时，列表和详情命令会为人显示表格和可读摘要。退出状态 0 表示成功，1 表示 Runner 拒绝了操作，2 表示用法或引用解析错误，3 表示应用未运行，5 表示沙箱拦住了本地连接。在 mission 内，同一个二进制从环境中取得 mission 和 handle，crew 成员也用它互发消息和信号。真正能复利的地方在于：你日常用的 agent 可以规划好一个修复，派出一个 coder 加 reviewer 的 crew 去实现，然后继续干自己的事，而它拉起的每个会话仍然是一个你随时可以打开查看的真实终端。
+后台服务没有运行时，命令会自己拉起它，所以应用关闭时命令照样可用。agent 使用 `--json`；不加时，列表和详情命令会为人显示表格和可读摘要。退出状态 0 表示成功，1 表示 Runner 拒绝了操作，2 表示用法或引用解析错误，3 表示 Runner 的后台服务没有运行且无法拉起（在 ssh 会话里 CLI 从不拉起它），5 表示沙箱拦住了本地连接。在 mission 内，同一个二进制从环境中取得 mission 和 handle，crew 成员也用它互发消息和信号。真正能复利的地方在于：你日常用的 agent 可以规划好一个修复，派出一个 coder 加 reviewer 的 crew 去实现，然后继续干自己的事，而它拉起的每个会话仍然是一个你随时可以打开查看的真实终端。
 
 ## 支持的 Agent
 
@@ -251,7 +257,7 @@ agent 使用 `--json`；不加时，列表和详情命令会为人显示表格�
 
 ### Antigravity CLI 支持清单
 
-这个分支已在 macOS 上**实现 Antigravity 后续功能**；实际运行验证见[冒烟测试清单](./docs/tests/644-antigravity-smoke.md)。
+Antigravity CLI 从 0.12.3 起提供；实际运行验证见[冒烟测试清单](./docs/tests/644-antigravity-smoke.md)。
 
 - [x] 直接聊天和 crew mission 槽位。
 - [x] 在首轮消息中传入角色人设。

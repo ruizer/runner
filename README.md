@@ -38,6 +38,8 @@
   ·
   <a href="#features">Features</a>
   ·
+  <a href="#agents-keep-working-when-runner-is-closed">Background agents</a>
+  ·
   <a href="#supported-agents">Agents</a>
   ·
   <a href="#mcp-servers-and-skills-managed-in-one-place">MCP</a>
@@ -63,13 +65,13 @@ Runner is a native desktop app for running CLI coding agents **together**. Runni
 - **Chat** — a single agent in a real terminal, no mission required; split a tab as far as the window allows.
 - **CLI** — everything above is a command too, so agents, scripts, and people at a terminal can drive Runner themselves.
 
-Written in Rust on [Zed](https://zed.dev)'s GPUI through [gpui-pre](https://github.com/longbridge/gpui-kit), with `alacritty_terminal` for the grid and SQLite for state. No webview. Everything runs and persists on your machine.
+Written in Rust on [Zed](https://zed.dev)'s GPUI through [gpui-pre](https://github.com/longbridge/gpui-kit), with `alacritty_terminal` for the grid and SQLite for state. No webview. A background service, `runnerd`, owns the sessions, so your agents keep working while the app is closed; the app and the `runner` command are its clients. Everything runs and persists on your machine.
 
 ## Download
 
 Grab the latest build from the [downloads page](https://runnersh.dev/downloads/): a signed and notarized `.dmg` for macOS on Apple Silicon, and a signed `Runner-Setup-…-x64.exe` installer for Windows 10 version 1809 or later. Intel Macs, Windows ARM64, and Linux are not supported.
 
-Both platforms update in place, macOS through Sparkle and Windows through the update icon beside Settings, and keep your settings, chats, and missions. On Windows, SmartScreen may still warn on a fresh release while the certificate builds reputation; **More info → Run anyway** continues.
+Both platforms update in place, macOS through Sparkle and Windows through the update icon beside Settings, and keep your settings, chats, and missions. An update restarts running agents, and each resumes its own conversation. On Windows, SmartScreen may still warn on a fresh release while the certificate builds reputation; **More info → Run anyway** continues.
 
 ## Community
 
@@ -109,7 +111,7 @@ A **role** is a reusable agent configuration: runtime, system prompt, working di
 
 ### Missions — a crew working one goal
 
-Starting a mission spawns one live PTY per slot into a tabbed workspace. The **feed** is where the crew coordinates: an append-only event log, every signal persisted and replayable, so missions survive a quit or crash, and `ask_human` questions surface there for you. Each **slot** is a real terminal one tab over, the agent's own TUI, where you can watch, type, or stop, resume, and restart that session on its own.
+Starting a mission spawns one live PTY per slot into a tabbed workspace. The **feed** is where the crew coordinates: an append-only event log, every signal persisted and replayable, and `ask_human` questions surface there for you. The crew keeps working while Runner is closed, and its questions wait in the feed until you are back. Each **slot** is a real terminal one tab over, the agent's own TUI, where you can watch, type, or stop, resume, and restart that session on its own.
 
 [Architecture →](./docs/arch/arch.md)
 
@@ -136,7 +138,7 @@ Every chat is a real 1:1 PTY with a role, no mission required. Split a tab as fa
 
 ### Multi-window
 
-`⇧⌘N` on macOS or `Ctrl+Shift+N` on Windows opens additional OS windows — a mission on one screen, a wall of chats on the other. Windows coordinate ownership of shared sessions: the primary owns the PTY, and any other window showing the same session gets a hand-off overlay instead of a corrupted terminal.
+`⇧⌘N` on macOS or `Ctrl+Shift+N` on Windows opens additional OS windows — a mission on one screen, a wall of chats on the other. Windows coordinate who drives a shared session: one window drives its terminal, and any other window showing the same session gets a read-only view with a hand-off overlay instead of a corrupted terminal.
 
 </td>
 </tr>
@@ -171,12 +173,15 @@ Carbon and Runner Light are Runner's own themes; Catppuccin Mocha and Latte ride
 </tr>
 </table>
 
+### Agents keep working when Runner is closed
+
+Every chat and mission runs in `runnerd`, Runner's background service, not in the app window. Quit Runner, or let it crash, and the agents carry on: crew members keep messaging each other, and questions for you wait in the feed. Reopening Runner reattaches to the same live terminals with their output intact. **Settings → General → When Runner quits** asks each time, keeps the agents running, or stops them; stopped agents come back on the next launch, each resuming its own conversation (**Resume running agents on launch**). On macOS, ⌥⌘Q quits and stops sessions in one step. The `runner` command starts the service when the app is closed, and `runner daemon status` and `runner daemon stop` inspect and stop it.
+
 ### Also in the box
 
-- **Agents come back after a relaunch** — quitting stops every agent, and the next launch reopens the chats and mission agents that were live, each resuming its own conversation (**Settings → General → Resume running agents on launch**). After a crash, resume a session from its pane. Agents that keep running while Runner is closed are planned in [#645](https://github.com/yicheng47/runner/issues/645).
 - **Projects** — bind a working directory once; chats and missions started inside a project inherit its cwd and stay grouped in their own sidebar section. Agents can create, rename, file into, and delete projects through the CLI too.
 - **Mission controls** — stop, resume, or restart a single slot without restarting the mission; a restarted session comes back fresh with its original brief. Missions use Bypass permissions so unattended slots do not wait at a tool prompt.
-- **Real terminals** — every pane is a real PTY on an `alacritty_terminal` grid drawn on the GPU: the agents' own colours, mouse reporting, IME input (Pinyin included), copy, file-path paste, 10,000 lines of scrollback. Click a file path to open it in your editor; select some output and ask about it in a side thread; ⌘+ and ⌘− zoom the app from 60% to 200%.
+- **Real terminals** — every pane is a real PTY on an `alacritty_terminal` grid drawn on the GPU: the agents' own colours, mouse reporting, IME input (Pinyin included), copy, file-path paste, 10,000 lines of scrollback. Click a file path to open it in your editor; ⌘+ and ⌘− zoom the app from 60% to 200%.
 - **Terminal drawer** — every chat and every mission has a shell beneath it, one shortcut away, opened in the same directory as the agent above: run the tests the agent just wrote, check `git status`, tail a log, without leaving the pane or opening another terminal app. Drawers hold as many shells as you need and come back where you left them.
 
 ## Drive Runner from your agents
@@ -189,6 +194,7 @@ runner — operate Runner from a shell or a mission session
 
 USAGE
   runner status
+  runner daemon status|stop
   runner project list|show|create|rename|delete
   runner role list|show|create|update|delete
   runner crew list|show|create|update|delete|add|set|remove|lead|order
@@ -226,7 +232,7 @@ runner mission stop "$mission"
 runner mission archive "$mission"
 ```
 
-Agents use `--json`; without it, list and show commands render tables and readable summaries for people. Exit status 0 is success, 1 means Runner refused the operation, 2 is a usage or reference error, 3 means the app is not running, and 5 means a sandbox blocked the local connection. Inside a mission, the same binary takes its mission and handle from the environment and is how crew members message and signal each other. The part that compounds: your daily agent can plan a fix, dispatch a coder and reviewer crew to build it, and keep working, while every session it spawned is still a real terminal you can open and watch.
+Commands start Runner's background service when it is not running, so they work with the app closed. Agents use `--json`; without it, list and show commands render tables and readable summaries for people. Exit status 0 is success, 1 means Runner refused the operation, 2 is a usage or reference error, 3 means Runner's background service is not running and could not be started (the CLI never starts it from an ssh session), and 5 means a sandbox blocked the local connection. Inside a mission, the same binary takes its mission and handle from the environment and is how crew members message and signal each other. The part that compounds: your daily agent can plan a fix, dispatch a coder and reviewer crew to build it, and keep working, while every session it spawned is still a real terminal you can open and watch.
 
 ## Supported agents
 
@@ -251,7 +257,7 @@ Agents use `--json`; without it, list and show commands render tables and readab
 
 ### Antigravity CLI checklist
 
-**Antigravity follow-ups are implemented on macOS** in this branch. The [smoke checklist](./docs/tests/644-antigravity-smoke.md) tracks live validation.
+Antigravity CLI shipped in 0.12.3. The [smoke checklist](./docs/tests/644-antigravity-smoke.md) tracks live validation.
 
 - [x] Direct chats and crew mission slots.
 - [x] Role persona delivered with the first turn.
