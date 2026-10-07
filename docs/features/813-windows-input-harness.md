@@ -1,7 +1,7 @@
 # 813 — Live-regression input harness
 
 > Tracking issue: [#813](https://github.com/yicheng47/runner/issues/813)
-> Priority: P2, 0.13. Platforms: Windows first; works on macOS unchanged.
+> Priority: P2, 0.15 with [704](./704-session-send.md), which it builds on (moved from 0.13 on 2026-10-07). Platforms: Windows first; works on macOS unchanged.
 > Status: draft 2026-10-06; builds on [#704](./704-session-send.md).
 
 ## Motivation

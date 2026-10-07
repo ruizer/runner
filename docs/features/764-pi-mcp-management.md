@@ -1,7 +1,7 @@
 # 764 — Support MCP management for Pi
 
 > Tracking issue: [#764](https://github.com/yicheng47/runner/issues/764)
-> Priority: P2, 0.13. Platforms: macOS and Windows.
+> Priority: P2, 0.15 (moved from 0.13 on 2026-10-07). Platforms: macOS and Windows.
 
 ## Motivation
 

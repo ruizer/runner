@@ -2,7 +2,7 @@
 
 > Tracking issue: [#586](https://github.com/yicheng47/runner/issues/586)
 > Priority: P2. Platforms: macOS and Windows, with different process APIs.
-> Milestone: 0.14, after the session host owns PTY process observation.
+> Milestone: 0.16 with remote machines (moved from 0.14 on 2026-10-07), since process observation belongs on the host that owns the PTY.
 > Decision, 2026-09-13: try process detection first; keep Ghostty-style semantic shell integration as a later improvement. No shell detector changes in v0.8.9.
 
 ## Motivation

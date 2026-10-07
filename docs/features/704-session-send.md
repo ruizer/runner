@@ -1,9 +1,9 @@
 # 704 — Send a prompt from one session to another
 
 > Tracking issue: [#704](https://github.com/yicheng47/runner/issues/704)
-> Priority: P1, milestone 0.13 (rescheduled after 0.12.0 shipped; filed P2 and raised to P1 on 2026-09-23). As of 2026-10-03 it remains scheduled alongside [562](./562-mission-spawn.md), with its release-blocker label removed; session host [#645](https://github.com/yicheng47/runner/issues/645) is the headline and sole gate for 0.13.0. Platforms: macOS and Windows.
+> Priority: P1, milestone 0.15 beside [562](./562-mission-spawn.md) (moved from 0.13 on 2026-10-07; filed P2 and raised to P1 on 2026-09-23). Platforms: macOS and Windows.
 > Status: spec, waiting for Jason's comments. No design: the feature has no UI.
-> Related: [562](./562-mission-spawn.md) (missions as containers, 0.13). The two are specced together on purpose: this spec is the terminal layer beside 562's coordination layer, and the section on the boundary below is the architecture decision.
+> Related: [562](./562-mission-spawn.md) (missions as containers, 0.15). The two are specced together on purpose: this spec is the terminal layer beside 562's coordination layer, and the section on the boundary below is the architecture decision.
 > Prior art: Orca's `orca terminal send/read/wait` and `orca orchestration …` (read 2026-09-23 in `~/repos/ai/orca/skill-guides/orca-cli.md` and `skill-guides/orchestration/`).
 
 ## Motivation

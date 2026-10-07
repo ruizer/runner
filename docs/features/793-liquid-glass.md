@@ -1,6 +1,6 @@
 # Liquid glass appearance
 
-Tracking issue: [#793](https://github.com/yicheng47/runner/issues/793). Priority: P2. Status: draft; design decisions open.
+Tracking issue: [#793](https://github.com/yicheng47/runner/issues/793). Priority: P2, the headline of 0.14 (moved from 0.13 on 2026-10-07). Status: draft; design decisions open.
 
 Design: [Liquid glass exploration](../../design/specs/793-liquid-glass.pen). Selected direction: A · Frosted chrome. Primary frames: `DJM0c` (dark) and `P1ZnQS` (light); shared sidebar: `N4yXC`.
 

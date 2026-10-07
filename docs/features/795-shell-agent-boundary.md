@@ -1,7 +1,7 @@
 # 795 — Separate shell lifecycle from agent orchestration
 
 > Tracking issue: [#795](https://github.com/yicheng47/runner/issues/795)
-> Priority: P1, 0.13. Platforms: macOS and Windows.
+> Priority: P1, 0.16 with remote machines (moved from 0.13 on 2026-10-07). Platforms: macOS and Windows.
 > Status: problem and direction recorded on 2026-10-03. On 2026-10-04 it moved to 0.13 as part of the [#645](https://github.com/yicheng47/runner/issues/645) session host design; [the issue comment](https://github.com/yicheng47/runner/issues/795#issuecomment-5980139947) rechecks the evidence below against the code after #791 and lists the launch steps a remote host must run itself. It closes when the #645 spec covers them.
 
 ## Motivation

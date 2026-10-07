@@ -1,6 +1,6 @@
 # 748 — Runner delivers mission updates to the chat that started the mission
 
-> Tracking issue: [#748](https://github.com/yicheng47/runner/issues/748). Priority: P1, milestone 0.13 (moved from 0.12 on 2026-10-03). Platforms: macOS and Windows.
+> Tracking issue: [#748](https://github.com/yicheng47/runner/issues/748). Priority: P1, milestone 0.15 (moved from 0.12 to 0.13 on 2026-10-03, and to 0.15 on 2026-10-07). Platforms: macOS and Windows.
 > Status: spec, waiting for Jason's comments. No design: nothing new is drawn, and the notices are text typed into the chat's own pane.
 > Related: the watch contract from #686 ([test record](../tests/archive/686-watch-cli-started-missions.md)), which this replaces inside Runner chats; [704](./704-session-send.md), whose `RUNNER_SESSION_ID` is pulled forward into 0.12; [562](./562-mission-spawn.md), whose outside seats can later use the same delivery.
 
