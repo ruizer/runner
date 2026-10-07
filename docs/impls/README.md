@@ -6,11 +6,11 @@ A plan stays here while its work is in flight and moves to [`archive/`](./archiv
 
 ## Active
 
-- [`645-runnerd/`](./645-runnerd/plan.md) — `runnerd`, the daemon that owns sessions and state so they outlive the app ([#645](https://github.com/yicheng47/runner/issues/645), 0.13): four phases, phase 1 in four missions on the umbrella branch `feat/645-runnerd`; 1a and 1b merged.
+- [`645-runnerd/`](./645-runnerd/plan.md) — `runnerd`, the daemon that owns sessions and state so they outlive the app ([#645](https://github.com/yicheng47/runner/issues/645)): phase 1 shipped in 0.13.0 on 2026-10-06 through four missions ([#805](https://github.com/yicheng47/runner/pull/805) to [#811](https://github.com/yicheng47/runner/pull/811)), and #645 is closed. The plan still holds the design for [#821](https://github.com/yicheng47/runner/issues/821), the CLI on the client protocol ([PR #822](https://github.com/yicheng47/runner/pull/822), which edits it), and the outline of [#808](https://github.com/yicheng47/runner/issues/808)'s phases 3 and 4; it moves to `archive/` after #822 merges.
 
 ## Archive
 
-- [`733-gpui-pre.md`](./archive/733-gpui-pre.md) — move GPUI from the yanked `gpui-ce` 0.3.3 to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), merged 2026-09-30; not yet in a stable release).
+- [`733-gpui-pre.md`](./archive/733-gpui-pre.md) — move GPUI from the yanked `gpui-ce` 0.3.3 to `gpui-pre =0.3.7` ([#767](https://github.com/yicheng47/runner/pull/767), shipped in 0.12.6 on 2026-10-01).
 
 Shipped plans are in [`archive/`](./archive/) in number order, and each names its PR. Multi-mission programs keep a folder with a condensed README:
 

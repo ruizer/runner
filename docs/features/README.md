@@ -6,7 +6,6 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Active
 
-- [645 — runnerd](./645-session-host.md) — a background daemon, `runnerd`, owns the database, sessions, routers and the CLI socket, and the app becomes a client, so sessions and mission coordination outlive quitting or crashing the app; remote machines over ssh and the Windows PC as a crew slot follow ([#645](https://github.com/yicheng47/runner/issues/645), P1, 0.13, the sole release blocker; spec and [plan](../impls/645-runnerd/plan.md) landed 2026-10-05).
 - [797 — Replace hook-status file feeds with local IPC](./797-hook-status-ipc.md) — native hooks report through a Runner-owned callback using local IPC, with bounded acknowledgment and listener ownership aligned with the session host; cmux and Orca references included ([#797](https://github.com/yicheng47/runner/issues/797), P2, 0.13; implementation design pending).
 - [795 — Separate shell lifecycle from agent orchestration](./795-shell-agent-boundary.md) — shell sessions traverse agent launch and conversation policy through no-op adapters; keep shared process lifecycle while making the shell/agent boundary explicit ([#795](https://github.com/yicheng47/runner/issues/795), P1, 0.13; part of the [#645](https://github.com/yicheng47/runner/issues/645) session host design since 2026-10-04).
 - [748 — Mission updates reach the chat that started the mission](./748-mission-watch-delivery.md) — Runner types a one-line notice into the starting chat for messages to the person, broadcasts, questions, failures and the end, through the slot delivery gate, so Codex chats watch missions with no host facility ([#748](https://github.com/yicheng47/runner/issues/748), P1, 0.13; spec under review).
@@ -23,7 +22,7 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Recently shipped
 
-Reconciled on 2026-10-04 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
+Reconciled on 2026-10-07 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
 
 | Spec | Shipped in |
 | --- | --- |
@@ -39,9 +38,10 @@ Reconciled on 2026-10-04 against closed issues and published releases. These spe
 | [756 — Model and effort in the chat side panel](./archive/756-chat-side-panel-model-effort.md) | 0.12.5, 2026-09-30 |
 | [731 — Role side panel redesign](./archive/731-role-side-panel.md) | 0.12.6, 2026-10-01 |
 | [768 — New role and New crew open their pages](./archive/768-new-role-crew-pages.md) | 0.12.6, 2026-10-01 |
-| [772 — Start chats, terminals and missions from the keyboard](./archive/772-keyboard-create.md) | `main` ([PR #776](https://github.com/yicheng47/runner/pull/776)), 2026-10-02; next 0.12.x |
-| [777 — Runtime adapter trait](./archive/777-runtime-adapter.md) | `main` ([PR #779](https://github.com/yicheng47/runner/pull/779), [#780](https://github.com/yicheng47/runner/pull/780), [#792](https://github.com/yicheng47/runner/pull/792)), 2026-10-03; next 0.12.x, no user-visible change |
-| [791 — Session state: one model for agent status, drafts and conversation identity](./archive/791-session-state.md) | `main` ([PR #796](https://github.com/yicheng47/runner/pull/796), [#798](https://github.com/yicheng47/runner/pull/798), [#800](https://github.com/yicheng47/runner/pull/800)), 2026-10-04; next 0.12.x; fixes #784, #785 and #786, #781 open pending a live check |
+| [772 — Start chats, terminals and missions from the keyboard](./archive/772-keyboard-create.md) | 0.12.8, 2026-10-04 ([PR #776](https://github.com/yicheng47/runner/pull/776)) |
+| [777 — Runtime adapter trait](./archive/777-runtime-adapter.md) | 0.12.8, 2026-10-04 ([PR #779](https://github.com/yicheng47/runner/pull/779), [#780](https://github.com/yicheng47/runner/pull/780), [#792](https://github.com/yicheng47/runner/pull/792)); no user-visible change |
+| [791 — Session state: one model for agent status, drafts and conversation identity](./archive/791-session-state.md) | 0.12.8, 2026-10-04 ([PR #796](https://github.com/yicheng47/runner/pull/796), [#798](https://github.com/yicheng47/runner/pull/798), [#800](https://github.com/yicheng47/runner/pull/800)); fixes #784, #785, #786 and #781 |
+| [645 — runnerd](./645-session-host.md) | 0.13.0, 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)); #645 closed with phase 1, and remote machines over ssh continue as [#808](https://github.com/yicheng47/runner/issues/808). The spec moves to `archive/` once [PR #822](https://github.com/yicheng47/runner/pull/822), which edits it, has merged |
 
 ## Dropped
 
@@ -51,7 +51,7 @@ Considered and deliberately not built; the spec stays in `archive/` as the recor
 - [21 — Import native agent sessions](./archive/21-import-native-sessions.md) ([#176](https://github.com/yicheng47/runner/issues/176)): the CLIs' own resume pickers from a pane cover the need.
 - [24 — Cronjobs](./archive/24-cronjobs.md) ([#193](https://github.com/yicheng47/runner/issues/193)): a resident scheduler is always-on machinery inside a cockpit; `mission start` from an external scheduler covers it.
 - [53 — Session fork](./archive/53-session-fork.md) ([#348](https://github.com/yicheng47/runner/issues/348)): zero reaches in months of use; the native tier returned as spec 60 ([#398](https://github.com/yicheng47/runner/issues/398)).
-- [466 — Sessions outlive the app](./archive/466-sessions-outlive-the-app.md) ([#466](https://github.com/yicheng47/runner/issues/466), 2026-09-02): PTYs stay in-process; the direction returned as the session host ([#645](https://github.com/yicheng47/runner/issues/645), now the sole 0.13 release blocker; moved forward from 0.14 on 2026-10-03).
+- [466 — Sessions outlive the app](./archive/466-sessions-outlive-the-app.md) ([#466](https://github.com/yicheng47/runner/issues/466), 2026-09-02): PTYs stay in-process; the direction returned as the session host, `runnerd` ([#645](https://github.com/yicheng47/runner/issues/645)), shipped in 0.13.0 on 2026-10-06.
 - [491 — Confirm quit while work is running](./archive/491-confirm-quit-running-work.md) ([#491](https://github.com/yicheng47/runner/issues/491), 2026-09-07): a stopgap the session host makes obsolete.
 - [511 — Ask about a selection](./archive/511-ask-about-selection.md) ([#511](https://github.com/yicheng47/runner/issues/511), 2026-09-10): no side thread forked from a selection.
 - [557 — Translucent window backdrop](./archive/557-window-backdrop.md) ([#557](https://github.com/yicheng47/runner/issues/557), 2026-09-11): not important enough to carry.

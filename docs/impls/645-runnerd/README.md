@@ -2,9 +2,9 @@
 
 Implementation record for [feature 645](../../features/645-session-host.md) ([#645](https://github.com/yicheng47/runner/issues/645)). The spec says *what*; this directory says *how, in what order, and what has landed*. This file is the condensed state and the decisions that bind. [plan.md](plan.md) has the phases, the four phase 1 missions in detail and the #709 evaluation; [impl_log.md](impl_log.md) is the dated log. Briefs go in [`../briefs/`](../briefs/) as `645-m{n}-{slug}.md`.
 
-## Status (2026-10-06)
+## Status (2026-10-07)
 
-Phase 1's code is on `main`. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)), 1b ([#806](https://github.com/yicheng47/runner/pull/806)), 1c ([#807](https://github.com/yicheng47/runner/pull/807)) and 1d ([#810](https://github.com/yicheng47/runner/pull/810)) merged into the umbrella on 2026-10-05 and 2026-10-06, each after review, CI on both platforms and QA's live pass on the Mac, and the umbrella landed on `main` on 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)), without its two CI-only commits. Nightlies come from `main` again. 0.13.0 is tagged when the gate passes (plan, The gate to tag 0.13.0): a week of daily use, the Windows PC checks and the named-pipe benchmark, checks A–D, and the full smoke test. Jason's open hand checks: IME, clipboard paste and ⌘-click links on the Mac. The stages after phase 1 are tracked in [#808](https://github.com/yicheng47/runner/issues/808).
+Phase 1 shipped in 0.13.0 on 2026-10-06, and #645 closed on 2026-10-07. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)), 1b ([#806](https://github.com/yicheng47/runner/pull/806)), 1c ([#807](https://github.com/yicheng47/runner/pull/807)) and 1d ([#810](https://github.com/yicheng47/runner/pull/810)) merged into the umbrella, which landed on `main` on 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)). 0.13.0 was tagged the same day, ahead of the plan's gate (Jason: the app is pre-alpha, so fix forward): the week of daily use did not run first, and the Windows PC regression ([#812](https://github.com/yicheng47/runner/pull/812)) ended Incomplete. A code review after the release filed [#815](https://github.com/yicheng47/runner/issues/815) to [#820](https://github.com/yicheng47/runner/issues/820). The CLI's move to the client protocol is [#821](https://github.com/yicheng47/runner/issues/821) ([PR #822](https://github.com/yicheng47/runner/pull/822)), and the remaining stages are [#808](https://github.com/yicheng47/runner/issues/808). This directory moves to `../archive/` once #822, which edits the plan, has merged.
 
 The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) dropped on 2026-10-06, because an update restarts every session; (3) remote machines over ssh, which builds the session daemon and its versioned protocol; (4) the Windows PC. Everything after phase 1 is tracked in [#808](https://github.com/yicheng47/runner/issues/808) since 2026-10-06; #645 closes with phase 1.
 
@@ -24,6 +24,5 @@ The phases: (1) the local daemon, four missions, which gates 0.13.0; (2) dropped
 
 ## Open
 
-- How long the daily-driving gate runs (proposed: one week).
 - Whether to close #795 as covered by the spec. #709 was closed on 2026-10-05.
-- The issue body's Shape section and title predate `runnerd`. The spec file is still named `645-session-host.md`.
+- The spec file is still named `645-session-host.md`.
