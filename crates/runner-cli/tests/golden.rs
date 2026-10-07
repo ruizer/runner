@@ -18,7 +18,7 @@ const EVENTS: [&str; 3] = [
     "01K5ZCJNP00000000000000003",
 ];
 const STAMP: &str = "2026-09-18T10:20:30Z";
-const HEADER: &str = "# Built runner CLI, isolated runnerd, fixed SQLite and event-log fixtures.\n# Each block records argv, exit status, stdout, then non-empty stderr after [stderr].\n# Only unfixed values are normalized: temporary paths (<ROOT>, <HOME>, <APP_DATA>,\n# <SIDECAR>, including platform-native and truncated paths), generated ULIDs (<ULID_n>),\n# generated RFC3339 times (<TIMESTAMP>), daemon PID (<PID>) and build hash (<EXE_SHA256>).\n# Fixture IDs, timestamps, event offsets, whitespace and JSON ordering stay verbatim.\n# Start and resume use a missing executable or unusable cwd. No agents run.\n# Windows status has its own block because command installation is unsupported in debug.\n\n";
+const HEADER: &str = "# Built runner CLI, isolated runnerd, fixed SQLite and event-log fixtures.\n# Each block records argv, exit status, stdout, then non-empty stderr after [stderr].\n# Only unfixed values are normalized: temporary paths (<ROOT>, <HOME>, <APP_DATA>,\n# <SIDECAR>, including platform-native and truncated paths), generated ULIDs (<ULID_n>),\n# generated RFC3339 times (<TIMESTAMP>), daemon PID (<PID>), build hash (<EXE_SHA256>) and crate version (<VERSION>).\n# Fixture IDs, timestamps, event offsets, whitespace and JSON ordering stay verbatim.\n# Start and resume use a missing executable or unusable cwd. No agents run.\n# Windows status has its own block because command installation is unsupported in debug.\n\n";
 
 struct Fixture {
     _root: tempfile::TempDir,
@@ -327,7 +327,13 @@ impl Fixture {
         text = pid.replace_all(&text, "${1}<PID>").into_owned();
         let hash =
             regex::Regex::new(r#"(?m)("exe_sha256":\s*"|^exe_sha256\s+)[a-f0-9]{64}"#).unwrap();
-        hash.replace_all(&text, "${1}<EXE_SHA256>").into_owned()
+        text = hash.replace_all(&text, "${1}<EXE_SHA256>").into_owned();
+        let version = regex::Regex::new(&format!(
+            r#"(?m)("cli_version":"|"app_version":"|^CLI VERSION\s+|^APP VERSION\s+){}"#,
+            regex::escape(env!("CARGO_PKG_VERSION"))
+        ))
+        .unwrap();
+        version.replace_all(&text, "${1}<VERSION>").into_owned()
     }
 }
 

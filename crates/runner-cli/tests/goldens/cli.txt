@@ -2,7 +2,7 @@
 # Each block records argv, exit status, stdout, then non-empty stderr after [stderr].
 # Only unfixed values are normalized: temporary paths (<ROOT>, <HOME>, <APP_DATA>,
 # <SIDECAR>, including platform-native and truncated paths), generated ULIDs (<ULID_n>),
-# generated RFC3339 times (<TIMESTAMP>), daemon PID (<PID>) and build hash (<EXE_SHA256>).
+# generated RFC3339 times (<TIMESTAMP>), daemon PID (<PID>), build hash (<EXE_SHA256>) and crate version (<VERSION>).
 # Fixture IDs, timestamps, event offsets, whitespace and JSON ordering stay verbatim.
 # Start and resume use a missing executable or unusable cwd. No agents run.
 # Windows status has its own block because command installation is unsupported in debug.
@@ -10,8 +10,8 @@
 # platform unix
 $ runner status
 exit 0
-CLI VERSION      0.13.0
-APP VERSION      0.13.0 (dev)
+CLI VERSION      <VERSION>
+APP VERSION      <VERSION> (dev)
 SOCKET           <APP_DATA>/runnerd.sock
 SIDECAR          <SIDECAR>
 SIDECAR PRESENT  true
@@ -28,13 +28,13 @@ missing  <HOME>/.gemini/antigravity-cli/skills/runner-dev
 
 $ runner status --json
 exit 0
-{"cli_version":"0.13.0","app_version":"0.13.0 (dev)","socket":"<APP_DATA>/runnerd.sock","sidecar":"<SIDECAR>","sidecar_present":true,"mode":"outside a mission","command":{"state":"not_installed"},"skills":[{"root":"<HOME>/.claude/skills","folder":"<HOME>/.claude/skills/runner-dev","state":"missing"},{"root":"<HOME>/.agents/skills","folder":"<HOME>/.agents/skills/runner-dev","state":"missing"},{"root":"<HOME>/.trae/skills","folder":"<HOME>/.trae/skills/runner-dev","state":"missing"},{"root":"<HOME>/.gemini/antigravity-cli/skills","folder":"<HOME>/.gemini/antigravity-cli/skills/runner-dev","state":"missing"}]}
+{"cli_version":"<VERSION>","app_version":"<VERSION> (dev)","socket":"<APP_DATA>/runnerd.sock","sidecar":"<SIDECAR>","sidecar_present":true,"mode":"outside a mission","command":{"state":"not_installed"},"skills":[{"root":"<HOME>/.claude/skills","folder":"<HOME>/.claude/skills/runner-dev","state":"missing"},{"root":"<HOME>/.agents/skills","folder":"<HOME>/.agents/skills/runner-dev","state":"missing"},{"root":"<HOME>/.trae/skills","folder":"<HOME>/.trae/skills/runner-dev","state":"missing"},{"root":"<HOME>/.gemini/antigravity-cli/skills","folder":"<HOME>/.gemini/antigravity-cli/skills/runner-dev","state":"missing"}]}
 
 # platform windows
 $ runner status
 exit 0
-CLI VERSION      0.13.0
-APP VERSION      0.13.0 (dev)
+CLI VERSION      <VERSION>
+APP VERSION      <VERSION> (dev)
 SOCKET           <APP_DATA>/runnerd.sock
 SIDECAR          <SIDECAR>
 SIDECAR PRESENT  true
@@ -51,7 +51,7 @@ missing  <HOME>/.gemini/antigravity-cli/skills/runner-dev
 
 $ runner status --json
 exit 0
-{"cli_version":"0.13.0","app_version":"0.13.0 (dev)","socket":"<APP_DATA>/runnerd.sock","sidecar":"<SIDECAR>","sidecar_present":true,"mode":"outside a mission","command":{"state":"unsupported"},"skills":[{"root":"<HOME>/.claude/skills","folder":"<HOME>/.claude/skills/runner-dev","state":"missing"},{"root":"<HOME>/.agents/skills","folder":"<HOME>/.agents/skills/runner-dev","state":"missing"},{"root":"<HOME>/.trae/skills","folder":"<HOME>/.trae/skills/runner-dev","state":"missing"},{"root":"<HOME>/.gemini/antigravity-cli/skills","folder":"<HOME>/.gemini/antigravity-cli/skills/runner-dev","state":"missing"}]}
+{"cli_version":"<VERSION>","app_version":"<VERSION> (dev)","socket":"<APP_DATA>/runnerd.sock","sidecar":"<SIDECAR>","sidecar_present":true,"mode":"outside a mission","command":{"state":"unsupported"},"skills":[{"root":"<HOME>/.claude/skills","folder":"<HOME>/.claude/skills/runner-dev","state":"missing"},{"root":"<HOME>/.agents/skills","folder":"<HOME>/.agents/skills/runner-dev","state":"missing"},{"root":"<HOME>/.trae/skills","folder":"<HOME>/.trae/skills/runner-dev","state":"missing"},{"root":"<HOME>/.gemini/antigravity-cli/skills","folder":"<HOME>/.gemini/antigravity-cli/skills/runner-dev","state":"missing"}]}
 
 # platform all
 $ runner daemon status
