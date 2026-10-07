@@ -1,6 +1,6 @@
 # Runner process and terminal runtime model
 
-Current three-process implementation for [#645](../features/645-session-host.md), updated on 2026-10-06 from the process map on `origin/fix/647-terminal-black-sidebar`. [Architecture](arch.md) covers domain state and coordination; [Concurrency](concurrency.md) covers executors.
+Current three-process implementation for [#645](../features/archive/645-session-host.md), updated on 2026-10-06 from the process map on `origin/fix/647-terminal-black-sidebar`. [Architecture](arch.md) covers domain state and coordination; [Concurrency](concurrency.md) covers executors.
 
 ## OS processes and ownership
 

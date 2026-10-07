@@ -2,11 +2,11 @@
 
 > Tracking issue: [#645](https://github.com/yicheng47/runner/issues/645)
 > Priority: P1, 0.13. Platforms: macOS and Windows.
-> Status: drafted 2026-10-04 and reviewed with Jason on 2026-10-05, when it landed on `main`. Phase 1's four missions landed on `main` on 2026-10-06 through the umbrella branch ([#811](https://github.com/yicheng47/runner/pull/811)) and shipped in 0.13.0 the same day; #645 closed on 2026-10-07. Phase 2 was dropped (decision 13). The CLI's move to the client protocol is [#821](https://github.com/yicheng47/runner/issues/821), and phases 3 and 4 are tracked in [#808](https://github.com/yicheng47/runner/issues/808). It starts from the archived [466 spec](./archive/466-sessions-outlive-the-app.md) and the issue body. Decision 1 changes the issue's shape: the daemon owns the state, not only the processes, following the lesson Jason took from Paseo and Orca on 2026-10-04. The issue calls the process the session host; on 2026-10-05 Jason named it `runnerd`, which leaves "host" to mean a machine in phase 3. The implementation plan is in [`docs/impls/645-runnerd/`](../impls/645-runnerd/plan.md). The Remote machines section covers the launch steps [#795](https://github.com/yicheng47/runner/issues/795) asked for, so #795 can close once this spec lands.
+> Status: drafted 2026-10-04 and reviewed with Jason on 2026-10-05, when it landed on `main`. Phase 1's four missions landed on `main` on 2026-10-06 through the umbrella branch ([#811](https://github.com/yicheng47/runner/pull/811)) and shipped in 0.13.0 the same day; #645 closed on 2026-10-07. Phase 2 was dropped (decision 13). The CLI's move to the client protocol ([#821](https://github.com/yicheng47/runner/issues/821)) merged as [#822](https://github.com/yicheng47/runner/pull/822) on 2026-10-07, when this spec was archived, and phases 3 and 4 are tracked in [#808](https://github.com/yicheng47/runner/issues/808). It starts from the archived [466 spec](./466-sessions-outlive-the-app.md) and the issue body. Decision 1 changes the issue's shape: the daemon owns the state, not only the processes, following the lesson Jason took from Paseo and Orca on 2026-10-04. The issue calls the process the session host; on 2026-10-05 Jason named it `runnerd`, which leaves "host" to mean a machine in phase 3. The implementation plan is in [`docs/impls/645-runnerd/`](../../impls/archive/645-runnerd/plan.md). The Remote machines section covers the launch steps [#795](https://github.com/yicheng47/runner/issues/795) asked for, so #795 can close once this spec lands.
 
 ## Motivation
 
-Every session's PTY lives inside Runner.app. Quitting, updating or crashing the app kills every agent mid-turn, and a crew mission can never run longer than one app process. [466](./archive/466-sessions-outlive-the-app.md) declined a background process on 2026-09-02 as too much machinery for that loss. Jason reversed that on 2026-09-07 when he closed [#491](https://github.com/yicheng47/runner/issues/491) (confirm on quit) in favour of the session host.
+Every session's PTY lives inside Runner.app. Quitting, updating or crashing the app kills every agent mid-turn, and a crew mission can never run longer than one app process. [466](./466-sessions-outlive-the-app.md) declined a background process on 2026-09-02 as too much machinery for that loss. Jason reversed that on 2026-09-07 when he closed [#491](https://github.com/yicheng47/runner/issues/491) (confirm on quit) in favour of the session host.
 
 A second reason arrived on 2026-09-17: crew members on other machines, such as a tester slot on the Windows PC or a coder on a dev box. An ssh reverse tunnel for the `runner` CLI was worked through and rejected, because it leaves hook status, Windows quoting, PATH on a non-interactive shell, sidecar version skew, `cwd` as a local path and agent detection all unsolved. A process running next to the agent solves all of them at once.
 
@@ -84,7 +84,7 @@ Three rules come with it:
 
 The daemon keeps the authoritative `TerminalSession` for every live session. The app keeps a mirror `Term` fed the same bytes, which it paints, selects in and encodes keys against.
 
-- **Only the daemon answers terminal queries:** device attributes, cursor position, colours, kitty keyboard flags and the colour scheme. The mirror discards its replies, so each query gets exactly one answer ([524](./archive/524-double-terminal-query-replies.md)), and agents still get answers while no app is attached.
+- **Only the daemon answers terminal queries:** device attributes, cursor position, colours, kitty keyboard flags and the colour scheme. The mirror discards its replies, so each query gets exactly one answer ([524](./524-double-terminal-query-replies.md)), and agents still get answers while no app is attached.
 - **Draft observations come from the daemon's `Term`**, next to the delivery gate that reads them.
 - **Attach is a snapshot, then the live stream.** Under the lock that records `seq`, the daemon serializes its `Term` to VT bytes: the primary screen with its scrollback, the alternate screen when active, cursor position and style, SGR attributes, the title, and the modes (application cursor keys, bracketed paste, mouse reporting, focus reporting, scroll region, the kitty keyboard stack). The client feeds those bytes into a fresh `Term`, then applies every frame after `seq`.
 - **The snapshot boundary is exact.** The bytes after the snapshot must land in the same parser state on both sides, so the snapshot also carries any escape sequence cut off at its boundary and any synchronized update the daemon's parser is still holding. The plan picks the mechanism; the split-point test under Verification proves it. One per-session lock covers numbering a chunk, queuing it for clients, parsing it, and taking a snapshot together with its subscription, so a client can neither miss nor repeat a chunk.
@@ -93,12 +93,12 @@ The daemon keeps the authoritative `TerminalSession` for every live session. The
 - **Resize feels as it does today.** The pane that owns the size resizes its mirror at once, in the same call, as `TerminalSession::resize` does now, and sends `Resize`; the daemon resizes the PTY and its own `Term` when the frame arrives. Bytes already in flight reflow on the mirror as they do today. Another client showing the same session follows the `Resized` frame the daemon emits.
 - **Everything else in the terminal stays local to the app:** painting, glyph shaping, IME, selection, copy, links and scrolling through scrollback never touch the socket. Only output bytes come in and input bytes go out.
 - **Palette.** The app sends the theme palette on connect and on every theme change, and the daemon answers colour queries with it.
-- **Crate boundary.** `runner-terminal` stops depending on `runner-backend`. The backend depends on it for the daemon's terminal, and the app depends on it for the mirror. More broadly, a new `protocol` module in `runner-core` holds everything that crosses the socket. After phase 1, the app depends only on `runner-core` and `runner-terminal`, never on the daemon's code, and `runner-backend` is renamed `runner-daemon` ([plan](../impls/645-runnerd/plan.md#crates)).
-- **The engine moves unchanged, and it stays Runner's own reader.** [#709](https://github.com/yicheng47/runner/issues/709) asked whether to adopt alacritty's `tty` and `EventLoop` instead. A daemon has to forward raw bytes to the mirror and to its own observers, and at the pinned 0.26.0 the event loop parses bytes without exposing them, except through a reference-test file tap. #709 therefore does not go first, and its audit checklist moves into 1b ([plan](../impls/645-runnerd/plan.md#709-does-not-go-first)).
+- **Crate boundary.** `runner-terminal` stops depending on `runner-backend`. The backend depends on it for the daemon's terminal, and the app depends on it for the mirror. More broadly, a new `protocol` module in `runner-core` holds everything that crosses the socket. After phase 1, the app depends only on `runner-core` and `runner-terminal`, never on the daemon's code, and `runner-backend` is renamed `runner-daemon` ([plan](../../impls/archive/645-runnerd/plan.md#crates)).
+- **The engine moves unchanged, and it stays Runner's own reader.** [#709](https://github.com/yicheng47/runner/issues/709) asked whether to adopt alacritty's `tty` and `EventLoop` instead. A daemon has to forward raw bytes to the mirror and to its own observers, and at the pinned 0.26.0 the event loop parses bytes without exposing them, except through a reference-test file tap. #709 therefore does not go first, and its audit checklist moves into 1b ([plan](../../impls/archive/645-runnerd/plan.md#709-does-not-go-first)).
 
 Two alternatives were rejected. A raw byte ring buffer replayed on attach starts a TUI in the wrong modes when it begins mid-stream, and is unbounded when it does not. Sending grid diffs would make a rendering protocol to maintain. The cost of the chosen design is two `Term`s per live session, which doubles terminal memory in the arch §11.4 cost model. At ten or so sessions that is acceptable.
 
-**This was tried before, and failed for reasons that no longer apply.** The Tauri app's tmux runtime ([impl 0004](../impls/archive/0004-tmux-session-runtime.md)) rebuilt screens from `tmux capture-pane`, rendered text that drops modes such as the alternate screen, which caused the stacked redraws of #150 and [0009](../impls/archive/0009-terminal-alt-screen-reattach.md). [PR #157](https://github.com/yicheng47/runner/pull/157) then tried a daemon with a headless alacritty `Term` and a serializer, and was closed after one review for four problems ([0011](../impls/archive/0011-pty-host-terminal-runtime.md) §"Why no headless emulator"). [Spec 42](./archive/42-headless-terminal-model.md) records the raw-replay workarounds that followed and lost Claude Code's history. Against #157's four:
+**This was tried before, and failed for reasons that no longer apply.** The Tauri app's tmux runtime ([impl 0004](../../impls/archive/0004-tmux-session-runtime.md)) rebuilt screens from `tmux capture-pane`, rendered text that drops modes such as the alternate screen, which caused the stacked redraws of #150 and [0009](../../impls/archive/0009-terminal-alt-screen-reattach.md). [PR #157](https://github.com/yicheng47/runner/pull/157) then tried a daemon with a headless alacritty `Term` and a serializer, and was closed after one review for four problems ([0011](../../impls/archive/0011-pty-host-terminal-runtime.md) §"Why no headless emulator"). [Spec 42](./42-headless-terminal-model.md) records the raw-replay workarounds that followed and lost Claude Code's history. Against #157's four:
 
 1. **Two parsers had to agree,** alacritty in the daemon and xterm.js in the webview. Now both sides run the same `alacritty_terminal` crate at the same version, from this workspace, over the same bytes. Since parsing is deterministic, the copies cannot disagree on the live path.
 2. **The serializer had to restore every mode.** That is still true, and it is the one hard part left. It is bounded by alacritty's own mode set, and the round-trip and split-point tests check it against real recordings.
@@ -150,7 +150,7 @@ Orca runs this design in production with `@xterm/headless` and lists what it hit
 
 The same design runs on Windows, and most of it is already there: the named pipe in `ipc.rs` serves the CLI today; each agent's job object kills the agent when its owner's handle closes, so a `runnerd` crash stops agents as an app crash does today; ConPTY works from a process with no visible window; and the hook reporters write the same feeds. Four points are specific to Windows:
 
-- **ConPTY beside `runnerd.exe`.** `portable-pty` loads the bundled `conpty.dll` from beside the running executable ([windows.md](../arch/windows.md)). The sidecar install therefore copies `conpty.dll` and `OpenConsole.exe` into `<app data>\bin` with `runnerd.exe`. Without them, sessions fall back to the inbox conhost, and Codex redraws split again ([492](./archive/492-windows-terminal-output-latency.md)). They are replaced only while no daemon runs, like `runnerd.exe`.
+- **ConPTY beside `runnerd.exe`.** `portable-pty` loads the bundled `conpty.dll` from beside the running executable ([windows.md](../../arch/windows.md)). The sidecar install therefore copies `conpty.dll` and `OpenConsole.exe` into `<app data>\bin` with `runnerd.exe`. Without them, sessions fall back to the inbox conhost, and Codex redraws split again ([492](./492-windows-terminal-output-latency.md)). They are replaced only while no daemon runs, like `runnerd.exe`.
 - **An owner-only pipe.** Without a security descriptor, a named pipe grants read access to Everyone. `runnerd`'s pipe, and the existing CLI pipe, get an explicit owner-only one and keep rejecting remote clients.
 - **Breakaway can be refused.** Runner's own session jobs forbid breakaway, so a `runnerd` that a `runner` command started from inside another Runner session would end with that session. When breakaway fails, the CLI does not start a daemon; it says to open Runner. The app retries without the flag only when its own launcher's job forbids breakaway, and logs it.
 - **The installer.** The update quit leaves `runnerd` running; the new build stops and replaces it on hash mismatch. The installer already renames files in use aside, and the files `runnerd` runs from live in app data, not in the install directory.
@@ -159,7 +159,7 @@ Measuring named-pipe latency on the PC is part of 1c's preparation.
 
 ### Missions while the app is closed
 
-The router keeps running. Messages nudge inboxes, `session_status` flows, and deliveries pass the gate as usual. `ask_human` appends its `human_question` and waits, to be answered with `runner mission answer` or when the app opens. Desktop notifications ([#701](./701-desktop-notifications.md)) are drawn by the app, so none appear while it is closed. Mission notices into a chat ([748](./748-mission-watch-delivery.md)) keep flowing, which changes that spec's "Runner quits" case.
+The router keeps running. Messages nudge inboxes, `session_status` flows, and deliveries pass the gate as usual. `ask_human` appends its `human_question` and waits, to be answered with `runner mission answer` or when the app opens. Desktop notifications ([#701](../701-desktop-notifications.md)) are drawn by the app, so none appear while it is closed. Mission notices into a chat ([748](../748-mission-watch-delivery.md)) keep flowing, which changes that spec's "Runner quits" case.
 
 This replaces 466's rule that the router is offline while the app is closed. Opening the app does not remount any router, because no router stopped, so there is nothing to deliver twice. Routers mount only when a daemon starts, with the replay rules of arch §7.2 unchanged.
 
@@ -190,7 +190,7 @@ The launch spec therefore names machine-side files by role, such as the system p
 
 ### The Windows PC as a remote machine (phase 4)
 
-The Windows PC runs a crew slot for a Mac's mission: OpenSSH Server, `runnerd --stdio` on Windows, ConPTY, argv with no quoting layer, the `.cmd` first-turn paste running on the machine where [610](./archive/610-windows-hook-status.md) proved it, and the PowerShell hook reporters local to it. A Windows machine's own local daemon is part of phase 1.
+The Windows PC runs a crew slot for a Mac's mission: OpenSSH Server, `runnerd --stdio` on Windows, ConPTY, argv with no quoting layer, the `.cmd` first-turn paste running on the machine where [610](./610-windows-hook-status.md) proved it, and the PowerShell hook reporters local to it. A Windows machine's own local daemon is part of phase 1.
 
 ## Design
 
@@ -209,7 +209,7 @@ Phase 3's host picker and disconnected pane get designed with phase 3.
 ## Rules
 
 - Agents see no change: argv, prompts and first turns are identical, and the environment differs only in the cleaned `PATH` described above.
-- `events.ndjson`, `sessions` rows and CLI output keep their shape. The CLI gains only `runner daemon status` and `runner daemon stop`. After phase 1, the CLI moves onto the client protocol, and the MCP server goes. The old MCP endpoint stays as an accept-and-close sentinel against a 0.12 app; CLI output stays unchanged except for the status endpoint and follow-delivery wording ([plan](../impls/645-runnerd/plan.md#after-phase-1--the-cli-moves-to-the-client-protocol)).
+- `events.ndjson`, `sessions` rows and CLI output keep their shape. The CLI gains only `runner daemon status` and `runner daemon stop`. After phase 1, the CLI moves onto the client protocol, and the MCP server goes. The old MCP endpoint stays as an accept-and-close sentinel against a 0.12 app; CLI output stays unchanged except for the status endpoint and follow-delivery wording ([plan](../../impls/archive/645-runnerd/plan.md#after-phase-1--the-cli-moves-to-the-client-protocol)).
 - Tests never start a daemon in real app data. They use temporary app-data directories and endpoints, with every root passed in rather than resolved from `$HOME` (the lesson of the #648 skill leak).
 - Every PR leaves both platforms working, with Windows-only paths covered on Windows CI.
 
@@ -222,11 +222,11 @@ Phase 3's host picker and disconnected pane get designed with phase 3.
 - Reading a remote machine's files from the app; Runner is not an ADE.
 - Registering MCP servers or managing skills on a remote machine in v1.
 - Sandboxing, federation between two daemons, and any hosted relay.
-- Adopting alacritty's event loop (#709; see The terminal), and moving hook status to local IPC ([#797](./797-hook-status-ipc.md)). When #797 lands, its listener belongs in the daemon, which is now always running.
+- Adopting alacritty's event loop (#709; see The terminal), and moving hook status to local IPC ([#797](../797-hook-status-ipc.md)). When #797 lands, its listener belongs in the daemon, which is now always running.
 
 ## Decisions
 
-Proposed 2026-10-04 and reviewed with Jason on 2026-10-05. He settled 4 and 9 in that review and asked for the spec to be committed; the others stand unless he changes them. The branch, channel, crate and no-downgrade plans settled the same day are in the [plan](../impls/645-runnerd/plan.md).
+Proposed 2026-10-04 and reviewed with Jason on 2026-10-05. He settled 4 and 9 in that review and asked for the spec to be committed; the others stand unless he changes them. The branch, channel, crate and no-downgrade plans settled the same day are in the [plan](../../impls/archive/645-runnerd/plan.md).
 
 1. **The daemon owns the state, not only the processes.** Two alternatives were weighed. (B) The issue's original split, in which the app owns state and a background process owns the PTYs. It has a smaller protocol, and an app update would not touch the agents. But nothing coordinates while the app is closed, the CLI still needs the app, and the boundary would have to carry a stream of draft observations from that process's `Term` to the app's delivery gate on every keystroke. (C) Keeping the app process alive in the background after its windows close. It is the cheapest, but every GPUI crash still kills every agent, and remote machines still need a session protocol. Jason's 2026-10-04 lesson from Paseo and Orca, that the state owner must run without the UI, picks this option.
 2. **Exact build match, so an update restarts the daemon and its agents in v1.** The daemon is most of the backend, and every release changes it. A protocol kept stable across Runner's release pace is a discipline worth taking on once, for the smaller session protocol, not for every core request. Remote machines use that protocol (phase 3); a local update restarts the agents (decision 13).
@@ -244,7 +244,7 @@ Proposed 2026-10-04 and reviewed with Jason on 2026-10-05. He settled 4 and 9 in
 
 ## Implementation phases
 
-The [implementation plan](../impls/645-runnerd/plan.md) has the detail: each mission's design, the files it touches, its verification, and the sequencing with the rest of 0.13.
+The [implementation plan](../../impls/archive/645-runnerd/plan.md) has the detail: each mission's design, the files it touches, its verification, and the sequencing with the rest of 0.13.
 
 **Phase 1: the local daemon, the 0.13.0 gate.** Four PRs, one mission each, in order, each leaving the app fully working. They merge into an umbrella branch, `feat/645-runnerd`, not into `main`. Each one ships on a separate `nightly-runnerd` channel. Jason's Mac install takes every cut and never moves back; problems are fixed forward. There is no downgrade guard; `runnerd` shuts down cleanly if an older app takes its sockets (plan, Branch and channel). The umbrella lands on `main` once, as soon as 1d merges into it, and 0.13.0 is tagged after Jason has daily-driven the nightlies from `main` (plan, Branch and channel).
 
@@ -255,7 +255,7 @@ The [implementation plan](../impls/645-runnerd/plan.md) has the detail: each mis
 
 **Phase 2: dropped** (decision 13). It would have kept agents running through updates.
 
-**Phase 3: remote machines over ssh.** A session daemon on another machine, speaking a session protocol kept stable across releases, reached through `ssh <host> runnerd --stdio`, with the #795 launch steps and the host picker. Supersedes [510](./archive/510-remote-ssh-session.md).
+**Phase 3: remote machines over ssh.** A session daemon on another machine, speaking a session protocol kept stable across releases, reached through `ssh <host> runnerd --stdio`, with the #795 launch steps and the host picker. Supersedes [510](./510-remote-ssh-session.md).
 
 **Phase 4: the Windows PC as a remote machine** for a crew slot.
 
@@ -292,7 +292,7 @@ Phase 1, on macOS and on Windows:
 - A typed draft still holds a crew delivery, as in the #791 smoke.
 - **A terminal benchmark gates 1b and 1c,** run on both platforms against `main` before each change: keystroke-to-echo latency through a shell session (p50 and p99), throughput replaying a 50 MB output burst, and a drag-resize of a busy pane side by side with `main`. It passes when p99 echo latency is no more than 1 ms above `main`'s, burst throughput is at least `main`'s, and the resize shows no added stutter. For scale, a local Unix socket round trip measured 7 µs p50 and 27 µs p99 on Jason's Mac on 2026-10-05, at 1.2 GB/s, both through Python, so the real cost is lower. Windows named pipes are measured on the PC before 1c starts.
 - An agent in a daemon the app started can read a file in `~/Documents` after the app quits, with no new prompt.
-- The [full smoke test](../tests/full-smoke-test.md) passes before 0.13.0.
+- The [full smoke test](../../tests/full-smoke-test.md) passes before 0.13.0.
 
 Phases 3 and 4, from the issue:
 
@@ -309,4 +309,4 @@ Phases 3 and 4, from the issue:
 - `crates/runner-terminal/src/terminal.rs`: `TerminalSession`, `TerminalBridge`, `feed_output`, `observe_parsed`, the `PtyWrite` reply path; `replay.rs` and `fixtures/` for the round-trip test.
 - `crates/runner-backend/src/cli_install.rs`: `install_runner_cli`; `crates/runner-cli/`: the socket client and its exit codes.
 - `crates/runner-backend/src/session/manager/spawn.rs`, `session/system_prompt.rs`, `shell_integration.rs`, `runtimes/*`: the #795 launch steps.
-- [arch §5](../arch/arch.md#5-pty-session-runtime), §7.2, §8.5 and §11, [`concurrency.md`](../arch/concurrency.md), and the #647 process-model draft on branch `fix/647-terminal-black-sidebar` (`docs/arch/process-model.md`), which maps today's per-session threads.
+- [arch §5](../../arch/arch.md#5-pty-session-runtime), §7.2, §8.5 and §11, [`concurrency.md`](../../arch/concurrency.md), and the #647 process-model draft on branch `fix/647-terminal-black-sidebar` (`docs/arch/process-model.md`), which maps today's per-session threads.

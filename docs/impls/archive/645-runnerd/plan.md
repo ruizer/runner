@@ -1,10 +1,10 @@
 # runnerd — implementation plan
 
-Plan for [feature 645](../../features/645-session-host.md) ([#645](https://github.com/yicheng47/runner/issues/645), milestone 0.13, closed 2026-10-07). The spec says what and why. This file says how it lands: the phases, the missions, what each one touches, how each is verified, and what reading the code found. [README.md](README.md) holds the condensed state, [impl_log.md](impl_log.md) the dated log, and the briefs go in [`../briefs/`](../briefs/) as `645-m{n}-{slug}.md`.
+Plan for [feature 645](../../../features/archive/645-session-host.md) ([#645](https://github.com/yicheng47/runner/issues/645), milestone 0.13, closed 2026-10-07). The spec says what and why. This file says how it lands: the phases, the missions, what each one touches, how each is verified, and what reading the code found. [README.md](README.md) holds the condensed state, [impl_log.md](impl_log.md) the dated log, and the briefs go in [`../briefs/`](../../briefs/) as `645-m{n}-{slug}.md`.
 
 ## Status (2026-10-07)
 
-Phase 1 shipped in 0.13.0 on 2026-10-06, tagged the day the umbrella landed instead of after the gate below (Jason: the app is pre-alpha, so fix forward), and #645 closed on 2026-10-07. The CLI's move to the client protocol ("After phase 1") is [#821](https://github.com/yicheng47/runner/issues/821), in [PR #822](https://github.com/yicheng47/runner/pull/822); phases 3 and 4 are [#808](https://github.com/yicheng47/runner/issues/808). The paragraph below is the record up to the landing.
+Phase 1 shipped in 0.13.0 on 2026-10-06, tagged the day the umbrella landed instead of after the gate below (Jason: the app is pre-alpha, so fix forward), and #645 closed on 2026-10-07. The CLI's move to the client protocol ("After phase 1", [#821](https://github.com/yicheng47/runner/issues/821)) merged as [#822](https://github.com/yicheng47/runner/pull/822) on 2026-10-07, when this plan was archived; phases 3 and 4 are [#808](https://github.com/yicheng47/runner/issues/808). The paragraph below is the record up to the landing.
 
 The spec was drafted on 2026-10-04, reviewed with Jason on 2026-10-05, and landed on `main` with this plan the same day. In that review the process was renamed `runnerd`, the terminal design was checked against the tmux era and PR #157, #709 was closed, and the branch, channel, crate and no-downgrade plans below were settled. The umbrella branch `feat/645-runnerd` was cut the same day. Missions 1a ([#805](https://github.com/yicheng47/runner/pull/805)) and 1b ([#806](https://github.com/yicheng47/runner/pull/806)) merged into it on 2026-10-05, and its first nightly went to the regular `nightly` release (see the note under "The `nightly-runnerd` channel"). Mission 1c ([#807](https://github.com/yicheng47/runner/pull/807)) followed on 2026-10-06, and 1d ([#810](https://github.com/yicheng47/runner/pull/810)) the same day. The umbrella landed on `main` on 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)), and the gate now protects the 0.13.0 tag. Phase 2 and the downgrade guard were dropped (spec decision 13; Branch and channel).
 
@@ -19,7 +19,7 @@ There are four phases, and only phase 1 gates 0.13.0.
 | 3. Remote machines over ssh | A chat or a crew slot on another Mac | about 2 | later |
 | 4. The Windows PC | A crew slot on the Windows PC, such as a tester | 1 | later |
 
-**Why this order.** The 2026-08-18 record of this direction in the [GPUI rewrite plan](../archive/gpui-rewrite/plan.md) ("Post-cutover direction: session daemon") named updates as the motivator: "every update restarts the app and kills running agents; a daemon makes updates and crashes invisible to live missions." Phase 1 makes quit and crash invisible. Phase 2 was to make updates invisible too, with a second process holding the PTYs and a protocol kept stable across releases. Jason dropped it on 2026-10-06 (spec decision 13): agents resume their conversations after an update, the update dialog shows when agents are working before their turns are lost, and restarting carries every fix to the whole stack. Remote machines still need the stable session protocol, so phase 3 builds it.
+**Why this order.** The 2026-08-18 record of this direction in the [GPUI rewrite plan](../gpui-rewrite/plan.md) ("Post-cutover direction: session daemon") named updates as the motivator: "every update restarts the app and kills running agents; a daemon makes updates and crashes invisible to live missions." Phase 1 makes quit and crash invisible. Phase 2 was to make updates invisible too, with a second process holding the PTYs and a protocol kept stable across releases. Jason dropped it on 2026-10-06 (spec decision 13): agents resume their conversations after an update, the update dialog shows when agents are working before their turns are lost, and restarting carries every fix to the whole stack. Remote machines still need the stable session protocol, so phase 3 builds it.
 
 ## Branch and channel
 
@@ -29,7 +29,7 @@ Phase 1 does not land on `main` mission by mission (Jason, 2026-10-05). It is bu
 
 - **`feat/645-runnerd`, cut from `origin/main`** after the spec and this plan land on `main`, in the worktree `.worktrees/feat-645-runnerd`.
 - **Each mission branches from the umbrella,** for example `feat/645-m2-terminal-split` in `.worktrees/feat-645-m2-terminal-split`, and opens its PR against the umbrella. It still lands as one commit. CI must be green on both platforms before it merges, as on `main`.
-- **The umbrella follows `main` by rebase, never by merge** ([AGENTS.md](../../../AGENTS.md)). It is rebased onto `origin/main` between missions, never while a mission branch is open from it, and pushed with `--force-with-lease`. The next mission then branches from the rebased umbrella. It is also rebased before every channel cut, so each nightly carries `main`'s fixes.
+- **The umbrella follows `main` by rebase, never by merge** ([AGENTS.md](../../../../AGENTS.md)). It is rebased onto `origin/main` between missions, never while a mission branch is open from it, and pushed with `--force-with-lease`. The next mission then branches from the rebased umbrella. It is also rebased before every channel cut, so each nightly carries `main`'s fixes.
 - **Fixes to code the umbrella also touches go to `main` first.** A session or terminal bug found on `main` is fixed there, and reaches the umbrella at its next rebase. A fix for something only the umbrella has stays on the umbrella.
 - **One rule keeps the two lines interchangeable: no schema change on the umbrella.** It adds no migration, changes no event-log shape and changes no CLI output. New settings are new keys that older builds ignore. If a migration becomes necessary, it lands on `main` first in a form both lines can read, as the GPUI rewrite required.
 - **Docs stay on `main`.** The spec, this plan and the log are doc-only changes and go straight to `main`. A mission's brief goes on its mission branch, as AGENTS.md requires, and travels with its commit. Briefs and mission test records stay on the umbrella until it lands, because later missions read them; the landing's cleanup archives them.
@@ -112,7 +112,7 @@ This catches problems that only real data shows, without touching the real data.
 - Checks A to D (above) all passed on a build from `main` with 1d.
 - At least one week of Jason daily-driving nightlies from `main` on the Mac, with no fallback to an older build.
 - The phase 1 checks on the Windows PC.
-- The spec's phase 1 verification list and the [full smoke test](../../tests/full-smoke-test.md) passed on the last cut.
+- The spec's phase 1 verification list and the [full smoke test](../../../tests/full-smoke-test.md) passed on the last cut.
 
 Jason can shorten or lengthen the week. When the gate passes:
 
@@ -323,7 +323,7 @@ Brief `645-m4-lifecycle.md`. Design comes first: the spec's Design list, drawn i
    - The development notes in `AGENTS.md`: `make run` restarts the development daemon, and `runner-dev daemon stop` stops it.
    - The process map from the `fix/647-terminal-black-sidebar` branch, updated to the new shape.
 
-**Verification:** the spec's phase 1 list, then the [full smoke test](../../tests/full-smoke-test.md), then 0.13.0.
+**Verification:** the spec's phase 1 list, then the [full smoke test](../../../tests/full-smoke-test.md), then 0.13.0.
 
 ## After phase 1 — the CLI moves to the client protocol
 
@@ -367,7 +367,7 @@ The spec's Remote machines section has the rest:
 - the host picker is designed first;
 - the session protocol's version check shows "Update Runner on <host>".
 
-Supersedes [510](../../features/archive/510-remote-ssh-session.md).
+Supersedes [510](../../../features/archive/510-remote-ssh-session.md).
 
 ## Phase 4 — the Windows PC
 
@@ -383,7 +383,7 @@ What remains specific to this phase: the user stays logged in on the PC (a test 
 ## Decisions that bind
 
 - The spec's decisions 1–13.
-- Every mission is one PR with one commit, and its brief's authorization section says so ([AGENTS.md](../../../AGENTS.md), Crew Missions).
+- Every mission is one PR with one commit, and its brief's authorization section says so ([AGENTS.md](../../../../AGENTS.md), Crew Missions).
 - Phase 1 missions branch from `feat/645-runnerd`, open their PRs against it, and never merge into `main` on their own; only the umbrella lands on `main` (Branch and channel).
 - **No test starts a daemon in real app data.** A test that spawns `runnerd` uses a temporary app-data directory and endpoint, passes every root in rather than resolving `$HOME`, and kills the daemon on drop.
 - Imports used only by `cfg(unix)` tests are `cfg(unix)`-gated, after Windows clippy failed on four PRs.

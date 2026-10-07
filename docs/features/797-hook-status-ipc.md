@@ -1,7 +1,7 @@
 # 797 — Replace hook-status file feeds with local IPC
 
 > Tracking issue: [#797](https://github.com/yicheng47/runner/issues/797)
-> Priority: P2, 0.16 with remote machines (moved from 0.13 on 2026-10-07). Platforms: macOS and Windows.
+> Priority: P2, 0.13.x (Jason, 2026-10-07: moved up to end the Windows Codex hook stall). Platforms: macOS and Windows.
 > Status: direction recorded on 2026-10-03; Windows hook latency added 2026-10-06 from the PC regression (F6); implementation design pending.
 
 ## Motivation

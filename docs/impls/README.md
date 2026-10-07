@@ -6,7 +6,7 @@ A plan stays here while its work is in flight and moves to [`archive/`](./archiv
 
 ## Active
 
-- [`645-runnerd/`](./645-runnerd/plan.md) — `runnerd`, the daemon that owns sessions and state so they outlive the app ([#645](https://github.com/yicheng47/runner/issues/645)): phase 1 shipped in 0.13.0 on 2026-10-06 through four missions ([#805](https://github.com/yicheng47/runner/pull/805) to [#811](https://github.com/yicheng47/runner/pull/811)), and #645 is closed. The plan still holds the design for [#821](https://github.com/yicheng47/runner/issues/821), the CLI on the client protocol ([PR #822](https://github.com/yicheng47/runner/pull/822), which edits it), and the outline of [#808](https://github.com/yicheng47/runner/issues/808)'s phases 3 and 4; it moves to `archive/` after #822 merges.
+None.
 
 ## Archive
 
@@ -14,6 +14,7 @@ A plan stays here while its work is in flight and moves to [`archive/`](./archiv
 
 Shipped plans are in [`archive/`](./archive/) in number order, and each names its PR. Multi-mission programs keep a folder with a condensed README:
 
+- [`645-runnerd/`](./archive/645-runnerd/README.md) — `runnerd`, the daemon that owns sessions and state so they outlive the app ([#645](https://github.com/yicheng47/runner/issues/645), shipped 2026-10-06 in 0.13.0 through four missions, [#805](https://github.com/yicheng47/runner/pull/805) to [#811](https://github.com/yicheng47/runner/pull/811)); the CLI followed onto its client protocol in [#822](https://github.com/yicheng47/runner/pull/822) (#821), and remote machines continue as [#808](https://github.com/yicheng47/runner/issues/808).
 - [`648-runner-cli/`](./archive/648-runner-cli/README.md) — the general `runner` CLI, its agent skill and the MCP removal ([#648](https://github.com/yicheng47/runner/issues/648), shipped 2026-09-20 in 0.11.0 through five missions, [#650](https://github.com/yicheng47/runner/pull/650) to [#667](https://github.com/yicheng47/runner/pull/667)); the Windows checks continue as [#668](https://github.com/yicheng47/runner/issues/668).
 - [`539-pi-runtime/`](./archive/539-pi-runtime/README.md) — pi as a runtime with hook status ([#539](https://github.com/yicheng47/runner/issues/539), shipped 2026-09-20 in 0.11.0 in [#646](https://github.com/yicheng47/runner/pull/646) and [#649](https://github.com/yicheng47/runner/pull/649)); the fixture and the JASONPC pass continue as [#668](https://github.com/yicheng47/runner/issues/668).
 - [`347-hook-status/`](./archive/347-hook-status/README.md) — hook-based agent status on macOS ([#347](https://github.com/yicheng47/runner/issues/347), closed 2026-09-16); Windows followed as [610](./archive/610-windows-hook-status.md), shipped in 0.10.0.
