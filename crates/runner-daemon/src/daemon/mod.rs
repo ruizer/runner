@@ -1,5 +1,7 @@
 pub mod boot;
 pub mod server;
+#[cfg(windows)]
+mod windows_shutdown;
 use crate::AppCore;
 use runner_core::protocol::command;
 use runner_core::protocol::terminal::*;

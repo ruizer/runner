@@ -301,6 +301,10 @@ impl SessionManager {
                 && !success
                 && !was_killed
                 && started_at.elapsed() < std::time::Duration::from_secs(3);
+            #[cfg(windows)]
+            let mut session_end = manager_t.session_end.exit();
+            #[cfg(windows)]
+            let resume_failed = resume_failed && !session_end.preserve_key();
             let final_status = if success || was_killed {
                 crate::model::SessionStatus::Stopped
             } else {
@@ -311,6 +315,10 @@ impl SessionManager {
                 let conn = pool.get().inspect_err(|_| {
                     checkout_failed = true;
                 })?;
+                #[cfg(windows)]
+                {
+                    session_end.snapshot = crate::repo::session::get_row(&conn, &session_id)?;
+                }
                 let changed = if clear_key {
                     crate::repo::session::set_crashed_clearing_key(&conn, &session_id, Utc::now())?
                 } else {
@@ -343,6 +351,8 @@ impl SessionManager {
                     log::warn!("session exit reconciliation failed for {session_id}: {error}");
                 }
             }
+            #[cfg(windows)]
+            drop(session_end);
             if resume_failed {
                 events.warning(&WarningEvent {
                     session_id: session_id.clone(),

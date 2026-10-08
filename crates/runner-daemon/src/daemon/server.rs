@@ -72,6 +72,10 @@ pub fn run(config: Config) -> Result<()> {
     );
     #[cfg(unix)]
     raise_descriptor_limit();
+    #[cfg(windows)]
+    if let Err(error) = super::windows_shutdown::set_shutdown_priority() {
+        log::warn!("runnerd shutdown priority unavailable; continuing: {error}");
+    }
     let hash = daemon_process::executable_hash(&std::env::current_exe()?)?;
     let settings: Settings = std::fs::read(config.paths.app_data_dir.join("ui-settings.json"))
         .ok()
@@ -144,7 +148,19 @@ impl Identity {
 
 async fn serve(config: Config, core: AppCore, hash: String, settings: Settings) -> Result<()> {
     let listener = IpcListener::bind(&config.endpoint)?;
-    serve_with_listener(config, core, hash, settings, listener).await
+    #[cfg(windows)]
+    let shutdown_window =
+        super::windows_shutdown::ShutdownWindow::new(core.sessions.session_end.clone());
+    serve_with_listener(
+        config,
+        core,
+        hash,
+        settings,
+        listener,
+        #[cfg(windows)]
+        shutdown_window,
+    )
+    .await
 }
 
 async fn serve_with_listener(
@@ -153,7 +169,18 @@ async fn serve_with_listener(
     hash: String,
     settings: Settings,
     mut listener: IpcListener,
+    #[cfg(windows)] shutdown_window: std::io::Result<super::windows_shutdown::ShutdownWindow>,
 ) -> Result<()> {
+    #[cfg(windows)]
+    let mut shutdown_window = match shutdown_window {
+        Ok(window) => Some(window),
+        Err(error) => {
+            log::warn!(
+                "runnerd shutdown window unavailable; continuing with console handlers: {error}"
+            );
+            None
+        }
+    };
     core.sessions.set_hook_endpoint(config.endpoint.clone());
     #[cfg(unix)]
     let daemon_file = Identity::new(config.endpoint.clone())?;
@@ -200,7 +227,10 @@ async fn serve_with_listener(
     let window_owners = Arc::new(Mutex::new(HashMap::new()));
     let mut next_connection = 0;
     let mut ownership = tokio::time::interval(Duration::from_secs(2));
-    let signal = os_shutdown();
+    let signal = os_shutdown(
+        #[cfg(windows)]
+        shutdown_window.as_mut().map(|window| &mut window.signal),
+    );
     tokio::pin!(signal);
     loop {
         tokio::select! {
@@ -231,10 +261,7 @@ async fn serve_with_listener(
     let teardown = tokio::task::spawn_blocking(move || -> Result<()> {
         resume_consumer.stop();
         shutdown_core.sessions.begin_shutdown();
-        let mut ids = {
-            let mut conn = shutdown_core.db.get()?;
-            crate::repo::session::mark_running_for_resume_on_launch(&mut conn)?
-        };
+        let mut ids = stamp_shutdown_sessions(&shutdown_core)?;
         for id in shutdown_core.sessions.live_session_ids() {
             if !ids.contains(&id) {
                 ids.push(id);
@@ -265,6 +292,37 @@ async fn serve_with_listener(
     mcp_file.remove();
     daemon_file.remove();
     Ok(())
+}
+
+pub(super) fn stamp_shutdown_sessions(core: &AppCore) -> Result<Vec<String>> {
+    #[cfg(windows)]
+    let exited = {
+        core.sessions.session_end.confirm();
+        core.sessions.session_end.take_exited_sessions()
+    };
+    let result: Result<Vec<String>> = (|| {
+        let mut conn = core.db.get()?;
+        #[cfg(unix)]
+        {
+            Ok(crate::repo::session::mark_running_for_resume_on_launch(
+                &mut conn,
+            )?)
+        }
+        #[cfg(windows)]
+        {
+            Ok(
+                crate::repo::session::mark_running_and_exited_for_resume_on_launch(
+                    &mut conn, &exited,
+                )?,
+            )
+        }
+    })();
+    if let Ok(ids) = &result {
+        log::info!("runnerd resume stamp committed for {} sessions", ids.len());
+    }
+    #[cfg(windows)]
+    core.sessions.session_end.finish(result.is_ok());
+    result
 }
 
 async fn accept_client_connection(accepted: std::io::Result<IpcStream>) -> Option<IpcStream> {
@@ -813,7 +871,9 @@ fn send_chunks(
     Ok(())
 }
 
-async fn os_shutdown() {
+pub(super) async fn os_shutdown(
+    #[cfg(windows)] window: Option<&mut tokio::sync::oneshot::Receiver<()>>,
+) {
     #[cfg(unix)]
     {
         if let Ok(mut signal) =
@@ -827,7 +887,21 @@ async fn os_shutdown() {
         let mut close = tokio::signal::windows::ctrl_close().expect("CTRL_CLOSE handler");
         let mut logoff = tokio::signal::windows::ctrl_logoff().expect("CTRL_LOGOFF handler");
         let mut shutdown = tokio::signal::windows::ctrl_shutdown().expect("CTRL_SHUTDOWN handler");
-        tokio::select! { _ = close.recv() => (), _ = logoff.recv() => (), _ = shutdown.recv() => () }
+        let window = async {
+            if let Some(window) = window {
+                if window.await.is_err() {
+                    log::warn!("runnerd shutdown window closed; stopping");
+                }
+            } else {
+                std::future::pending::<()>().await;
+            }
+        };
+        tokio::select! {
+            _ = close.recv() => (),
+            _ = logoff.recv() => (),
+            _ = shutdown.recv() => (),
+            _ = window => (),
+        }
     }
 }
 
@@ -888,6 +962,10 @@ mod tests {
                 ..Settings::default()
             },
             listener,
+            #[cfg(windows)]
+            Err(std::io::Error::other(
+                "injected shutdown window creation failure",
+            )),
         ));
         let started = tokio::time::Instant::now();
         let connected = tokio::task::spawn_blocking(move || {
