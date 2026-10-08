@@ -986,7 +986,11 @@ impl NativeRoot {
                 .chain(drawer_action)
                 .chain(panel_action),
         )
-        .into_div();
+        .into_div()
+        .w_full()
+        .when(cfg!(test), |header| {
+            header.debug_selector(|| "CHAT_TAB_HEADER_CONTENT".into())
+        });
         self.render_titlebar_drag_area("chat-titlebar-drag", header, cx)
             .into_any_element()
     }
@@ -3306,6 +3310,66 @@ mod tests {
             agent_session_key: forkable.then(|| "key".into()),
             pinned: false,
             archived_at: None,
+        }
+    }
+
+    #[test]
+    fn cached_chat_header_spans_the_chat_column_with_or_without_the_side_panel() {
+        use crate::{AppRoute, NativeRoot};
+        use gpui::{TestAppContext, VisualTestContext};
+
+        let _theme = crate::theme_snapshot::ThemeGuard::new();
+        for panel_open in [false, true] {
+            for zoom in [1., 1.5] {
+                let temp = tempfile::tempdir().unwrap();
+                let mut cx = TestAppContext::single();
+                let store = crate::app_store::test_lifecycle_store(&mut cx, temp.path());
+                store.update(&mut cx, |store, cx| {
+                    crate::app_store::seed_mixed_working_sessions(store);
+                    store
+                        .test_core
+                        .db
+                        .get()
+                        .unwrap()
+                        .execute(
+                            "UPDATE sessions SET status = 'stopped' WHERE mission_id IS NULL",
+                            [],
+                        )
+                        .unwrap();
+                    store.refresh(crate::app_store::StoreRefreshKind::All, cx);
+                    store.settings.chat_panel_open = panel_open;
+                    store.settings.app_zoom = zoom;
+                });
+                let host = cx.add_window(|window, cx| {
+                    let mut root = NativeRoot::new(
+                        "chat-header-width".into(),
+                        temp.path().join("logs"),
+                        None,
+                        None,
+                        store.clone(),
+                        window,
+                        cx,
+                    );
+                    root.apply_tab_rows(cx);
+                    assert!(root.tabs.activate_session("direct-agent"));
+                    root.route = AppRoute::Chat;
+                    root.sync_active_chat_detail(cx);
+                    root
+                });
+                let mut visual = VisualTestContext::from_window(host.into(), &cx);
+                for width in [1000., 1600.] {
+                    visual.simulate_resize(size(px(width), px(900.)));
+                    visual.run_until_parked();
+                    let column = visual.debug_bounds("CHAT_TAB_HEADER").unwrap();
+                    let header = visual.debug_bounds("CHAT_TAB_HEADER_CONTENT").unwrap();
+                    assert_eq!(header.left(), column.left());
+                    assert_eq!(
+                        header.right(),
+                        column.right(),
+                        "panel={panel_open}, zoom={zoom}, width={width}"
+                    );
+                }
+            }
         }
     }
 
