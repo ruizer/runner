@@ -6,6 +6,9 @@ use crate::*;
 
 const TITLEBAR_HEIGHT: f32 = 44.;
 
+pub(crate) const SETTINGS_DRAG_INSET: f32 = TITLEBAR_DRAG_HEIGHT;
+pub(crate) const SETTINGS_CONTENT_TOP: f32 = 56.;
+
 pub(crate) const PRIMARY_MODIFIER: &str = "⌘";
 pub(crate) const SHORTCUT_REQUIREMENTS: &str =
     "Shortcuts must include ⌘, Control, or Option. Function keys can be used alone.";
@@ -64,6 +67,18 @@ impl NativeRoot {
                 cx,
             )
             .into_any_element(),
+        )
+    }
+
+    pub(crate) fn render_settings_titlebar_drag_area(
+        &self,
+        id: &'static str,
+        area: Div,
+        cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        Some(
+            self.render_titlebar_drag_area(id, area, cx)
+                .into_any_element(),
         )
     }
 

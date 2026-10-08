@@ -22,6 +22,7 @@ use crate::app_settings::{
     TerminalCursorStyle, TerminalFontFamily, TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN,
     TERMINAL_SCROLLBACK_LINES, ZOOM_STEPS,
 };
+use crate::platform_ui::{SETTINGS_CONTENT_TOP, SETTINGS_DRAG_INSET};
 use crate::surfaces::app_shell::TITLEBAR_DRAG_HEIGHT;
 use crate::surfaces::settings::theme_preview::{self, PreviewMode, PreviewPane};
 use crate::theme::{DarkTheme, LightTheme, ThemeIntent};
@@ -530,14 +531,15 @@ struct ShortcutConflict {
     message: String,
 }
 
-/// The content column: the titlebar drag strip, the padded scroll container
-/// with its centered column, and the scrollbar in an overlay inset by the
-/// drag strip's height at both ends, so the thumb never runs behind the
-/// traffic lights or into the window's bottom corner (#553). The overlay has
-/// no id or handlers, so wheel and click pass through it to the scroll
-/// container.
+/// The content column: the platform's titlebar drag strip, if it draws one,
+/// the padded scroll container with its centered column, and the scrollbar
+/// in an overlay. The overlay's top inset keeps the thumb out from under the
+/// traffic lights where the page draws its own strip, and its bottom inset
+/// keeps it out of the window's bottom corner on every platform (#553). The
+/// overlay has no id or handlers, so wheel and click pass through it to the
+/// scroll container.
 fn settings_content_column(
-    titlebar_drag_area: impl IntoElement,
+    titlebar_drag_area: Option<impl IntoElement>,
     content: Option<AnyElement>,
     scroll: &ScrollHandle,
     scrollbar: Entity<Scrollbar>,
@@ -550,7 +552,7 @@ fn settings_content_column(
         .h_full()
         .flex_1()
         .bg(theme::bg())
-        .child(titlebar_drag_area)
+        .children(titlebar_drag_area)
         .child(
             div()
                 .id("settings-content-scroll")
@@ -560,7 +562,7 @@ fn settings_content_column(
                 .track_scroll(scroll)
                 .px(rems(40. / 16.))
                 .pb(rems(64. / 16.))
-                .pt(rems(56. / 16.))
+                .pt(rems(SETTINGS_CONTENT_TOP / 16.))
                 .children(content.map(|content| {
                     div()
                         .mx_auto()
@@ -572,7 +574,7 @@ fn settings_content_column(
         .child(
             div()
                 .absolute()
-                .top(px(TITLEBAR_DRAG_HEIGHT * zoom))
+                .top(px(SETTINGS_DRAG_INSET * zoom))
                 .bottom(px(TITLEBAR_DRAG_HEIGHT * zoom))
                 .left_0()
                 .right_0()
@@ -1189,7 +1191,7 @@ impl NativeRoot {
                     .bg(theme::sidebar())
                     .border_r_1()
                     .border_color(theme::border())
-                    .child(self.render_titlebar_drag_area(
+                    .children(self.render_settings_titlebar_drag_area(
                         "settings-sidebar-titlebar-drag",
                         div().h(px(32. * self.settings(cx).app_zoom)).flex_none(),
                         cx,
@@ -1262,11 +1264,11 @@ impl NativeRoot {
                     .children(self.render_daemon_banner(cx).map(|banner| {
                         div()
                             .flex_none()
-                            .pt(rems(TITLEBAR_DRAG_HEIGHT / 16.))
+                            .pt(rems(SETTINGS_DRAG_INSET / 16.))
                             .child(banner)
                     }))
                     .child(settings_content_column(
-                        self.render_titlebar_drag_area(
+                        self.render_settings_titlebar_drag_area(
                             "settings-content-titlebar-drag",
                             div()
                                 .absolute()
@@ -1305,6 +1307,7 @@ impl NativeRoot {
     fn render_settings_back_button(&self, cx: &mut Context<Self>) -> AnyElement {
         div()
             .id("settings-back")
+            .debug_selector(|| "SETTINGS_BACK".into())
             .group("settings-back")
             .px_2()
             .py(rems(6. / 16.))
@@ -3213,12 +3216,14 @@ mod tests {
                     .flex()
                     .child(div().flex_none().h_full().w(px(SIDEBAR_DEFAULT * zoom)))
                     .child(settings_content_column(
-                        div()
-                            .absolute()
-                            .top_0()
-                            .left_0()
-                            .right_0()
-                            .h(px(TITLEBAR_DRAG_HEIGHT * zoom)),
+                        (SETTINGS_DRAG_INSET > 0.).then(|| {
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .right_0()
+                                .h(px(TITLEBAR_DRAG_HEIGHT * zoom))
+                        }),
                         Some(
                             div()
                                 .flex()
@@ -3266,7 +3271,10 @@ mod tests {
         for width in [1000., 2000.] {
             for rem in [16., 20.8] {
                 let zoom = rem / 16.;
+                let track_top = px(SETTINGS_DRAG_INSET * zoom);
+                let content_top = px(SETTINGS_CONTENT_TOP * zoom);
                 window.simulate_resize(size(px(width), px(HEIGHT)));
+                scroll.set_offset(point(px(0.), px(0.)));
                 host.update(&mut window, |_, window, _| {
                     window.set_rem_size(px(rem));
                     window.refresh();
@@ -3281,13 +3289,15 @@ mod tests {
 
                 assert!(near(track.right(), px(width)), "{label}");
                 assert!(near(track.left(), px(SIDEBAR_DEFAULT * zoom)), "{label}");
-                assert!(
-                    near(track.top(), px(TITLEBAR_DRAG_HEIGHT * zoom)),
-                    "{label}"
-                );
+                assert!(near(track.top(), track_top), "{label}");
                 assert!(
                     near(track.bottom(), px(HEIGHT - TITLEBAR_DRAG_HEIGHT * zoom)),
                     "{label}"
+                );
+                let pane = window.debug_bounds("SETTINGS_MISSIONS_PANE").unwrap();
+                assert!(
+                    near(pane.top(), content_top),
+                    "{label}: pane {pane:?} content {content_top:?}"
                 );
 
                 // The scrollbar entity's root carries no selector, so prove its
@@ -3300,7 +3310,6 @@ mod tests {
                 let outside_left = px(width - GUTTER * zoom - 1.);
                 let inside_right = px(width - 1.);
                 let below_top = track.top() + px(1.);
-                let above_top = track.top() - px(1.);
                 let bottom = track.bottom() - px(1.);
                 let below_bottom = track.bottom() + px(1.);
                 let mut click_from = |from: Pixels, at: Point<Pixels>| {
@@ -3327,16 +3336,63 @@ mod tests {
                     near(click_from(-max, point(outside_left, below_top)), -max),
                     "{label}: a click left of the gutter should not scroll"
                 );
-                assert!(
-                    near(click_from(-max, point(inside_right, above_top)), -max),
-                    "{label}: a click in the drag strip should not scroll"
-                );
+                if SETTINGS_DRAG_INSET > 0. {
+                    assert!(
+                        near(
+                            click_from(-max, point(inside_right, track.top() - px(1.))),
+                            -max
+                        ),
+                        "{label}: a click in the drag strip should not scroll"
+                    );
+                }
                 assert!(
                     near(
                         click_from(px(0.), point(inside_right, below_bottom)),
                         px(0.)
                     ),
                     "{label}: a click below the track should not scroll"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn settings_back_button_clears_one_titlebar_allowance() {
+        use crate::theme_snapshot::ThemeGuard;
+        use gpui::{size, TestAppContext, VisualTestContext};
+
+        let _theme = ThemeGuard::new();
+        let temp = tempfile::tempdir().unwrap();
+        let mut cx = TestAppContext::single();
+        let store = crate::app_store::test_lifecycle_store(&mut cx, temp.path());
+        let window = cx.add_window(|window, cx| {
+            let mut root = NativeRoot::new(
+                "settings-back".into(),
+                temp.path().join("logs"),
+                None,
+                None,
+                store.clone(),
+                window,
+                cx,
+            );
+            root.route = AppRoute::Settings;
+            root
+        });
+        cx.run_until_parked();
+        let mut visual = VisualTestContext::from_window(window.into(), &cx);
+        for zoom in [1.0, 1.3] {
+            for width in [1440., 2400.] {
+                visual.simulate_resize(size(px(width), px(900.)));
+                window
+                    .update(&mut cx, |root, window, cx| {
+                        root.set_zoom(zoom, window, cx);
+                    })
+                    .unwrap();
+                cx.run_until_parked();
+                let back = visual.debug_bounds("SETTINGS_BACK").unwrap();
+                assert!(
+                    back.top() >= px(32. * zoom) && back.top() < px(48. * zoom),
+                    "zoom {zoom} width {width}: {back:?}"
                 );
             }
         }

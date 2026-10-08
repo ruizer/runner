@@ -6,6 +6,11 @@ use runner_app::ui::CAPTION_BUTTON_WIDTH;
 
 const TITLEBAR_HEIGHT: f32 = 32.;
 
+// The chrome titlebar already reserves the band macOS Settings pads for, so
+// the content starts at the same window height on both platforms.
+pub(crate) const SETTINGS_DRAG_INSET: f32 = 0.;
+pub(crate) const SETTINGS_CONTENT_TOP: f32 = 56. - TITLEBAR_HEIGHT;
+
 pub(crate) const PRIMARY_MODIFIER: &str = "Ctrl";
 pub(crate) const SHORTCUT_REQUIREMENTS: &str =
     "Shortcuts must include Ctrl, Alt, or Win. Function keys can be used alone.";
@@ -76,6 +81,15 @@ impl NativeRoot {
 
     pub(crate) fn render_main_titlebar_drag_area(
         &self,
+        _cx: &mut Context<Self>,
+    ) -> Option<AnyElement> {
+        None
+    }
+
+    pub(crate) fn render_settings_titlebar_drag_area(
+        &self,
+        _id: &'static str,
+        _area: Div,
         _cx: &mut Context<Self>,
     ) -> Option<AnyElement> {
         None
