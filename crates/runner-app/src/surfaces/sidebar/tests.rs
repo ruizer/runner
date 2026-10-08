@@ -932,7 +932,7 @@ fn sidebar_fork_menu_target_exposes_enabled_and_disabled_single_chats() {
     let target = sidebar_fork_menu_target(&layout, &members).expect("fork target");
     assert_eq!(target.session_id, "chat");
     assert!(!target.disabled);
-    assert_eq!(target.description, None);
+    assert_eq!(target.reason, None);
 
     let entries = tab_menu_entries(
         "tab-1",
@@ -972,10 +972,7 @@ fn sidebar_fork_menu_target_exposes_enabled_and_disabled_single_chats() {
     let waiting_members = vec![waiting];
     let waiting_target = sidebar_fork_menu_target(&layout, &waiting_members).unwrap();
     assert!(waiting_target.disabled);
-    assert_eq!(
-        waiting_target.description,
-        Some("No session key captured yet")
-    );
+    assert_eq!(waiting_target.reason, Some("No session key captured yet"));
     let waiting_entries = tab_menu_entries(
         "tab-1",
         false,
@@ -989,15 +986,16 @@ fn sidebar_fork_menu_target_exposes_enabled_and_disabled_single_chats() {
         None,
     );
     assert!(waiting_entries[2].0.disabled);
+    assert_eq!(waiting_entries[2].0.description, None);
     assert_eq!(
-        waiting_entries[2].0.description.clone(),
+        waiting_entries[2].0.tooltip.clone(),
         Some("No session key captured yet".into())
     );
 
     let trae_members = vec![direct_session("chat", "trae", SessionStatus::Running)];
     let trae_target = sidebar_fork_menu_target(&layout, &trae_members).unwrap();
     assert!(trae_target.disabled);
-    assert_eq!(trae_target.description, None);
+    assert_eq!(trae_target.reason, None);
     let trae_entries = tab_menu_entries(
         "tab-1",
         false,
@@ -1011,13 +1009,13 @@ fn sidebar_fork_menu_target_exposes_enabled_and_disabled_single_chats() {
         None,
     );
     assert!(trae_entries[2].0.disabled);
-    assert_eq!(trae_entries[2].0.description, None);
+    assert_eq!(trae_entries[2].0.tooltip, None);
 
     for runtime in ["copilot", "antigravity"] {
         let members = vec![direct_session("chat", runtime, SessionStatus::Running)];
         let target = sidebar_fork_menu_target(&layout, &members).unwrap();
         assert!(target.disabled, "{runtime}");
-        assert_eq!(target.description, None, "{runtime}");
+        assert_eq!(target.reason, None, "{runtime}");
     }
 
     let shell_members = vec![direct_session("chat", "shell", SessionStatus::Running)];

@@ -752,6 +752,9 @@ impl Render for ContextMenu {
                         .text_color(theme::faint())
                         .child(shortcut)
                 }))
+                .when_some(item.tooltip, |row, tooltip| {
+                    row.tooltip(move |_, cx| tooltip_view(tooltip.clone(), cx))
+                })
                 .when(!item.disabled, |row| {
                     row.on_click(move |_, window, cx| {
                         click_entity.update(cx, |menu, cx| menu.activate(index, window, cx));

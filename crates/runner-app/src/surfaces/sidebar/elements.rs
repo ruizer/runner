@@ -329,7 +329,7 @@ pub(super) fn sidebar_fork_menu_target(
     let entry = members
         .first()
         .filter(|entry| !Runtime::parse(&entry.agent_runtime).is_some_and(Runtime::is_shell))?;
-    let (disabled, description) = if !entry.native_fork {
+    let (disabled, reason) = if !entry.native_fork {
         (true, None)
     } else if !entry.forkable {
         (true, Some("No session key captured yet"))
@@ -339,7 +339,7 @@ pub(super) fn sidebar_fork_menu_target(
     Some(SidebarForkMenuTarget {
         session_id: entry.session_id.clone(),
         disabled,
-        description,
+        reason,
     })
 }
 
