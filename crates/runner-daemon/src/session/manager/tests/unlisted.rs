@@ -58,6 +58,64 @@ fn update_spec_runs_the_update_in_home_without_runner_layers() {
 }
 
 #[test]
+fn runtime_update_spec_allows_live_sessions_without_stopping_or_restarting_them() {
+    let bin = tempfile::tempdir().unwrap();
+    let executable = bin.path().join("agent.exe");
+    std::fs::write(&executable, "").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    let command = executable.to_str().unwrap();
+
+    for definition in crate::runtimes::catalogs()
+        .iter()
+        .filter(|definition| !definition.update_args.is_empty())
+    {
+        let mut state = crate::test_support::test_core();
+        let fake = fake_runtime();
+        state.sessions = SessionManager::new(
+            Arc::clone(&state.runtime_shell_env),
+            Arc::clone(&state.runtime_discovery),
+            Arc::clone(&fake) as Arc<dyn SessionRuntime>,
+        );
+        crate::db::set_runtime_override(&state.db, definition.name.key(), Some(command)).unwrap();
+        for running in 0..=2 {
+            if running > 0 {
+                let id = format!("running-{running}");
+                let mut row = crate::test_support::test_session_row(
+                    &id,
+                    crate::model::SessionStatus::Running,
+                );
+                row.agent_runtime = Some(definition.name.to_string());
+                crate::repo::session::insert(&state.db.get().unwrap(), &row).unwrap();
+                install_test_session_handle(&state.sessions, &id);
+            }
+            let live = state.sessions.live_session_ids();
+            assert_eq!(
+                crate::ops::session::live_session_counts(&state)
+                    .unwrap()
+                    .get(&definition.name)
+                    .copied()
+                    .unwrap_or(0),
+                running
+            );
+            let spec =
+                crate::ops::runtime::runtime_update_spawn_spec(&state, definition.name, (90, 28))
+                    .unwrap();
+            assert_eq!(spec.command, command);
+            assert_eq!(spec.args, definition.update_args);
+            assert_eq!(spec.cwd, runner_core::app_paths::home_dir());
+            assert_eq!(spec.initial_size, Some((90, 28)));
+            assert_eq!(state.sessions.live_session_ids(), live);
+            assert!(fake.stops.lock().unwrap().is_empty());
+            assert_eq!(fake.spawn_count(), 0);
+        }
+    }
+}
+
+#[test]
 fn sessions_keep_the_quiet_flags_the_update_drops() {
     let claude = spawn::agent_env(
         BTreeMap::new(),

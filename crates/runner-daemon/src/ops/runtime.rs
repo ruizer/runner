@@ -108,9 +108,7 @@ pub fn runtime_check_updates(state: &AppCore, force: bool) {
 
 /// argv, env and cwd for a runtime's own update (#533): the effective
 /// executable with the runtime's update arguments, the agent environment
-/// without Runner's layers, and the home directory. On Windows it refuses
-/// while any session of the runtime is alive, because the executable is in
-/// use.
+/// without Runner's layers, and the home directory.
 pub fn runtime_update_spawn_spec(
     state: &AppCore,
     runtime: Runtime,
@@ -120,16 +118,6 @@ pub fn runtime_update_spawn_spec(
         .catalog()
         .filter(|definition| !definition.update_args.is_empty())
         .ok_or_else(|| Error::msg(format!("{runtime} has no update command")))?;
-    #[cfg(windows)]
-    if let Some(&count) = crate::ops::session::live_session_counts(state)?
-        .get(&runtime)
-        .filter(|count| **count > 0)
-    {
-        return Err(Error::msg(format!(
-            "Stop the {count} running {} sessions first.",
-            definition.display_name
-        )));
-    }
     let command = crate::runtime_status::effective_runtime_command(
         runtime,
         &state.db,
