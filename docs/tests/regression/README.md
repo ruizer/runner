@@ -1,0 +1,91 @@
+# Live regression suite
+
+This is Runner's maintained list of live regression cases for the current native app and CLI. It contains actions and observable expectations, not the results of a particular run. Automated unit/integration tests and parser/fixture checks stay in the crates and CI. An archive pass, user confirmation, CLI-only probe or green CI does not establish a current native pass.
+
+Use [Full smoke test procedure](../full-smoke-test.md) for authorization, candidate identity, isolation, native computer use, bounded startup goals and cleanup. The suite itself authorizes no app launch, agent/account use, installation, configuration change or destructive fixture action. Only run a case inside the live-test scope already granted. Record missing access or a safe fixture rather than changing accounts, trust, permissions or production state to obtain a pass. Current code wins over an origin record, with newer archived records clarifying older contracts.
+
+## Layout and cases
+
+| Area | File | Cases | Smoke | Additional full |
+| --- | --- | ---: | ---: | ---: |
+| Runtime lifecycle, conversation identity, status and hooks | [runtimes.md](runtimes.md) | 36 | 10 | 26 |
+| Native terminal rendering, input, resize and history | [terminal.md](terminal.md) | 21 | 4 | 17 |
+| Windows, tabs, panes, sidebar, cwd and drawers | [workspace.md](workspace.md) | 27 | 5 | 22 |
+| Crews, missions, delivery, asks, feed and watches | [missions.md](missions.md) | 20 | 4 | 16 |
+| Quit, daemon lifetime, reconnect and recovery | [daemon.md](daemon.md) | 22 | 4 | 18 |
+| Agents, settings, skills, MCP, installation and updates | [settings.md](settings.md) | 21 | 4 | 17 |
+| Candidate CLI commands, output, feeds and connection | [cli.md](cli.md) | 13 | 4 | 9 |
+| **Total** | | **160** | **35** | **125** |
+
+`regression/` holds this README and one table file per area, with feature sections. Historical feature records remain in `../archive/` and are never edited to turn their old result into a current result. New run results live separately at `docs/tests/runs/YYYY-MM-DD-<platform>.md`, where platform is `mac`, `win` or `both`. Repeated runs on the same day append a separately identified candidate/attempt block to that file. No run record is needed merely to edit this suite.
+
+Every case has an ID `AREA-FEATURE-NN`, using the existing prefixes `RT`, `TERM`, `WS`, `MIS`, `DAE`, `SET` and `CLI`. IDs are globally unique and never reused. Append the next unused number in the feature rather than renumber existing cases. If an expectation is retired, keep its row under a Retired section with `Retired — <reason and replacement ID/source>` in Case and omit it from run selection. Preserve its ID and origin. Moving a row to another file does not change its ID. A changed observable contract is a new case, with the old case retired and linked to it.
+
+| Column | Meaning |
+| --- | --- |
+| ID | Stable case identifier. |
+| Case | Action a QA agent/human can perform in the native development app or candidate CLI, with runtime applicability stated where restricted. |
+| Expected | Observable result and required case-specific evidence. General evidence rules also apply. |
+| Platform | `mac`, `win` or `both`, describing applicability rather than historical verification. |
+| Needs | Empty or comma-separated `account` for a real agent account, `computer-use` for native UI access, `human` for a step such as divider drag/IME or an expressly authorized install, and `windows-host` for a special Windows host prerequisite. “Both” cases still need a Windows machine for their Windows instance. Fixture/artifact prerequisites are stated in Case or area preamble. |
+| Tier | `smoke` or `full`. Full runs select both values. |
+| Origin | Relative link to an archive record with its old row ID/check name where present, or a spec/issue/current code. This is traceability, not a claim that the check passed. |
+
+## Tiers and selection
+
+Before every release, select active `smoke` rows on every required platform. The 35 case templates cover the runtime lifecycle core plus small native/CLI paths in each area. Major refactors select all active rows, adding any feature-specific live checks not yet promoted. Smoke is the Tier selection in the same tables, never a copied checklist with independent numbering.
+
+Runtime rows are written once but executed separately for each required runtime/platform. Record instances as `RT-LIFE-01 / codex / mac`, for example. The ten runtime smoke templates expand to 50 checks with all five runtimes on one platform, plus 25 other smoke rows before their own applicability variants. This is not 35 individual executions or 35 new launches: reuse one owned lifecycle chat and one bounded startup mission per runtime, plus shared shell/UI fixtures, in one QA session. List required runtimes, hosts and case instances before beginning and report account/native-control gaps explicitly. TRAE adds instances only where required and accessible, with unsupported controls labeled. Do not silently reduce release coverage to fit an unavailable account or host.
+
+Each row may name closely related variants, such as approve/reject/cancel. Record every applicable variant in its evidence, and the row passes only when all required variants pass. Reuse existing evidence within the same candidate for overlapping rows, naming each case it proves. A new candidate or changed behavior requires affected rechecks, not an automatic rewrite of earlier results. Package/update, secondary-account, privacy, subagent and watch-host cases require their stated authorized fixtures and do not follow automatically from a general chat smoke request.
+
+## Run records and evidence
+
+Start each run block with date/time, scope/authorization, candidate commit and dirty diff identity, artifact/build hashes, app/CLI/daemon versions and namespace, OS/architecture, runtime versions/model/effort, existing permission/extensions, configuration-isolation audit and native-control method. List required cases/platforms/runtimes, deviations and the ledger/evidence root outside Git. Link automated test/CI evidence separately. Candidate source, compiled artifact and installed sidecar identities must agree before a pass is attributed to that candidate.
+
+Then record one row per selected case instance, with the following format:
+
+```markdown
+| Case ID | Platform / runtime / variant | Result | Evidence and reason |
+| --- | --- | --- | --- |
+| RT-LIFE-01 | mac / codex | Passed | Timestamped native ACK screenshot, key/state JSON and candidate identity. |
+| TERM-IME-01 | win / shell | Blocked | Native Pinyin composition unavailable on the required host. |
+```
+
+The example describes the format, not actual results. Result is `Passed`, `Failed`, `Blocked` or `Skipped`. Passed means every required observation/evidence exists. Failed means observed behavior contradicts Expected. Blocked means a required account, machine, safe fixture, candidate artifact or observation method is missing. Skipped means explicitly outside the agreed run scope or not applicable, with the reason recorded. An overall full/release pass requires all required instances to pass. No partial, recovered or CLI-only result silently upgrades an unobserved native check.
+
+Capture native terminal/screenshots for rendering, input, status and configuration surfaces, CLI JSON for identities/lifecycle/activity, exact bytes/files for markers/paste/IME, event IDs/transcripts/read watermarks for delivery, and PID/start-time/descendant plus endpoint/log evidence for daemon paths. A successful automation call is not proof of input or pixels. A public lifecycle projection is not independent native hook-admission evidence. Use admitted-report observations only when a supported evidence method exists, otherwise retain the gap. Record latency method, sample/error counts and whether measurements include CLI startup or merely bound physical timing.
+
+Follow the results table with findings (expected/actual, minimal repro, severity, case IDs and evidence), failed-attempt/recovery history, established or uncertain attribution, and cleanup. Preserve the ledger's exact stopped/archived state, process/endpoint verification and retained artifacts. Retain failed attempts even after a scoped retry passes. Keep secrets, account identifiers, private clipboard/file contents and unrelated conversations out of committed evidence. The procedure owns the teardown commands and data-preservation rules.
+
+## Promotion and maintenance
+
+When a feature's test record is archived during [Post-mission cleanup](../../../AGENTS.md#post-mission-cleanup), add its lasting live checks here, or have the record state why none apply. Trace every promoted case to its record/spec/issue/code, reconcile its expectation with current code, set platform/needs/tier and retain the evidence requirements. Results, temporary investigation recipes and automated-only assertions stay with the run/archive or owning test. Change navigation/counts when adding or retiring rows, check all relative links with a script and review at least two cases per area against origin and current code.
+
+## Not carried over
+
+All 38 archive records were considered. Their lasting current live checks are linked from the area rows. The following portions are excluded, rather than converted into live cases. Build logs, result verdicts, per-run object IDs, machine-local evidence paths and review/publication history remain historical evidence throughout the archive.
+
+| Archive record/check left out | Reason / current owner |
+| --- | --- |
+| [v0 MVP](../archive/v0-mvp-tests.md): Tauri/React routes, TypeScript/ESLint, DevTools, reset-by-wipe, closed signal allowlist and `status busy/idle` | Retired implementation/control surface. Current native mission/feed/ask workflows survive in `MIS-*` and `CLI-*`. |
+| [#347 Codex](../archive/347-codex-hooks-smoke.md), [#347 UI](../archive/347-status-ui-smoke.md), [#540](../archive/540-copilot-hooks-smoke.md), [#610 Claude](../archive/610-claude-hooks-windows-smoke.md), [Codex](../archive/610-codex-hooks-windows-smoke.md), [Copilot](../archive/610-copilot-hooks-windows-smoke.md): old Windows baseline-only policy and file/helper/payload cleanup | Retired by native Windows adapters and [#797 IPC](../../features/archive/797-hook-status-ipc.md). Hook semantics/opt-outs are retained in `RT-*`, not old transport files. |
+| [#539](../archive/539-pi-hooks-smoke.md), [#799](../archive/799-pi-draft-delivery.md): extension stubs, missing-API versions, timer/subscription teardown and feed-byte assertions | CI fixtures: `editor_draft_requires_a_boolean_and_does_not_change_turn_status` in [pi status](../../../crates/runner-daemon/src/runtimes/pi/pi_status.rs), plus `native_draft_resets_on_bridge_loss_detach_and_attach_and_ignores_late_events` in [session model tests](../../../crates/runner-daemon/src/session/state/tests.rs). Native draft/reload/resume remains `MIS-DRAFT-*`. |
+| [#64](../archive/64-terminal-as-pane-option-smoke.md): unbound ⌘T, three-pane cap, universal empty-pane New terminal and old menu/layout recipes | Reversed by [#469 drawer](../../features/archive/469-terminal-drawer.md) and [#772 keyboard](../../features/archive/772-keyboard-create.md). Current shell/pane behavior is `WS-*`. |
+| [#575](../archive/575-live-cwd-smoke.md): literal OSC 7 bytes and hook-list mechanics | CI parser/shell-integration checks in [terminal cwd parser](../../../crates/runner-terminal/src/terminal.rs) and [shell integration](../../../crates/runner-daemon/src/shell_integration.rs). Native split/link/config preservation is `WS-CWD-*`. |
+| [#644](../archive/644-antigravity-smoke.md), [#747](../archive/747-antigravity-followups.md): first-key-only limitation, static-only catalog, old permissions and hook-folder distraction probes | Superseded by active key capture, catalog discovery and fixed mission Bypass. One-off investigation remains in archive. Current cwd/navigation/model/settings cases retained. |
+| [#645 1b](../archive/645-m2-terminal-split.md): parser snapshot split offsets, negative controls, sync deadlines, overflow/resync races and source/cfg audit | CI ownership: `recording_split_points` in [snapshots](../../../crates/runner-terminal/tests/snapshot.rs), `hidden_terminal_answers_each_query_once` and resize fan-out in [terminal seam tests](../../../crates/runner-daemon/src/session/manager/terminal/tests.rs). Native query/history/resize cases remain. |
+| [#645 1c](../archive/645-m3-daemon-process.md), [1d](../archive/645-m4-lifecycle.md): normal Quit always stopping, fourth-disconnect cap, redundant pre-unification banners and synchronous request inventory | Retired lifecycle/presentation. Current Keep/Stop and third-crash cap are `DAE-*`. Fixture request timings are one-off diagnosis, not a populated-account/native latency pass. |
+| [#648 CLI](../archive/648-cli-smoke.md), [skill](../archive/648-skill-smoke.md), [MCP removal](../archive/648-mcp-removal-smoke.md): external MCP bridge, own-server registration and first-upgrade registration-removal campaign | Bridge/server retired. Migration fixture assertions stay in [MCP-removal tests](../../../crates/runner-app/src/app_store/mcp_removal.rs). Native user MCP and command/skill installation remain `SET-*`; current protocol is `CLI-*`. |
+| [#648 install](../archive/648-install-smoke.md), [#686](../archive/686-watch-cli-started-missions.md): fixed three-root counts, four-poll archive latency and historical watcher recipe verdicts | Superseded root/catalog and pushed feed contracts. Current managed-root/install/watch behavior remains `SET-*`, `MIS-WATCH-*`, `CLI-FEED-*`, without reusing old timing as acceptance. |
+| [#687](../archive/687-codex-pre-hook-idle.md), [#688](../archive/688-title-status-fallback.md): canned localhost provider, repeated-redraw fixtures and direct feed-deletion method | One-off mechanism proof/retired transport. Reporter deletion is no longer a native bridge-loss stimulus; explicit bridge failure stays in `codex_pre_hook_native_commands_and_failed_bridges_use_output_fallback` in [Codex session tests](../../../crates/runner-daemon/src/session/manager/tests/codex.rs). CI owns deterministic title/startup sequences in [Codex terminal adapter](../../../crates/runner-daemon/src/runtimes/codex/terminal.rs). Current native startup/title cases are `RT-HOOK-*`. |
+| [#753](../archive/753-inbox-delivery.md), [#766](../archive/766-idle-codex-delivery.md): rejected bracketed-paste implementation, paste-detector-disable workaround and recorded timing constants as universal thresholds | Investigation/control, not final product behavior. Native submitted notices, draft release and recipient stale suppression remain `MIS-*`. |
+| [#772](../archive/772-keyboard-create-smoke.md), [#777 catalog](../archive/777-runtime-adapter-catalog.md): paired preserved-binary before/after controller retries and temporary Example runtime | One-off parity/investigation. Current selector/provider/settings cases survive without requiring a historical baseline or adding a runtime. |
+| [#777 catalog coverage](../archive/777-runtime-adapter-catalog-coverage.md): exhaustive argv/config/copy goldens, source-variant counts, pool-thread diagnosis and CRLF probes | Automated characterization: `catalog_speed_golden` in [launch goldens](../../../crates/runner-daemon/src/session/manager/tests/golden.rs), plus catalog expectations in owning crates. No new live case for unchanged source organization. |
+| [#777 runtime smoke](../archive/777-runtime-adapter-smoke.md), [#783](../archive/783-cancel-status.md), [#791](../archive/791-session-state-reducer.md): superseded stuck-status/pi-abort/Copilot-rekey/cwd expectations, golden-format equivalence and stale-generation injections | Historical failures remain in records. Current cancellation/rekey/cwd cases use later fixes. [session state tests](../../../crates/runner-daemon/src/session/state/tests.rs) and scenario corpus own synthetic ordering/equivalence, not native emission. |
+| [#787](../archive/787-antigravity-mission-cwd.md): 11 controlled hook-directory/context variants | One-off causal investigation. Retain current direct/mission cwd and user's added-folder behavior in `RT-START-*`. |
+| [#797](../archive/797-hook-status-ipc.md): Python timing proxies, queue/envelope/deadline fault injection, direct database admission probes and shell-version fixture costs | CI/measurement fixtures: `native_command_reporters_preserve_utf8_and_provider_neutral_results` in [reporter processes](../../../crates/runner-cli/tests/hook_process.rs), plus daemon admission tests. Native Escape/process boundary and hook semantics retained without fake statistical proof. |
+| [#533 update verification](../../features/archive/533-agent-cli-updates.md#verification): Windows stop-before-update guard | Retired by #790. Current [Agents action](../../../crates/runner-app/src/surfaces/settings/agents.rs) keeps Update enabled with a running-session caption; retained in `SET-UPDATE-01`. |
+| [PC full regression](../archive/2026-10-06-pc-full-regression.md): F1/F2/F4 before/after repetitions, F5 global-canary write investigation and F6 PowerShell option prototypes | One-off remediation/history. Current Stop, hook and configuration-isolation boundaries survive. Signed/native Windows rows remain cases even where that run was Blocked. |
+| [#821](../archive/821-cli-client-protocol-smoke.md): old app-owned MCP handshake, wrong-sidecar report and scratch trust-stanza restoration recipe | MCP server retired, wrong-sidecar is setup evidence, config restoration is run history. Current daemon/sentinel/feed/sandbox cases retained. Trust writers are accounted for by startup isolation, not global edits to make a case pass. |
+| [M6.1](../archive/m6-1-input-state-smoke.md), [M6.6](../archive/m6-6-resize-smoke.md): old backend byte-latch/ring purge, `gpui-nightly` versus Tauri-main and internal ioctl/DB-count assertions | Retired structure/CI detail. Native drafts/IME and immediate resize/reattach/geometry/memory behavior remain `TERM-*`, `WS-*` and `MIS-*`. |
