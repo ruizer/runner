@@ -168,7 +168,10 @@ pub fn restart_message(count: usize, version: &str) -> Option<String> {
 }
 
 pub fn crash_recovery_message(count: usize) -> String {
-    format!("Background service restarted · {count} sessions stopped")
+    format!(
+        "Background service restarted · {count} session{} stopped",
+        if count == 1 { "" } else { "s" }
+    )
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -238,6 +241,22 @@ mod tests {
             .contains("2 agents are working and lose their current turns."));
         assert_eq!(summary.caption(), "3 sessions running · 2 working");
     }
+    #[test]
+    fn crash_recovery_counts_use_singular_and_plural_sessions() {
+        assert_eq!(
+            crash_recovery_message(0),
+            "Background service restarted · 0 sessions stopped"
+        );
+        assert_eq!(
+            crash_recovery_message(1),
+            "Background service restarted · 1 session stopped"
+        );
+        assert_eq!(
+            crash_recovery_message(3),
+            "Background service restarted · 3 sessions stopped"
+        );
+    }
+
     #[test]
     fn restart_and_update_counts_use_plain_words() {
         assert_eq!(working_caption(0), None);

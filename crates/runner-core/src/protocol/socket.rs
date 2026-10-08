@@ -10,6 +10,16 @@ use super::*;
 use crate::app_paths::IpcEndpoint;
 
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+pub const FORK_MATERIALIZE_TIMEOUT: Duration = Duration::from_secs(120);
+pub const FORK_REQUEST_TIMEOUT: Duration =
+    Duration::from_secs(FORK_MATERIALIZE_TIMEOUT.as_secs() + 30);
+
+fn request_timeout(request: &Request, timeout: Duration) -> Duration {
+    match request {
+        Request::session_fork { .. } => timeout.max(FORK_REQUEST_TIMEOUT),
+        _ => timeout,
+    }
+}
 const QUEUE_CAPACITY: usize = 64;
 
 #[cfg(unix)]
@@ -536,6 +546,7 @@ impl Drop for SocketTransport {
 }
 impl Transport for SocketTransport {
     fn call(&self, request: Request) -> Result<Response, ClientError> {
+        let timeout = request_timeout(&request, self.timeout);
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let (done, result) = mpsc::channel();
         self.pending.lock().unwrap().insert(id, done);
@@ -544,7 +555,7 @@ impl Transport for SocketTransport {
             .and_then(|frame| self.send(frame))
             .and_then(|()| {
                 result
-                    .recv_timeout(self.timeout)
+                    .recv_timeout(timeout)
                     .map_err(|_| ClientError::msg("runnerd request deadline exceeded"))?
             });
         self.pending.lock().unwrap().remove(&id);
@@ -698,7 +709,7 @@ mod tests {
         }
     }
     #[test]
-    fn pending_request_has_a_deadline_without_blocking_another_call() {
+    fn ordinary_non_fast_request_times_out_without_blocking_another_call() {
         let root = tempfile::tempdir().unwrap();
         let endpoint = IpcEndpoint(root.path().join("runnerd.sock"));
         let listener = std::os::unix::net::UnixListener::bind(&endpoint.0).unwrap();
@@ -718,40 +729,114 @@ mod tests {
             .unwrap()
             .write(&mut stream)
             .unwrap();
-            let _: wire::Call = Frame::read(&mut stream).unwrap().decode().unwrap();
+            let first: wire::Call = Frame::read(&mut stream).unwrap().decode().unwrap();
+            assert!(matches!(first.request, Request::session_list { .. }));
             ready.send(()).unwrap();
             let second: wire::Call = Frame::read(&mut stream).unwrap().decode().unwrap();
             Frame::json(
                 wire::RESPONSE,
                 &wire::Reply {
                     id: second.id,
-                    response: Response::role_list(Ok(Vec::new())),
+                    response: Response::app_version(Ok("fixture".into())),
                 },
             )
             .unwrap()
             .write(&mut stream)
             .unwrap();
-            closing.recv_timeout(Duration::from_secs(5)).unwrap();
+            closing
+                .recv_timeout(REQUEST_TIMEOUT + Duration::from_secs(5))
+                .unwrap();
         });
-        let socket = SocketTransport::connect_with_timeout(
+        let socket = SocketTransport::connect(
             &endpoint,
             wire::Hello {
                 exe_sha256: "hash".into(),
                 client: "test".into(),
             },
-            Duration::from_millis(200),
         )
         .unwrap();
         let first = socket.client();
-        let call = std::thread::spawn(move || first.role_list());
+        let call = std::thread::spawn(move || first.session_list("mission"));
         started.recv_timeout(Duration::from_secs(1)).unwrap();
-        assert!(socket.client().role_list().unwrap().is_empty());
-        let error = call.join().unwrap().unwrap_err();
-        assert!(error.message.contains("deadline"), "{error:?}");
-        close.send(()).unwrap();
+        let version = socket.client().app_version();
+        let result = call.join().unwrap();
+        let _ = close.send(());
         server.join().unwrap();
-        assert!(socket.client().role_list().is_err());
+        assert_eq!(version.unwrap(), "fixture");
+        let error = result.unwrap_err();
+        assert!(error.message.contains("deadline"), "{error:?}");
+        assert!(socket.client().app_version().is_err());
     }
+    #[test]
+    fn slow_fork_response_outlives_ten_seconds() {
+        let root = tempfile::tempdir().unwrap();
+        let endpoint = IpcEndpoint(root.path().join("runnerd.sock"));
+        let listener = std::os::unix::net::UnixListener::bind(&endpoint.0).unwrap();
+        let (ready, started) = mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            Frame::read(&mut stream).unwrap();
+            Frame::json(
+                wire::WELCOME,
+                &wire::Welcome {
+                    exe_sha256: "hash".into(),
+                    pid: 1,
+                    started_at: "now".into(),
+                },
+            )
+            .unwrap()
+            .write(&mut stream)
+            .unwrap();
+            let fork: wire::Call = Frame::read(&mut stream).unwrap().decode().unwrap();
+            assert!(matches!(fork.request, Request::session_fork { .. }));
+            ready.send(()).unwrap();
+            let fast: wire::Call = Frame::read(&mut stream).unwrap().decode().unwrap();
+            Frame::json(
+                wire::RESPONSE,
+                &wire::Reply {
+                    id: fast.id,
+                    response: Response::app_version(Ok("fixture".into())),
+                },
+            )
+            .unwrap()
+            .write(&mut stream)
+            .unwrap();
+            std::thread::sleep(REQUEST_TIMEOUT + Duration::from_secs(1));
+            Frame::json(
+                wire::RESPONSE,
+                &wire::Reply {
+                    id: fork.id,
+                    response: Response::session_fork(Ok(SpawnedSession {
+                        id: "fork".into(),
+                        mission_id: None,
+                        role_id: None,
+                        handle: "fixture".into(),
+                        pid: None,
+                    })),
+                },
+            )
+            .unwrap()
+            .write(&mut stream)
+            .unwrap();
+        });
+        let socket = SocketTransport::connect(
+            &endpoint,
+            wire::Hello {
+                exe_sha256: "hash".into(),
+                client: "test".into(),
+            },
+        )
+        .unwrap();
+        let client = socket.client();
+        let fork = std::thread::spawn(move || client.session_fork("source", None, None, None));
+        started.recv_timeout(Duration::from_secs(2)).unwrap();
+        let version = socket.client().app_version();
+        let result = fork.join().unwrap();
+        server.join().unwrap();
+        assert_eq!(version.unwrap(), "fixture");
+        assert_eq!(result.unwrap().id, "fork");
+    }
+
     #[test]
     fn client_terminal_overflow_requests_resync() {
         let queue = Frames::default();
@@ -768,5 +853,51 @@ mod tests {
             state.frames.pop_front(),
             Some(TerminalFrame::Resync)
         ));
+    }
+}
+
+#[cfg(test)]
+mod deadline_tests {
+    use super::*;
+
+    #[test]
+    fn only_forks_extend_the_request_deadline_to_cover_materialization() {
+        let fast = Request::app_version {};
+        let fork = Request::session_fork {
+            source_session_id: "source".into(),
+            title: None,
+            cols: None,
+            rows: None,
+        };
+        assert_eq!(
+            request_timeout(&fast, REQUEST_TIMEOUT),
+            Duration::from_secs(10)
+        );
+        assert_eq!(
+            request_timeout(&fast, Duration::from_millis(200)),
+            Duration::from_millis(200)
+        );
+        assert!(request_timeout(&fork, REQUEST_TIMEOUT) > FORK_MATERIALIZE_TIMEOUT);
+        for ordinary in [
+            Request::session_list {
+                mission_id: "mission".into(),
+            },
+            Request::role_list {},
+            Request::node_rename {
+                id: "node".into(),
+                name: "renamed".into(),
+            },
+        ] {
+            assert!(!ordinary.is_fast());
+            assert_eq!(request_timeout(&ordinary, REQUEST_TIMEOUT), REQUEST_TIMEOUT);
+            assert_eq!(
+                request_timeout(&ordinary, Duration::from_millis(200)),
+                Duration::from_millis(200)
+            );
+            assert_eq!(
+                request_timeout(&ordinary, Duration::from_secs(30)),
+                Duration::from_secs(30)
+            );
+        }
     }
 }

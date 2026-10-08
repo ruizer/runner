@@ -10,6 +10,20 @@ use crate::protocol::socket::{ConnectError, SocketTransport};
 use crate::protocol::wire::Hello;
 use sha2::{Digest, Sha256};
 
+pub const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(60);
+pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(8);
+pub const RESUME_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
+pub const RUNTIME_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(1);
+pub const DAEMON_STOP_TIMEOUT: Duration = Duration::from_secs(
+    SHUTDOWN_TIMEOUT.as_secs()
+        + RESUME_SHUTDOWN_TIMEOUT.as_secs()
+        + RUNTIME_SHUTDOWN_TIMEOUT.as_secs()
+        + 5,
+);
+// A starter may replace an old daemon before starting the new one.
+pub const STARTUP_LOCK_TIMEOUT: Duration =
+    Duration::from_secs(DAEMON_STOP_TIMEOUT.as_secs() + DAEMON_START_TIMEOUT.as_secs() + 5);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NativePaths {
     pub home_dir: Option<PathBuf>,
@@ -167,7 +181,7 @@ impl Launch {
                 )?;
                 old.shutdown(true)
                     .map_err(|error| ConnectError::Protocol(error.to_string()))?;
-                wait_unlocked(&self.paths.app_data_dir, Duration::from_secs(10))
+                wait_unlocked(&self.paths.app_data_dir, DAEMON_STOP_TIMEOUT)
                     .map_err(|error| ConnectError::Protocol(error.to_string()))?;
             }
             Err(ConnectError::NotRunning) => (),
@@ -181,19 +195,44 @@ impl Launch {
         let mut child = self.spawn().map_err(|error| {
             ConnectError::Protocol(format!("start runnerd: {error}. Open Runner and retry."))
         })?;
+        let result = (|| {
+            let deadline = Instant::now() + DAEMON_START_TIMEOUT;
+            loop {
+                self.check_startup(&mut child)?;
+                match SocketTransport::connect(&self.daemon_endpoint, hello()) {
+                    Ok(client) => return Ok((client, restarted)),
+                    Err(ConnectError::NotRunning) if Instant::now() < deadline => {
+                        std::thread::sleep(Duration::from_millis(20))
+                    }
+                    Err(ConnectError::NotRunning) => return Err(self.startup_timeout()),
+                    Err(error) => return Err(error),
+                }
+            }
+        })();
         std::thread::spawn(move || {
             let _ = child.wait();
         });
-        let deadline = Instant::now() + Duration::from_secs(10);
-        loop {
-            match SocketTransport::connect(&self.daemon_endpoint, hello()) {
-                Ok(client) => return Ok((client, restarted)),
-                Err(ConnectError::NotRunning) if Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(20))
-                }
-                Err(error) => return Err(error),
-            }
+        result
+    }
+    pub fn check_startup(&self, child: &mut Child) -> Result<(), ConnectError> {
+        match child.try_wait() {
+            Ok(None) => Ok(()),
+            Ok(Some(status)) => Err(ConnectError::Protocol(format!(
+                "runnerd exited during startup ({status}); log: {}",
+                self.paths.log_dir.join("runnerd.log").display()
+            ))),
+            Err(error) => Err(ConnectError::Protocol(format!(
+                "check runnerd startup: {error}; log: {}",
+                self.paths.log_dir.join("runnerd.log").display()
+            ))),
         }
+    }
+    pub fn startup_timeout(&self) -> ConnectError {
+        ConnectError::Protocol(format!(
+            "runnerd did not start within {}s; log: {}",
+            DAEMON_START_TIMEOUT.as_secs(),
+            self.paths.log_dir.join("runnerd.log").display()
+        ))
     }
 }
 pub fn startup_lock(data: &Path) -> io::Result<File> {
@@ -204,7 +243,7 @@ pub fn startup_lock(data: &Path) -> io::Result<File> {
         .read(true)
         .write(true)
         .open(data.join("runnerd-start.lock"))?;
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + STARTUP_LOCK_TIMEOUT;
     loop {
         match fs2::FileExt::try_lock_exclusive(&lock) {
             Ok(()) => return Ok(lock),
@@ -293,6 +332,52 @@ mod tests {
     use super::*;
 
     #[test]
+    fn exited_child_is_reported_immediately_with_status_and_log_path() {
+        let root = tempfile::tempdir().unwrap();
+        let launch = Launch::new(
+            NativePaths::new(root.path().join("data"), root.path().join("logs")),
+            root.path().join("runner"),
+            false,
+        );
+        #[cfg(unix)]
+        let mut child = Command::new("/bin/sh")
+            .args(["-c", "exit 23"])
+            .spawn()
+            .unwrap();
+        #[cfg(windows)]
+        let mut child = Command::new("cmd.exe")
+            .args(["/C", "exit 23"])
+            .spawn()
+            .unwrap();
+        let status = child.wait().unwrap();
+        let started = Instant::now();
+        let error = launch.check_startup(&mut child).unwrap_err().to_string();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert!(error.contains(&status.to_string()), "{error}");
+        assert!(
+            error.contains(
+                &launch
+                    .paths
+                    .log_dir
+                    .join("runnerd.log")
+                    .display()
+                    .to_string()
+            ),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn lifecycle_deadlines_cover_start_and_teardown() {
+        assert!(DAEMON_START_TIMEOUT > Duration::from_secs(10));
+        assert!(
+            DAEMON_STOP_TIMEOUT
+                > SHUTDOWN_TIMEOUT + RESUME_SHUTDOWN_TIMEOUT + RUNTIME_SHUTDOWN_TIMEOUT
+        );
+        assert!(STARTUP_LOCK_TIMEOUT > DAEMON_START_TIMEOUT + DAEMON_STOP_TIMEOUT);
+    }
+
+    #[test]
     fn startup_lock_waits_for_the_active_starter() {
         let root = tempfile::tempdir().unwrap();
         let first = startup_lock(root.path()).unwrap();
@@ -302,7 +387,7 @@ mod tests {
             done.send(startup_lock(&data)).unwrap();
         });
         assert!(matches!(
-            result.recv_timeout(Duration::from_millis(50)),
+            result.recv_timeout(Duration::from_secs(11)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout)
         ));
         drop(first);
@@ -322,11 +407,11 @@ mod tests {
         let data = root.path().to_owned();
         let (done, result) = std::sync::mpsc::channel();
         let wait = std::thread::spawn(move || {
-            done.send(wait_unlocked(&data, Duration::from_secs(2)))
+            done.send(wait_unlocked(&data, DAEMON_STOP_TIMEOUT))
                 .unwrap();
         });
         assert!(matches!(
-            result.recv_timeout(Duration::from_millis(50)),
+            result.recv_timeout(Duration::from_secs(11)),
             Err(std::sync::mpsc::RecvTimeoutError::Timeout)
         ));
         drop(daemon);

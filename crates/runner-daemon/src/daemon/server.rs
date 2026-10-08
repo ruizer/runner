@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use runner_core::app_paths::IpcEndpoint;
-use runner_core::daemon_process::{self, NativePaths};
+use runner_core::daemon_process::{
+    self, NativePaths, RESUME_SHUTDOWN_TIMEOUT, RUNTIME_SHUTDOWN_TIMEOUT, SHUTDOWN_TIMEOUT,
+};
 use runner_core::protocol::terminal::{TerminalAttachment, TerminalFrame};
 use runner_core::protocol::wire::{self, Binary, Frame};
 use runner_core::protocol::{ClientError, Request, Response};
@@ -16,7 +18,6 @@ use tokio_util::sync::CancellationToken;
 use crate::ipc::{IpcListener, IpcStream};
 use crate::AppCore;
 
-pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(8);
 pub struct Config {
     pub paths: NativePaths,
     pub endpoint: IpcEndpoint,
@@ -69,6 +70,8 @@ pub fn run(config: Config) -> Result<()> {
         &runner_core::version::display_version(),
         &config.paths.app_data_dir,
     );
+    #[cfg(unix)]
+    raise_descriptor_limit();
     let hash = daemon_process::executable_hash(&std::env::current_exe()?)?;
     let settings: Settings = std::fs::read(config.paths.app_data_dir.join("ui-settings.json"))
         .ok()
@@ -83,7 +86,7 @@ pub fn run(config: Config) -> Result<()> {
         .enable_all()
         .build()?;
     let result = runtime.block_on(serve(config, core, hash, settings));
-    runtime.shutdown_timeout(Duration::from_secs(1));
+    runtime.shutdown_timeout(RUNTIME_SHUTDOWN_TIMEOUT);
     drop(lock);
     result
 }
@@ -140,7 +143,17 @@ impl Identity {
 }
 
 async fn serve(config: Config, core: AppCore, hash: String, settings: Settings) -> Result<()> {
-    let mut listener = IpcListener::bind(&config.endpoint)?;
+    let listener = IpcListener::bind(&config.endpoint)?;
+    serve_with_listener(config, core, hash, settings, listener).await
+}
+
+async fn serve_with_listener(
+    config: Config,
+    core: AppCore,
+    hash: String,
+    settings: Settings,
+    mut listener: IpcListener,
+) -> Result<()> {
     core.sessions.set_hook_endpoint(config.endpoint.clone());
     #[cfg(unix)]
     let daemon_file = Identity::new(config.endpoint.clone())?;
@@ -198,8 +211,8 @@ async fn serve(config: Config, core: AppCore, hash: String, settings: Settings) 
             }
             Some(result) = connections.join_next(), if !connections.is_empty() => { if let Err(error) = result { log::warn!("runnerd connection task: {error}"); } }
             accepted = sentinel.accept() => discard_sentinel_connection(accepted).await,
-            accepted = listener.accept() => match accepted {
-                Ok(stream) => {
+            accepted = listener.accept() => {
+                if let Some(stream) = accept_client_connection(accepted).await {
                     let core = core.clone(); let welcome = welcome.clone(); let cancel = cancel.clone();
                     let isolated = config.isolated;
                     let resume_report = resume_rx.clone();
@@ -207,7 +220,6 @@ async fn serve(config: Config, core: AppCore, hash: String, settings: Settings) 
                     let windows = Arc::new(ConnectionWindows { core: core.clone(), owners: window_owners.clone(), id: next_connection, closed: AtomicBool::new(false) });
                     connections.spawn(async move { if let Err(error) = connection(stream, core, welcome, cancel, isolated, windows, resume_report).await { log::debug!("runnerd client: {error}"); } });
                 }
-                Err(error) => { log::error!("runnerd accept: {error}"); cancel.cancel(); break; }
             }
         }
     }
@@ -247,12 +259,57 @@ async fn serve(config: Config, core: AppCore, hash: String, settings: Settings) 
             SHUTDOWN_TIMEOUT.as_secs()
         ),
     }
-    let _ = tokio::time::timeout(Duration::from_secs(1), resume).await;
+    let _ = tokio::time::timeout(RESUME_SHUTDOWN_TIMEOUT, resume).await;
     connections.abort_all();
     while connections.join_next().await.is_some() {}
     mcp_file.remove();
     daemon_file.remove();
     Ok(())
+}
+
+async fn accept_client_connection(accepted: std::io::Result<IpcStream>) -> Option<IpcStream> {
+    match accepted {
+        Ok(stream) => Some(stream),
+        Err(error) => {
+            log::error!("runnerd accept: {error}");
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            None
+        }
+    }
+}
+
+#[cfg(unix)]
+fn raise_descriptor_limit() {
+    let mut limits: libc::rlimit = unsafe { std::mem::zeroed() };
+    if unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limits) } != 0 {
+        log::warn!("runnerd RLIMIT_NOFILE: {}", std::io::Error::last_os_error());
+        return;
+    }
+    let previous = limits.rlim_cur;
+    #[cfg(target_os = "macos")]
+    let target = {
+        // Darwin rejects an infinite soft limit; sys/syslimits.h defines OPEN_MAX as 10240.
+        const OPEN_MAX: libc::rlim_t = 10240;
+        limits.rlim_max.min(OPEN_MAX)
+    };
+    #[cfg(not(target_os = "macos"))]
+    let target = limits.rlim_max;
+    if target > previous {
+        limits.rlim_cur = target;
+        if unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limits) } != 0 {
+            log::warn!(
+                "runnerd RLIMIT_NOFILE: soft={previous} hard={} raise to {target} failed: {}",
+                limits.rlim_max,
+                std::io::Error::last_os_error()
+            );
+            return;
+        }
+    }
+    log::info!(
+        "runnerd RLIMIT_NOFILE: soft={previous} -> {} hard={}",
+        limits.rlim_cur,
+        limits.rlim_max
+    );
 }
 
 async fn discard_sentinel_connection(accepted: std::io::Result<IpcStream>) {
@@ -777,6 +834,128 @@ async fn os_shutdown() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn client_accept_errors_back_off_and_preserve_live_sessions() {
+        let root = tempfile::tempdir().unwrap();
+        let mut core = crate::test_support::test_core_in(root.path().to_owned());
+        core.sessions = crate::session::SessionManager::new(
+            core.runtime_shell_env.clone(),
+            core.runtime_discovery.clone(),
+            Arc::new(crate::session::pty_runtime::PtyRuntime::new()),
+        );
+        let spawned = crate::ops::session::session_start_shell_in(
+            &core,
+            runner_core::protocol::ProjectScope::Root,
+            Some(root.path().to_string_lossy().into_owned()),
+            Some(80),
+            Some(24),
+        )
+        .unwrap();
+        #[cfg(unix)]
+        let raw_error = libc::EMFILE;
+        #[cfg(windows)]
+        let raw_error = windows_sys::Win32::Foundation::ERROR_NO_DATA as i32;
+        #[cfg(unix)]
+        let endpoint = IpcEndpoint(root.path().join("runnerd.sock"));
+        #[cfg(windows)]
+        let endpoint = IpcEndpoint(std::path::PathBuf::from(format!(
+            r"\\.\pipe\runner-accept-test-{}",
+            root.path().file_name().unwrap().to_string_lossy()
+        )));
+        #[cfg(unix)]
+        let mcp_endpoint = IpcEndpoint(root.path().join("mcp.sock"));
+        #[cfg(windows)]
+        let mcp_endpoint = IpcEndpoint(std::path::PathBuf::from(format!(
+            r"\\.\pipe\runner-accept-mcp-test-{}",
+            root.path().file_name().unwrap().to_string_lossy()
+        )));
+        let mut listener = IpcListener::bind(&endpoint).unwrap();
+        listener.accept_error = Some(std::io::Error::from_raw_os_error(raw_error));
+        let config = Config {
+            paths: NativePaths::new(root.path().to_owned(), root.path().join("logs")),
+            endpoint: endpoint.clone(),
+            mcp_endpoint,
+            isolated: true,
+        };
+        let server_core = core.clone();
+        let server = tokio::spawn(serve_with_listener(
+            config,
+            server_core,
+            "hash".into(),
+            Settings {
+                resume_on_launch: false,
+                ..Settings::default()
+            },
+            listener,
+        ));
+        let started = tokio::time::Instant::now();
+        let connected = tokio::task::spawn_blocking(move || {
+            runner_core::protocol::socket::SocketTransport::connect(
+                &endpoint,
+                wire::Hello {
+                    exe_sha256: "hash".into(),
+                    client: "test".into(),
+                },
+            )
+        })
+        .await
+        .unwrap();
+        let elapsed = started.elapsed();
+        let live = core.sessions.live_session_ids();
+        let row = crate::repo::session::get_row(&core.db.get().unwrap(), &spawned.id)
+            .unwrap()
+            .unwrap();
+        let stopped = if let Ok(client) = &connected {
+            client.shutdown(true).unwrap();
+            Some(tokio::time::timeout(SHUTDOWN_TIMEOUT * 2, server).await)
+        } else {
+            server.abort();
+            crate::ops::session::session_stop(&core, &spawned.id).unwrap();
+            core.sessions.drain_terminal_workers();
+            None
+        };
+        assert!(connected.is_ok(), "accept error must return to serving");
+        stopped.unwrap().unwrap().unwrap().unwrap();
+        assert!(elapsed >= Duration::from_millis(100));
+        assert_eq!(live, vec![spawned.id]);
+        assert!(!row.resume_on_launch);
+        assert_eq!(row.status, crate::model::SessionStatus::Running);
+        assert!(core.sessions.live_session_ids().is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn descriptor_limit_is_raised_in_an_isolated_process() {
+        const CHILD: &str = "RUNNER_TEST_DESCRIPTOR_LIMIT";
+        if std::env::var_os(CHILD).is_some() {
+            let mut limits: libc::rlimit = unsafe { std::mem::zeroed() };
+            assert_eq!(
+                unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limits) },
+                0
+            );
+            let hard = limits.rlim_max;
+            limits.rlim_cur = 64;
+            assert_eq!(unsafe { libc::setrlimit(libc::RLIMIT_NOFILE, &limits) }, 0);
+            raise_descriptor_limit();
+            assert_eq!(
+                unsafe { libc::getrlimit(libc::RLIMIT_NOFILE, &mut limits) },
+                0
+            );
+            assert!(limits.rlim_cur > 64);
+            assert_eq!(limits.rlim_max, hard);
+            return;
+        }
+        assert!(std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "daemon::server::tests::descriptor_limit_is_raised_in_an_isolated_process"
+            ])
+            .env(CHILD, "1")
+            .status()
+            .unwrap()
+            .success());
+    }
 
     #[tokio::test]
     async fn sentinel_accept_errors_back_off_and_return_to_serving() {

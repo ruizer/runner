@@ -4,7 +4,7 @@ use crate::model::{CodexSpeed, Runtime};
 use std::io::{BufRead, BufReader, Read};
 use std::process::{Command, Stdio};
 
-const FORK_MATERIALIZE_TIMEOUT: Duration = Duration::from_secs(120);
+use runner_core::protocol::socket::FORK_MATERIALIZE_TIMEOUT;
 const FORK_MATERIALIZE_POLL: Duration = Duration::from_millis(25);
 const CODEX_FORK_ROLLOUT_TIMEOUT: Duration = Duration::from_secs(5);
 

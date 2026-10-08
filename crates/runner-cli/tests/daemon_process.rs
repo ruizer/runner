@@ -303,7 +303,7 @@ impl Daemon {
         self.connect()
     }
     fn connect(&self) -> Arc<SocketTransport> {
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + daemon_process::DAEMON_START_TIMEOUT;
         loop {
             match SocketTransport::connect(&self.launch.daemon_endpoint, self.hello(&self.hash)) {
                 Ok(client) => return client,
@@ -325,7 +325,7 @@ impl Daemon {
         }
     }
     fn stopped(&mut self) {
-        let deadline = Instant::now() + Duration::from_secs(12);
+        let deadline = Instant::now() + daemon_process::DAEMON_STOP_TIMEOUT;
         while self
             .child
             .as_mut()
@@ -367,7 +367,7 @@ impl Drop for Daemon {
             let _ = client.shutdown(true);
             let _ = daemon_process::wait_unlocked(
                 &self.launch.paths.app_data_dir,
-                Duration::from_secs(10),
+                daemon_process::DAEMON_STOP_TIMEOUT,
             );
         }
         if let Some(child) = self.child.as_mut() {
@@ -565,6 +565,99 @@ fn sigterm_stamps_resume_and_replaced_socket_stops_daemon() {
 }
 
 #[test]
+fn exited_daemon_reports_status_and_log_path() {
+    for cli in [false, true] {
+        let daemon = Daemon::new();
+        std::fs::write(
+            daemon.launch.paths.app_data_dir.join("runner.db"),
+            b"not sqlite",
+        )
+        .unwrap();
+        let error = if cli {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            rt.block_on(runner_cli::client::SocketClient::connect_or_start(
+                &daemon.launch,
+                false,
+            ))
+            .err()
+            .expect("invalid database must fail startup")
+            .to_string()
+        } else {
+            daemon
+                .launch
+                .connect_or_spawn(&daemon.hash)
+                .err()
+                .expect("invalid database must fail startup")
+                .to_string()
+        };
+        assert!(error.contains("exited during startup"), "{error}");
+        #[cfg(unix)]
+        assert!(error.contains("exit status: 1"), "{error}");
+        #[cfg(windows)]
+        assert!(error.contains("exit code: 1"), "{error}");
+        assert!(
+            error.contains(
+                &daemon
+                    .launch
+                    .paths
+                    .log_dir
+                    .join("runnerd.log")
+                    .display()
+                    .to_string()
+            ),
+            "{error}"
+        );
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn app_and_cli_allow_daemon_start_past_ten_seconds() {
+    use std::os::unix::fs::PermissionsExt;
+    for cli in [false, true] {
+        let daemon = Daemon::new();
+        let bin = daemon.launch.source.parent().unwrap();
+        let executable = bin.join(runner_core::cli_install::DAEMON_DEST_BIN_NAME);
+        std::fs::create_dir(bin.join("slow")).unwrap();
+        std::fs::rename(&executable, bin.join("slow/runnerd")).unwrap();
+        std::fs::write(
+            &executable,
+            "#!/bin/sh\nsleep 11\nexec \"${0%/*}/slow/runnerd\" \"$@\"\n",
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let started = Instant::now();
+        if cli {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
+            let client = rt
+                .block_on(runner_cli::client::SocketClient::connect_or_start(
+                    &daemon.launch,
+                    false,
+                ))
+                .unwrap();
+            assert_eq!(client.endpoint(), &daemon.launch.daemon_endpoint);
+        } else {
+            let client = daemon.launch.connect_or_spawn(&daemon.hash).unwrap();
+            assert!(client.welcome.pid > 0);
+        }
+        assert!(started.elapsed() > Duration::from_secs(10));
+        let socket = daemon.connect();
+        socket.shutdown(true).unwrap();
+        daemon_process::wait_unlocked(
+            &daemon.launch.paths.app_data_dir,
+            daemon_process::DAEMON_STOP_TIMEOUT,
+        )
+        .unwrap();
+    }
+}
+
+#[test]
 fn cli_starts_only_on_not_running_and_never_from_ssh() {
     let daemon = Daemon::new();
     let rt = tokio::runtime::Builder::new_current_thread()
@@ -584,8 +677,11 @@ fn cli_starts_only_on_not_running_and_never_from_ssh() {
     });
     let socket = daemon.connect();
     socket.shutdown(true).unwrap();
-    daemon_process::wait_unlocked(&daemon.launch.paths.app_data_dir, Duration::from_secs(10))
-        .unwrap();
+    daemon_process::wait_unlocked(
+        &daemon.launch.paths.app_data_dir,
+        daemon_process::DAEMON_STOP_TIMEOUT,
+    )
+    .unwrap();
 }
 
 #[test]
@@ -615,8 +711,11 @@ fn concurrent_app_starters_and_cli_share_one_daemon() {
     assert_eq!(a.welcome.pid, daemon.connect().welcome.pid);
     drop(cli);
     a.shutdown(true).unwrap();
-    daemon_process::wait_unlocked(&daemon.launch.paths.app_data_dir, Duration::from_secs(10))
-        .unwrap();
+    daemon_process::wait_unlocked(
+        &daemon.launch.paths.app_data_dir,
+        daemon_process::DAEMON_STOP_TIMEOUT,
+    )
+    .unwrap();
 }
 
 #[cfg(unix)]
