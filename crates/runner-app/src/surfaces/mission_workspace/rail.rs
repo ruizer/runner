@@ -218,39 +218,121 @@ impl MissionWorkspace {
                 self.secondary,
             )
             .then(|| {
-                div().flex().items_center().gap_1().children(
-                    slot_controls(session.session.status)
-                        .into_iter()
-                        .map(|action| {
-                            let action_root = root.clone();
-                            let target = session_id.clone();
-                            SessionControl::new(
-                                SharedString::from(format!("slot-{action:?}-{session_id}")),
-                                action,
-                            )
-                            .variant(SessionControlVariant::Header)
-                            .title(slot_control_title(
-                                action,
-                                &self.settings(cx).keymap_overrides,
-                            ))
-                            .header_size(24.)
-                            .restarting(
-                                self.transition_kind(&session_id)
-                                    == Some(MissionTransitionKind::Restarting),
-                            )
-                            .lifecycle_disabled(disabled)
-                            .on_press(move |window, cx| {
-                                action_root.update(cx, |this, cx| {
-                                    this.request_slot_action(&target, action, window, cx)
+                div()
+                    .debug_selector(|| format!("MISSION_CARD_CONTROLS {session_id}"))
+                    .flex_none()
+                    .flex()
+                    .items_center()
+                    .gap_1()
+                    .children(
+                        slot_controls(session.session.status)
+                            .into_iter()
+                            .map(|action| {
+                                let action_root = root.clone();
+                                let target = session_id.clone();
+                                SessionControl::new(
+                                    SharedString::from(format!("slot-{action:?}-{session_id}")),
+                                    action,
+                                )
+                                .variant(SessionControlVariant::Header)
+                                .title(slot_control_title(
+                                    action,
+                                    &self.settings(cx).keymap_overrides,
+                                ))
+                                .header_size(24.)
+                                .restarting(
+                                    self.transition_kind(&session_id)
+                                        == Some(MissionTransitionKind::Restarting),
+                                )
+                                .lifecycle_disabled(disabled)
+                                .on_press(move |window, cx| {
+                                    action_root.update(cx, |this, cx| {
+                                        this.request_slot_action(&target, action, window, cx)
+                                    })
                                 })
-                            })
-                        }),
-                )
+                            }),
+                    )
             });
+            let handle_title = SharedString::from(format!("@{}", session.handle));
+            let mut header_gap = rems(8. / 16.);
+            let mut header_margin = px(0.);
+            if controls.is_some() && session.handle == lead_handle {
+                let mut badge_style = window.text_style();
+                badge_style.font_weight = FontWeight::BOLD;
+                let badge_width = window
+                    .text_system()
+                    .shape_line(
+                        "LEAD".into(),
+                        theme::text_micro().to_pixels(window.rem_size()),
+                        &[badge_style.to_run("LEAD".len())],
+                        None,
+                    )
+                    .width
+                    .ceil();
+                let mut handle_style = window.text_style();
+                handle_style.font_family = theme::UI_MONOSPACE_FONT.into();
+                handle_style.font_weight = FontWeight::SEMIBOLD;
+                let prefix =
+                    SharedString::from(format!("@{}…", session.handle.chars().next().unwrap()));
+                let prefix_width = window
+                    .text_system()
+                    .shape_line(
+                        prefix.clone(),
+                        theme::text_body().to_pixels(window.rem_size()),
+                        &[handle_style.to_run(prefix.len())],
+                        None,
+                    )
+                    .width
+                    .ceil();
+                let full_width = window
+                    .text_system()
+                    .shape_line(
+                        handle_title.clone(),
+                        theme::text_body().to_pixels(window.rem_size()),
+                        &[handle_style.to_run(handle_title.len())],
+                        None,
+                    )
+                    .width
+                    .ceil();
+                let needed_width = full_width.min(prefix_width);
+                let fixed_width = rems((40. + 24. + 25. + 52. + 12. + 24.) / 16.)
+                    .to_pixels(window.rem_size())
+                    + px(2.)
+                    + badge_width;
+                let rail_width =
+                    rems(self.settings(cx).mission_rail_width / 16.).to_pixels(window.rem_size());
+                let available_width = rail_width - fixed_width;
+                if available_width < needed_width {
+                    header_gap = rems(2. / 16.);
+                    let compact_width =
+                        available_width + rems(18. / 16.).to_pixels(window.rem_size());
+                    if compact_width < needed_width {
+                        // Borrow only the header's padding when even compact gaps cannot fit @<character>….
+                        header_margin = -((needed_width - compact_width) / 2.).ceil();
+                    }
+                }
+            }
             let copy = self.session_key_copies.get(&session_id).cloned();
+            let key_value = div()
+                .debug_selector(|| format!("MISSION_CARD_KEY {session_id}"))
+                .min_w(px(0.))
+                .flex_1()
+                .font_family(theme::UI_MONOSPACE_FONT)
+                .text_color(theme::muted());
+            let key_value = match &session.agent_session_key {
+                Some(key) => Tooltip::new(
+                    SharedString::from(format!("mission-session-key-{session_id}")),
+                    key.clone(),
+                    key_value.line_clamp(2).text_ellipsis().child(key.clone()),
+                )
+                .expand()
+                .into_any_element(),
+                None => key_value.child("NULL").into_any_element(),
+            };
             let active = selected == Some(session_id.as_str());
             list = list.child(
                 div()
+                    .debug_selector(|| format!("MISSION_CARD {session_id}"))
                     .id(SharedString::from(format!(
                         "mission-role-card-{session_id}"
                     )))
@@ -296,38 +378,58 @@ impl MissionWorkspace {
                     })
                     .child(
                         div()
+                            .mx(header_margin)
                             .flex()
                             .items_center()
                             .justify_between()
-                            .gap_2()
+                            .gap(header_gap)
                             .child(
                                 div()
                                     .min_w(px(0.))
+                                    .flex_initial()
                                     .flex()
                                     .items_center()
-                                    .gap_2()
-                                    .child(RoleAvatar::new(session.handle.clone(), 25.))
-                                    .child(Tooltip::new(
-                                        SharedString::from(format!(
-                                            "mission-role-title-{session_id}"
-                                        )),
-                                        self.session_title_tooltip(session, cx),
+                                    .gap(header_gap)
+                                    .child(
                                         div()
-                                            .min_w(px(0.))
-                                            .truncate()
-                                            .font_family(theme::UI_MONOSPACE_FONT)
-                                            .text_size(theme::text_body())
-                                            .font_weight(FontWeight::SEMIBOLD)
-                                            .text_color(
-                                                runner_app::ui::hue_for_seed(&session.handle)
-                                                    .color(),
-                                            )
-                                            .child(format!("@{}", session.handle)),
-                                    ))
-                                    .children(
-                                        (session.handle == lead_handle)
-                                            .then(runner_app::ui::lead_badge),
-                                    ),
+                                            .debug_selector(|| {
+                                                format!("MISSION_CARD_AVATAR {session_id}")
+                                            })
+                                            .flex_none()
+                                            .child(RoleAvatar::new(session.handle.clone(), 25.)),
+                                    )
+                                    .child(
+                                        Tooltip::new(
+                                            SharedString::from(format!(
+                                                "mission-role-title-{session_id}"
+                                            )),
+                                            self.session_title_tooltip(session, cx),
+                                            div()
+                                                .debug_selector(|| {
+                                                    format!("MISSION_CARD_HANDLE {session_id}")
+                                                })
+                                                .min_w(px(0.))
+                                                .flex_1()
+                                                .truncate()
+                                                .font_family(theme::UI_MONOSPACE_FONT)
+                                                .text_size(theme::text_body())
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .text_color(
+                                                    runner_app::ui::hue_for_seed(&session.handle)
+                                                        .color(),
+                                                )
+                                                .child(handle_title),
+                                        )
+                                        .expand(),
+                                    )
+                                    .children((session.handle == lead_handle).then(|| {
+                                        div()
+                                            .debug_selector(|| {
+                                                format!("MISSION_CARD_LEAD {session_id}")
+                                            })
+                                            .flex_none()
+                                            .child(runner_app::ui::lead_badge())
+                                    })),
                             )
                             .children(controls),
                     )
@@ -352,6 +454,9 @@ impl MissionWorkspace {
                             .line_height(rems(14. / 16.))
                             .child(
                                 div()
+                                    .debug_selector(|| {
+                                        format!("MISSION_CARD_KEY_LABEL {session_id}")
+                                    })
                                     .w(rems(72. / 16.))
                                     .flex_none()
                                     .text_color(theme::faint())
@@ -364,20 +469,15 @@ impl MissionWorkspace {
                                     .flex()
                                     .items_start()
                                     .gap(rems(6. / 16.))
-                                    .child(
+                                    .child(key_value)
+                                    .children(copy.map(|copy| {
                                         div()
-                                            .min_w(px(0.))
-                                            .flex_1()
-                                            .font_family(theme::UI_MONOSPACE_FONT)
-                                            .text_color(theme::muted())
-                                            .child(
-                                                session
-                                                    .agent_session_key
-                                                    .clone()
-                                                    .unwrap_or_else(|| "NULL".into()),
-                                            ),
-                                    )
-                                    .children(copy),
+                                            .debug_selector(|| {
+                                                format!("MISSION_CARD_KEY_COPY {session_id}")
+                                            })
+                                            .flex_none()
+                                            .child(copy)
+                                    })),
                             ),
                     ),
             );
@@ -449,6 +549,7 @@ impl MissionWorkspace {
                     .gap_1()
                     .child(
                         div()
+                            .debug_selector(|| "MISSION_META_ID".into())
                             .min_w(px(0.))
                             .flex_1()
                             .font_family(theme::UI_MONOSPACE_FONT)

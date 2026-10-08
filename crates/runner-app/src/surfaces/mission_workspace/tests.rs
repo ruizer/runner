@@ -453,6 +453,369 @@ fn slot_rail_actions_match_status() {
     }
 }
 
+struct MissionRailLayoutTest {
+    workspace: Entity<MissionWorkspace>,
+}
+
+impl gpui::Render for MissionRailLayoutTest {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let rail = self.workspace.update(cx, |workspace, cx| {
+            workspace.render_mission_rail(1., true, false, window, cx)
+        });
+        let handle_text = |selector: &'static str, text: &'static str| {
+            div()
+                .debug_selector(|| selector.into())
+                .flex_none()
+                .font_family(theme::UI_MONOSPACE_FONT)
+                .text_size(theme::text_body())
+                .font_weight(gpui::FontWeight::SEMIBOLD)
+                .child(text)
+        };
+        div().size_full().flex().child(rail).child(
+            div()
+                .flex()
+                .flex_col()
+                .items_start()
+                .child(handle_text(
+                    "RAIL_FULL_HANDLE",
+                    "@abcdefghijklmnopqrstuvwxyz012345",
+                ))
+                .child(handle_text("RAIL_VISIBLE_PREFIX", "@a…"))
+                .child(handle_text("RAIL_SHORT_HANDLE", "@qa"))
+                .child(handle_text("RAIL_SHORT_LEAD_HANDLE", "@dev"))
+                .child(handle_text("RAIL_SHORTEST_LEAD_HANDLE", "@a"))
+                .child(
+                    div()
+                        .debug_selector(|| "RAIL_FULL_LEAD".into())
+                        .child(runner_app::ui::lead_badge()),
+                )
+                .child(
+                    div()
+                        .debug_selector(|| "RAIL_KEY_PREFIX".into())
+                        .font_family(theme::UI_MONOSPACE_FONT)
+                        .text_size(theme::text_caption())
+                        .line_height(gpui::rems(14. / 16.))
+                        .child("01…"),
+                )
+                .child(
+                    div()
+                        .debug_selector(|| "RAIL_TWO_LINE_KEY".into())
+                        .font_family(theme::UI_MONOSPACE_FONT)
+                        .text_size(theme::text_caption())
+                        .line_height(gpui::rems(14. / 16.))
+                        .child("01a119c9\n-4714-70"),
+                )
+                .child(
+                    div()
+                        .debug_selector(|| "RAIL_TWO_LINE_MISSION_ID".into())
+                        .font_family(theme::UI_MONOSPACE_FONT)
+                        .text_size(theme::text_meta())
+                        .child("01M4CWJGAR56H\nCBK0RNRQS8DV0"),
+                ),
+        )
+    }
+}
+
+#[test]
+fn mission_rail_long_values_truncate_without_overlapping_fixed_controls() {
+    use gpui::{TestAppContext, VisualTestContext};
+    use runner_daemon::{db, session, shell_path};
+    use std::sync::RwLock;
+
+    let session_key = "01a119c9-4714-7091-8b75-81cec4ff360c";
+    for width in [
+        app_settings::MISSION_RAIL_MIN,
+        208.,
+        220.,
+        224.,
+        225.,
+        239.,
+        240.,
+        app_settings::MISSION_RAIL_DEFAULT,
+    ] {
+        let temp = tempfile::tempdir().unwrap();
+        let pool = Arc::new(db::open_pool(&temp.path().join("runner.db")).unwrap());
+        pool.get()
+            .unwrap()
+            .execute_batch(
+                "INSERT INTO crews (id, name, created_at, updated_at)
+             VALUES ('crew', 'Crew', '2026-10-08T00:00:00Z', '2026-10-08T00:00:00Z');
+             INSERT INTO missions (id, crew_id, title, status, started_at)
+             VALUES ('mission', 'crew', 'Rail test', 'running', '2026-10-08T00:00:00Z');",
+            )
+            .unwrap();
+        let runtime_shell_env = Arc::new(RwLock::new(shell_path::LoginShellEnv::default()));
+        let runtime_discovery =
+            Arc::new(RwLock::new(shell_path::DiscoveryState::startup(None, None)));
+        let core = crate::test_support::core(
+            pool,
+            temp.path().to_owned(),
+            session::SessionManager::new(
+                runtime_shell_env.clone(),
+                runtime_discovery.clone(),
+                Arc::new(session::pty_runtime::PtyRuntime::new()),
+            ),
+            runtime_shell_env,
+            runtime_discovery,
+        );
+        let mut cx = TestAppContext::single();
+        let store = cx.new(|cx| {
+            AppStore::new(
+                core.clone(),
+                None,
+                None,
+                temp.path().join("settings.json"),
+                AppSettings {
+                    mission_rail_width: width,
+                    ..AppSettings::default()
+                },
+                None,
+                cx,
+            )
+        });
+        let host = cx.add_window(|window, cx| {
+            window.set_rem_size(px(16.));
+            let workspace = cx.new(|cx| {
+                let mut workspace = MissionWorkspace::new(
+                    "rail-test".into(),
+                    WeakEntity::new_invalid(),
+                    store,
+                    window,
+                    cx,
+                );
+                workspace.mission =
+                    Some(runner_daemon::ops::mission::mission_get(&core, "mission").unwrap());
+                workspace.sessions = [
+                    ("lead", "abcdefghijklmnopqrstuvwxyz012345", true),
+                    ("worker", "abcdefghijklmnopqrstuvwxyz012346", false),
+                    ("short", "qa", false),
+                ]
+                .into_iter()
+                .map(|(id, handle, lead)| SessionRow {
+                    session: runner_core::protocol::model::Session {
+                        id: id.into(),
+                        mission_id: Some("mission".into()),
+                        role_id: "role".into(),
+                        slot_id: None,
+                        cwd: None,
+                        status: SessionStatus::Running,
+                        pid: None,
+                        started_at: None,
+                        stopped_at: None,
+                    },
+                    handle: handle.into(),
+                    lead,
+                    runtime: "codex".into(),
+                    live_title: None,
+                    agent_session_key: (id != "short").then(|| session_key.into()),
+                })
+                .collect();
+                workspace.sync_mission_copy_entities(cx);
+                assert_eq!(
+                    workspace.session_title_tooltip(&workspace.sessions[0], cx),
+                    "@abcdefghijklmnopqrstuvwxyz012345"
+                );
+                workspace
+            });
+            MissionRailLayoutTest { workspace }
+        });
+        let mut visual = VisualTestContext::from_window(host.into(), &cx);
+        visual.simulate_resize(size(px(960.), px(600.)));
+        cx.run_until_parked();
+        let full = visual.debug_bounds("RAIL_FULL_HANDLE").unwrap();
+        let prefix = visual.debug_bounds("RAIL_VISIBLE_PREFIX").unwrap();
+        let badge = visual.debug_bounds("MISSION_CARD_LEAD lead").unwrap();
+        let full_badge = visual.debug_bounds("RAIL_FULL_LEAD").unwrap();
+        assert_eq!(
+            badge.size, full_badge.size,
+            "badge shrank at rail width {width}"
+        );
+        for (card_selector, handle_selector, controls_selector) in [
+            (
+                "MISSION_CARD lead",
+                "MISSION_CARD_HANDLE lead",
+                "MISSION_CARD_CONTROLS lead",
+            ),
+            (
+                "MISSION_CARD worker",
+                "MISSION_CARD_HANDLE worker",
+                "MISSION_CARD_CONTROLS worker",
+            ),
+        ] {
+            let card = visual.debug_bounds(card_selector).unwrap();
+            let handle = visual.debug_bounds(handle_selector).unwrap();
+            let controls = visual.debug_bounds(controls_selector).unwrap();
+            assert!(
+                handle.size.width >= prefix.size.width,
+                "handle cannot retain its first character at rail width {width}: {handle:?}, prefix {prefix:?}"
+            );
+            assert!(
+                handle.size.width < full.size.width,
+                "handle did not truncate at rail width {width}: {handle:?}"
+            );
+            assert!(
+                handle.right() <= controls.left(),
+                "handle overlaps controls at rail width {width}"
+            );
+            assert!(
+                controls.right() <= card.right(),
+                "controls overflow at rail width {width}"
+            );
+            assert_eq!(
+                controls.size.width,
+                px(52.),
+                "controls shrank at rail width {width}"
+            );
+            if handle_selector == "MISSION_CARD_HANDLE lead" {
+                let avatar = visual.debug_bounds("MISSION_CARD_AVATAR lead").unwrap();
+                assert!(
+                    avatar.left() >= card.left(),
+                    "avatar overflows at rail width {width}"
+                );
+                assert_eq!(
+                    avatar.size.width,
+                    px(25.),
+                    "avatar shrank at rail width {width}"
+                );
+                assert!(
+                    handle.right() <= badge.left(),
+                    "handle overlaps LEAD at rail width {width}"
+                );
+                assert!(
+                    badge.right() <= controls.left(),
+                    "LEAD overlaps controls at rail width {width}"
+                );
+            }
+        }
+        assert_eq!(
+            visual
+                .debug_bounds("MISSION_CARD_HANDLE short")
+                .unwrap()
+                .size
+                .width,
+            visual.debug_bounds("RAIL_SHORT_HANDLE").unwrap().size.width,
+            "short handle changed at rail width {width}"
+        );
+        for (key_selector, label_selector, copy_selector, card_selector) in [
+            (
+                "MISSION_CARD_KEY lead",
+                "MISSION_CARD_KEY_LABEL lead",
+                "MISSION_CARD_KEY_COPY lead",
+                "MISSION_CARD lead",
+            ),
+            (
+                "MISSION_CARD_KEY worker",
+                "MISSION_CARD_KEY_LABEL worker",
+                "MISSION_CARD_KEY_COPY worker",
+                "MISSION_CARD worker",
+            ),
+        ] {
+            let key = visual.debug_bounds(key_selector).unwrap();
+            assert_eq!(
+                key.size.height,
+                visual
+                    .debug_bounds("RAIL_TWO_LINE_KEY")
+                    .unwrap()
+                    .size
+                    .height,
+                "key must use two lines at rail width {width}: {key:?}"
+            );
+            assert!(
+                key.size.width >= visual.debug_bounds("RAIL_KEY_PREFIX").unwrap().size.width,
+                "key collapsed to ellipsis only at rail width {width}: {key:?}"
+            );
+            let label = visual.debug_bounds(label_selector).unwrap();
+            let copy = visual.debug_bounds(copy_selector).unwrap();
+            let card = visual.debug_bounds(card_selector).unwrap();
+            assert_eq!(label.size.width, px(72.));
+            assert_eq!(copy.size, size(px(20.), px(20.)));
+            assert!(key.right() <= copy.left());
+            assert!(copy.right() <= card.right());
+            visual.simulate_click(copy.center(), gpui::Modifiers::default());
+            cx.run_until_parked();
+            assert_eq!(
+                cx.read_from_clipboard().and_then(|item| item.text()),
+                Some(session_key.into()),
+                "copy lost the full key at rail width {width}"
+            );
+        }
+        assert_eq!(
+            visual
+                .debug_bounds("MISSION_CARD_KEY short")
+                .unwrap()
+                .size
+                .height,
+            px(14.),
+            "NULL gained a line at rail width {width}"
+        );
+        for status in [MissionStatus::Running, MissionStatus::Completed] {
+            let (short_handle, reference) = if status == MissionStatus::Running && width < 239. {
+                ("a", "RAIL_SHORTEST_LEAD_HANDLE")
+            } else {
+                ("dev", "RAIL_SHORT_LEAD_HANDLE")
+            };
+            host.update(&mut visual, |host, _, cx| {
+                host.workspace.update(cx, |workspace, _| {
+                    workspace.sessions[0].handle = short_handle.into();
+                    workspace.mission.as_mut().unwrap().status = status;
+                });
+                cx.notify();
+            })
+            .unwrap();
+            cx.run_until_parked();
+            let handle = visual.debug_bounds("MISSION_CARD_HANDLE lead").unwrap();
+            let avatar = visual.debug_bounds("MISSION_CARD_AVATAR lead").unwrap();
+            let badge = visual.debug_bounds("MISSION_CARD_LEAD lead").unwrap();
+            assert_eq!(
+                handle.size.width,
+                visual.debug_bounds(reference).unwrap().size.width,
+                "short lead handle changed at rail width {width}, status {status:?}"
+            );
+            let expected_gap = if status == MissionStatus::Running && width < 220. {
+                2.
+            } else {
+                8.
+            };
+            assert_eq!(
+                handle.left() - avatar.right(),
+                px(expected_gap),
+                "short lead avatar gap changed at rail width {width}, status {status:?}"
+            );
+            assert_eq!(
+                badge.left() - handle.right(),
+                px(expected_gap),
+                "short lead badge gap changed at rail width {width}, status {status:?}"
+            );
+            assert_eq!(
+                visual.debug_bounds("MISSION_CARD_CONTROLS lead").is_some(),
+                status == MissionStatus::Running
+            );
+        }
+        host.update(&mut visual, |host, _, cx| {
+            host.workspace.update(cx, |workspace, cx| {
+                let mission_id = "01M4CWJGAR56HCBK0RNRQS8DV0";
+                workspace.mission.as_mut().unwrap().id = mission_id.into();
+                workspace.mission_id_copy.update(cx, |copy, cx| {
+                    copy.set_value(Some(mission_id.into()), cx);
+                });
+                workspace.rail_view = MissionRailView::Meta;
+            });
+            cx.notify();
+        })
+        .unwrap();
+        cx.run_until_parked();
+        assert!(
+            visual.debug_bounds("MISSION_META_ID").unwrap().size.height
+                <= visual
+                    .debug_bounds("RAIL_TWO_LINE_MISSION_ID")
+                    .unwrap()
+                    .size
+                    .height,
+            "mission ID exceeds two lines at rail width {width}"
+        );
+    }
+}
+
 #[test]
 fn focused_mission_session_actions_match_the_active_tab_and_status() {
     let session = MissionTab::Session("coder".into());
