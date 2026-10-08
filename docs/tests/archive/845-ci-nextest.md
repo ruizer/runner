@@ -72,15 +72,31 @@ The latest plain Cargo run passed all 2,141 non-ignored tests and left the same 
 | `UPDATE_RUNNER_GOLDENS=1 cargo nextest run --locked -p runner-cli --test golden --cargo-profile ci built_cli_goldens_manifest_and_update` (twice) | Both 0; 39.038 s and 39.355 s; both byte-identical to the committed golden |
 | `cmp crates/runner-cli/tests/goldens/cli.txt /tmp/845-original-golden.txt` (after each update) | Both 0 |
 
-All 100 non-ignored tests in the real-daemon group passed in each of the three full nextest runs (the first full run had only the unrelated redraw failure; the next two were entirely green). The final database unit regression took 0.037 s, and the two real startup failure paths together took 1.565 s. Hosted three-consecutive-run verification remains pending PR CI.
+All 100 non-ignored tests in the real-daemon group passed in each of the three full nextest runs (the first full run had only the unrelated redraw failure; the next two were entirely green). The final database unit regression took 0.037 s, and the two real startup failure paths together took 1.565 s.
 
 ## Hosted CI evidence
 
-After local validation, Jason explicitly changed the sequencing: commit, push, and open a regular PR so hosted CI can run alongside the review. Review remains required before this is ready to merge. Baseline totals come from job logs, excluding the nested Unix subprocess summary.
+After local validation, Jason changed the sequencing: commit, push, and open a regular PR so hosted CI could run alongside the review. The reviewer's verdict on head `2af09ebc` was NO REMAINING MUST-FIX ISSUES, and PR #846 merged on 2026-10-08 as `5c5a3264`. Totals come from job logs; the baselines exclude the nested Unix subprocess summary.
 
-| Platform and baseline run | Test step | Job | Passed / failed / ignored |
-| --- | --- | --- | --- |
-| macOS 37769556810 | 8m32s | 10m58s | 2,048 / 0 / 6 |
-| Windows 37765871789 | 13m13s | 16m39s | 1,981 / 2 / 4 |
+Every run below restored the Rust cache (macOS on a full key match, Windows on a restore-key match), so all of them are warm. Test execution is nextest's reported duration; the Test step adds compilation.
 
-The Windows issue baseline is an earlier #844 revision with 1,106 daemon unit tests; the main run Jason linked has 1,108. Thus Windows should gain 95 tests relative to the issue's baseline (93 from this change and two from the newer base), with formerly failing tests also becoming passes. On the current base this predicts 2,078 Windows passes and four ignored. macOS should gain exactly 93, yielding 2,141 passes and six ignored. Hosted totals and consecutive real-daemon results will be checked against those expectations.
+| Platform and run | Test step | Test execution | Job | Passed / failed / skipped |
+| --- | --- | --- | --- | --- |
+| macOS baseline 37769556810 | 8m32s | 6m44s | 10m58s | 2,048 / 0 / 6 |
+| macOS PR 37777500795, attempt 1 | 4m13s | 2m52s | 6m24s | 2,141 / 0 / 6 |
+| macOS PR 37777500795, attempt 2 | 4m07s | 2m34s | 6m08s | 2,141 / 0 / 6 |
+| macOS main 37779393773 (`5c5a3264`) | 4m31s | 2m55s | 6m40s | 2,141 / 0 / 6 |
+| Windows baseline 37765871789 | 13m13s | 9m52s | 16m39s | 1,981 / 2 / 4 |
+| Windows PR 37777500795, attempt 1 | 11m02s | 7m01s | 14m52s | 2,078 / 0 / 4 |
+| Windows PR 37777500795, attempt 2 | 11m11s | 7m06s | 14m54s | 2,078 / 0 / 4 |
+| Windows main 37779393773 (`5c5a3264`) | 11m19s | 7m09s | 14m28s | 2,077 / 1 / 4 |
+
+The totals match the predictions: 93 more tests on macOS and 95 more on Windows than the issue's baselines. macOS met the halving target, with the job down from 10m58s to about 6m20s and test execution from 6m44s to under 3m. Windows did not: the job fell from 16m39s to about 14m50s, and its Test step still spends about four minutes compiling before nextest starts.
+
+The one failure, on main's first run, was `runner-cli::daemon_process persistent_hook_reporter_delivers_to_real_isolated_daemon` at `daemon_process.rs:74`. It gave a PowerShell fixture 10 s to write its routing file and timed out at 14.4 s, after taking 11.98 s in the PR's first run. Cargo ran test binaries one at a time; nextest runs every binary at once, and the `real-daemon` group caps only the three integration binaries, so the rest of the suite loads the runner while the fixture's PowerShell starts. The same day the wait was raised to 30 s, keeping its early exit (`test(cli): give the PowerShell hook fixture 30 s to start`). The other fixed waits in the real-daemon binaries cover daemon startup, shell echo and process exit, and none of them failed.
+
+Across the PR's two runs and main's first run, the real-daemon group passed in full three times on macOS and twice on Windows, the third Windows run failing only as above.
+
+## Regression suite
+
+No live regression case applies. The change is CI configuration and tests, plus a startup preflight that `db::tests::invalid_database_fails_fast_without_shortening_pool_checkout_timeout` and the real-daemon startup regression cover.
