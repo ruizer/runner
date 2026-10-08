@@ -47,6 +47,8 @@ mod lifecycle;
 mod output;
 mod spawn;
 pub mod terminal;
+#[cfg(windows)]
+pub(crate) mod windows_shutdown;
 
 #[cfg(test)]
 use super::state::ObservedInput;
@@ -653,6 +655,8 @@ pub struct SessionManager {
     runtime: Arc<dyn SessionRuntime>,
     hook_endpoint: RwLock<Option<runner_core::app_paths::IpcEndpoint>>,
     shutdown: RwLock<bool>,
+    #[cfg(windows)]
+    pub(crate) session_end: Arc<windows_shutdown::SessionEnd>,
     resize_settle_ms: AtomicU64,
     resize_generation: AtomicU64,
     terminal_palette: Mutex<runner_terminal::palette::TerminalPalette>,
@@ -791,6 +795,8 @@ impl SessionManager {
             runtime,
             hook_endpoint: RwLock::new(None),
             shutdown: RwLock::new(false),
+            #[cfg(windows)]
+            session_end: Arc::default(),
             resize_settle_ms: AtomicU64::new(RESIZE_SETTLE_MS),
             resize_generation: AtomicU64::new(0),
             terminal_palette: Mutex::new(runner_terminal::palette::RUNNER),

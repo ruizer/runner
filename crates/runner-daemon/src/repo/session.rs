@@ -27,9 +27,8 @@ pub struct ResumeOnLaunchClaim {
     pub session_id: String,
     pub shell: bool,
 }
-const LIVE_AT_QUIT_PREDICATE: &str = "
-    status = 'running'
-    AND archived_at IS NULL
+const RESUMABLE_AT_QUIT_PREDICATE: &str = "
+    archived_at IS NULL
     AND (
         mission_id IS NULL
         OR (
@@ -467,6 +466,43 @@ pub fn cleanup_stale_running(conn: &Connection, now: Timestamp) -> rusqlite::Res
 /// The caller kills the returned live ids only after this transaction commits.
 pub fn mark_running_for_resume_on_launch(conn: &mut Connection) -> rusqlite::Result<Vec<String>> {
     let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let ids = mark_running_for_resume(&tx)?;
+    tx.commit()?;
+    Ok(ids)
+}
+
+#[cfg(windows)]
+pub(crate) fn mark_running_and_exited_for_resume_on_launch(
+    conn: &mut Connection,
+    exited: &[SessionRowDb],
+) -> rusqlite::Result<Vec<String>> {
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    let mut ids = mark_running_for_resume(&tx)?;
+    for row in exited {
+        let changed = tx.execute(
+            &format!(
+                "UPDATE sessions
+                    SET resume_on_launch = ?1,
+                        agent_session_key = COALESCE(agent_session_key, ?2)
+                  WHERE id = ?3 AND started_at IS ?4
+                    AND {RESUMABLE_AT_QUIT_PREDICATE}"
+            ),
+            rusqlite::params![
+                RESUME_ON_LAUNCH_PENDING,
+                row.agent_session_key,
+                row.id,
+                row.started_at.map(|time| time.to_rfc3339()),
+            ],
+        )?;
+        if changed > 0 && !ids.contains(&row.id) {
+            ids.push(row.id.clone());
+        }
+    }
+    tx.commit()?;
+    Ok(ids)
+}
+
+fn mark_running_for_resume(tx: &rusqlite::Transaction<'_>) -> rusqlite::Result<Vec<String>> {
     tx.execute(
         "UPDATE sessions
             SET resume_on_launch = ?1
@@ -477,7 +513,7 @@ pub fn mark_running_for_resume_on_launch(conn: &mut Connection) -> rusqlite::Res
         &format!(
             "UPDATE sessions
                 SET resume_on_launch = ?1
-              WHERE {LIVE_AT_QUIT_PREDICATE}"
+              WHERE status = 'running' AND {RESUMABLE_AT_QUIT_PREDICATE}"
         ),
         [RESUME_ON_LAUNCH_PENDING],
     )?;
@@ -486,7 +522,7 @@ pub fn mark_running_for_resume_on_launch(conn: &mut Connection) -> rusqlite::Res
             "SELECT id
                FROM sessions
               WHERE resume_on_launch = ?1
-                AND {LIVE_AT_QUIT_PREDICATE}
+                AND status = 'running' AND {RESUMABLE_AT_QUIT_PREDICATE}
               ORDER BY started_at, id"
         ))?;
         let rows = stmt
@@ -494,7 +530,6 @@ pub fn mark_running_for_resume_on_launch(conn: &mut Connection) -> rusqlite::Res
             .collect::<rusqlite::Result<Vec<_>>>()?;
         rows
     };
-    tx.commit()?;
     Ok(ids)
 }
 
