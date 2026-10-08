@@ -151,93 +151,137 @@ fn recording_round_trips() {
     }
 }
 
-#[test]
-fn recording_split_points() {
-    for path in recordings() {
-        let fixture = Fixture::load(&path).unwrap();
-        let bytes = fixture.output_bytes().unwrap();
-        let mut offsets = vec![0, bytes.len()];
-        let mut offset = 0;
-        for event in &fixture.events {
-            if let FixtureEvent::Data { data, .. } = event {
-                offset += decode_chunk(data).unwrap().len();
-                offsets.push(offset);
+macro_rules! split_recordings {
+    ($($name:ident => $file:literal),+ $(,)?) => {
+        mod recording_split_points {
+            use super::*;
+            $(#[test]
+            fn $name() {
+                super::recording_split_points($file);
+            })+
+
+            #[test]
+            fn all_recordings_are_covered() {
+                let mut expected = vec![$($file),+];
+                expected.sort_unstable();
+                assert_eq!(
+                    recordings().iter().map(|path| path.file_name().unwrap().to_str().unwrap()).collect::<Vec<_>>(),
+                    expected
+                );
             }
         }
-        let mut seed = 0x0006_451b_u64;
-        for _ in 0..200 {
-            seed ^= seed << 13;
-            seed ^= seed >> 7;
-            seed ^= seed << 17;
-            offsets.push(seed as usize % (bytes.len() + 1));
+    };
+}
+
+split_recordings! {
+    fixture_645_m2_claude_clear_resize => "645-m2-claude-clear-resize.ndjson",
+    fixture_645_m2_claude_long_transcript => "645-m2-claude-long-transcript.ndjson",
+    fixture_645_m2_codex_alt_resize => "645-m2-codex-alt-resize.ndjson",
+    fixture_645_m2_pi_shift_enter => "645-m2-pi-shift-enter.ndjson",
+    fixture_645_m2_zsh_less_vim => "645-m2-zsh-less-vim.ndjson",
+    agy_first_turn => "agy-first-turn.ndjson",
+    claude_session => "claude-session.ndjson",
+    codex_title_working => "codex-title-working.ndjson",
+    copilot_first_turn => "copilot-first-turn.ndjson",
+    input_claude_control_submit => "input-claude-control-submit.ndjson",
+    input_claude_delete => "input-claude-delete.ndjson",
+    input_codex_filled_submit => "input-codex-filled-submit.ndjson",
+    input_codex_fresh_submit => "input-codex-fresh-submit.ndjson",
+    input_codex_menu => "input-codex-menu.ndjson",
+    input_codex_queued_submit => "input-codex-queued-submit.ndjson",
+    input_zsh_submit => "input-zsh-submit.ndjson",
+    procedural_glyphs => "procedural-glyphs.ndjson",
+    top_busy => "top-busy.ndjson",
+    width_torture => "width-torture.ndjson",
+}
+
+fn recording_split_points(name: &str) {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("fixtures")
+        .join(name);
+    let fixture = Fixture::load(&path).unwrap();
+    let bytes = fixture.output_bytes().unwrap();
+    let mut offsets = vec![0, bytes.len()];
+    let mut offset = 0;
+    for event in &fixture.events {
+        if let FixtureEvent::Data { data, .. } = event {
+            offset += decode_chunk(data).unwrap().len();
+            offsets.push(offset);
         }
-        offsets.sort_unstable();
-        offsets.dedup();
-        for offset in offsets {
-            let mut original = new_term(fixture.header.cols, fixture.header.rows);
-            let mut parser = Processor::new();
-            let mut scanner = BoundaryScanner::default();
-            let mut remaining = offset;
-            let mut resume = (fixture.events.len(), 0);
-            for (index, event) in fixture.events.iter().enumerate() {
-                if remaining == 0 {
-                    resume = (index, 0);
+    }
+    let mut seed = 0x0006_451b_u64;
+    for _ in 0..200 {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        offsets.push(seed as usize % (bytes.len() + 1));
+    }
+    offsets.sort_unstable();
+    offsets.dedup();
+    for offset in offsets {
+        let mut original = new_term(fixture.header.cols, fixture.header.rows);
+        let mut parser = Processor::new();
+        let mut scanner = BoundaryScanner::default();
+        let mut remaining = offset;
+        let mut resume = (fixture.events.len(), 0);
+        for (index, event) in fixture.events.iter().enumerate() {
+            if remaining == 0 {
+                resume = (index, 0);
+                break;
+            }
+            if let FixtureEvent::Data { data, .. } = event {
+                let chunk = decode_chunk(data).unwrap();
+                if remaining < chunk.len() {
+                    parse(
+                        &mut original,
+                        &mut parser,
+                        &mut scanner,
+                        &chunk[..remaining],
+                    );
+                    resume = (index, remaining);
                     break;
                 }
-                if let FixtureEvent::Data { data, .. } = event {
-                    let chunk = decode_chunk(data).unwrap();
-                    if remaining < chunk.len() {
-                        parse(
-                            &mut original,
-                            &mut parser,
-                            &mut scanner,
-                            &chunk[..remaining],
-                        );
-                        resume = (index, remaining);
-                        break;
-                    }
-                    remaining -= chunk.len();
-                }
-                apply_event(&mut original, &mut parser, &mut scanner, event);
+                remaining -= chunk.len();
             }
-            let (mut restored, mut restored_parser, mut restored_scanner) =
-                restore(&original, &parser, &scanner);
-            equal(
-                &original,
-                &restored,
-                &format!("{} offset {offset} immediate", path.display()),
-            );
-            for (index, event) in fixture.events.iter().enumerate().skip(resume.0) {
-                if index == resume.0 && resume.1 != 0 {
-                    let FixtureEvent::Data { data, .. } = event else {
-                        unreachable!();
-                    };
-                    let chunk = decode_chunk(data).unwrap();
-                    parse(&mut original, &mut parser, &mut scanner, &chunk[resume.1..]);
-                    parse(
-                        &mut restored,
-                        &mut restored_parser,
-                        &mut restored_scanner,
-                        &chunk[resume.1..],
-                    );
-                } else {
-                    apply_event(&mut original, &mut parser, &mut scanner, event);
-                    apply_event(
-                        &mut restored,
-                        &mut restored_parser,
-                        &mut restored_scanner,
-                        event,
-                    );
-                }
-            }
-            parser.stop_sync(&mut original);
-            restored_parser.stop_sync(&mut restored);
-            equal(
-                &original,
-                &restored,
-                &format!("{} offset {offset}", path.display()),
-            );
+            apply_event(&mut original, &mut parser, &mut scanner, event);
         }
+        let (mut restored, mut restored_parser, mut restored_scanner) =
+            restore(&original, &parser, &scanner);
+        equal(
+            &original,
+            &restored,
+            &format!("{} offset {offset} immediate", path.display()),
+        );
+        for (index, event) in fixture.events.iter().enumerate().skip(resume.0) {
+            if index == resume.0 && resume.1 != 0 {
+                let FixtureEvent::Data { data, .. } = event else {
+                    unreachable!();
+                };
+                let chunk = decode_chunk(data).unwrap();
+                parse(&mut original, &mut parser, &mut scanner, &chunk[resume.1..]);
+                parse(
+                    &mut restored,
+                    &mut restored_parser,
+                    &mut restored_scanner,
+                    &chunk[resume.1..],
+                );
+            } else {
+                apply_event(&mut original, &mut parser, &mut scanner, event);
+                apply_event(
+                    &mut restored,
+                    &mut restored_parser,
+                    &mut restored_scanner,
+                    event,
+                );
+            }
+        }
+        parser.stop_sync(&mut original);
+        restored_parser.stop_sync(&mut restored);
+        equal(
+            &original,
+            &restored,
+            &format!("{} offset {offset}", path.display()),
+        );
     }
 }
 

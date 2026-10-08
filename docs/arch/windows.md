@@ -22,18 +22,28 @@ To clean build outputs, close the development app and finish other Cargo builds,
 
 ## Validation
 
+Install the same pinned prebuilt nextest used by CI into Cargo's bin directory:
+
+```powershell
+$nextestArchive = Join-Path ([IO.Path]::GetTempPath()) ('nextest-' + [guid]::NewGuid() + '.zip')
+Invoke-WebRequest -OutFile $nextestArchive https://get.nexte.st/0.9.148/windows
+$cargoBin = if ($env:CARGO_HOME) { Join-Path $env:CARGO_HOME 'bin' } else { Join-Path $env:USERPROFILE '.cargo\bin' }
+Expand-Archive $nextestArchive -DestinationPath $cargoBin -Force
+Remove-Item $nextestArchive
+```
+
 Run the same Clippy and test commands as Windows CI:
 
 ```powershell
 cargo clippy --locked --workspace --all-targets --profile ci -- -D warnings
 if ($LASTEXITCODE -ne 0) { throw 'Clippy failed' }
-cargo test --locked --workspace --no-fail-fast --profile ci --timings
+cargo nextest run --locked --workspace --no-fail-fast --cargo-profile ci --timings
 if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
 cargo fmt --all --check
 if ($LASTEXITCODE -ne 0) { throw 'Formatting check failed' }
 ```
 
-The `ci` profile uses level 1 dependency optimization and minimal backtrace debug information. CI also runs installer tests, builds `Runner.exe` for manifest/icon verification, and uploads Cargo timing reports. Development builds retain their UI optimization settings; release builds use level 3 with thin LTO.
+The `ci` Cargo profile uses level 1 dependency optimization and minimal backtrace debug information. `make test` and `cargo test --locked --workspace --no-fail-fast --profile ci` still run the plain Cargo suite. CI also runs installer tests, builds `Runner.exe` for manifest/icon verification, and uploads Cargo timing reports. Development builds retain their UI optimization settings; release builds use level 3 with thin LTO.
 
 ## Building and testing the Windows installer
 

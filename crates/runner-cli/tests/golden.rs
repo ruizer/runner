@@ -381,168 +381,131 @@ impl Drop for Fixture {
     }
 }
 
-fn cases() -> Vec<Vec<&'static str>> {
-    vec![
-        vec!["status"],
-        vec!["daemon", "status"],
-        vec!["daemon", "stop"],
-        vec!["project", "list"],
-        vec!["project", "show", "Runner"],
-        vec!["project", "create", "New", "--path", "."],
-        vec!["project", "rename", "Runner", "Renamed"],
-        vec!["project", "delete", "Runner", "--force"],
-        vec!["role", "list"],
-        vec!["role", "show", "coder"],
-        vec!["role", "create", "new", "--runtime", "codex"],
-        vec![
-            "role", "update", "coder", "--model", "updated", "--speed", "standard",
-        ],
-        vec!["role", "delete", "unused"],
-        vec!["crew", "list"],
-        vec!["crew", "show", "Peer"],
-        vec!["crew", "create", "New"],
-        vec!["crew", "update", "Peer", "--name", "Renamed"],
-        vec!["crew", "delete", "Empty"],
-        vec!["crew", "add", "Peer", "unused", "--as", "impl"],
-        vec!["crew", "set", "Peer", "reviewer", "--effort", "medium"],
-        vec!["crew", "remove", "Peer", "reviewer"],
-        vec!["crew", "lead", "Peer", "reviewer"],
-        vec!["crew", "order", "Peer", "reviewer", "coder"],
-        vec!["mission", "list", "--crew", "Peer"],
-        vec!["mission", "show", MISSION],
-        vec![
-            "mission",
-            "start",
-            "--crew",
-            "Peer",
-            "--goal",
-            "ship",
-            "--cwd",
-            "not-a-directory",
-        ],
-        vec!["mission", "stop", MISSION],
-        vec!["mission", "resume", MISSION],
-        vec!["mission", "archive", MISSION],
-        vec!["mission", "unarchive", ARCHIVED],
-        vec!["mission", "rename", MISSION, "Renamed"],
-        vec!["mission", "pin", MISSION],
-        vec!["mission", "unpin", MISSION],
-        vec!["mission", "move", MISSION, "--unfile"],
-        vec!["mission", "feed", MISSION, "--oldest-first"],
-        vec!["mission", "answer", MISSION, EVENTS[1], "yes"],
-        vec!["chat", "start", "coder", "--cwd", "not-a-directory"],
-        vec![
-            "chat",
-            "start",
-            "--runtime",
-            "codex",
-            "--cwd",
-            "not-a-directory",
-        ],
-        vec!["session", "list"],
-        vec!["session", "show", SESSION],
-        vec!["session", "stop", SESSION],
-        vec!["session", "archive", SESSION],
-        vec!["session", "resume", SESSION],
-        vec!["session", "restart", SESSION],
-        vec![
-            "msg",
-            "post",
-            "Hello",
-            "--mission",
-            MISSION,
-            "--to",
-            "reviewer",
-        ],
-        vec!["msg", "read"],
-        vec![
-            "signal",
-            "ask_lead",
-            "--mission",
-            MISSION,
-            "--as",
-            "coder",
-            "--payload",
-            r#"{"question":"Review?"}"#,
-        ],
-        vec![
-            "ask",
-            "Review?",
-            "--context",
-            "Checks pass",
-            "--mission",
-            MISSION,
-            "--as",
-            "coder",
-        ],
-        vec![
-            "ask",
-            "--human",
-            "Ship?",
-            "--choices",
-            "yes,no",
-            "--mission",
-            MISSION,
-            "--as",
-            "coder",
-        ],
-        vec!["call", "role_get", r#"{"id":"role-coder"}"#],
-        vec!["msg", "post", "Hello", "--mission", "mission-running"],
-        vec![
-            "signal",
-            "ask_lead",
-            "--mission",
-            "mission-running",
-            "--as",
-            "coder",
-            "--payload",
-            r#"{"question":"Review?"}"#,
-        ],
-        vec![
-            "ask",
-            "Review?",
-            "--mission",
-            "mission-running",
-            "--as",
-            "coder",
-        ],
-        vec![
-            "ask",
-            "--human",
-            "Ship?",
-            "--choices",
-            "yes,no",
-            "--mission",
-            "mission-running",
-            "--as",
-            "coder",
-        ],
-        vec!["mission", "answer", "mission-running", EVENTS[1], "yes"],
-        vec!["project", "show", "missing"],
-        vec!["role", "show", "missing"],
-        vec!["crew", "show", "missing"],
-        vec!["mission", "show", "missing"],
-        vec!["session", "show", "missing"],
-        vec![
-            "msg",
-            "post",
-            "Hello",
-            "--mission",
-            "mission-running",
-            "--as",
-            "ghost",
-        ],
-        vec!["signal", "ask_lead", "--mission", MISSION, "--as", "ghost"],
-        vec!["mission", "feed", MISSION, "--since", "0", "--limit", "1"],
-        vec![
-            "mission", "feed", MISSION, "--types", "message", "--from", "reviewer",
-        ],
-        vec!["mission", "move", MISSION, "--project", "Runner"],
-        vec!["role", "create", "coder"],
-        vec!["role", "create", "new", "--runtime", "shell"],
-        vec!["mission", "move", MISSION],
-        vec!["signal", "unknown", "--mission", MISSION],
-    ]
+macro_rules! cli_cases {
+    ($($name:ident => $args:expr),+ $(,)?) => {
+        fn cases() -> Vec<Vec<&'static str>> {
+            vec![$($args),+]
+        }
+
+        mod built_cli_goldens {
+            use super::*;
+
+            $(#[test]
+            fn $name() {
+                check_cases(variants($args, false, true));
+            })+
+        }
+    };
+}
+
+cli_cases! {
+    status => vec!["status"],
+    daemon_status => vec!["daemon", "status"],
+    daemon_stop => vec!["daemon", "stop"],
+    project_list => vec!["project", "list"],
+    project_show => vec!["project", "show", "Runner"],
+    project_create => vec!["project", "create", "New", "--path", "."],
+    project_rename => vec!["project", "rename", "Runner", "Renamed"],
+    project_delete => vec!["project", "delete", "Runner", "--force"],
+    role_list => vec!["role", "list"],
+    role_show => vec!["role", "show", "coder"],
+    role_create => vec!["role", "create", "new", "--runtime", "codex"],
+    role_update => vec!["role", "update", "coder", "--model", "updated", "--speed", "standard"],
+    role_delete => vec!["role", "delete", "unused"],
+    crew_list => vec!["crew", "list"],
+    crew_show => vec!["crew", "show", "Peer"],
+    crew_create => vec!["crew", "create", "New"],
+    crew_update => vec!["crew", "update", "Peer", "--name", "Renamed"],
+    crew_delete => vec!["crew", "delete", "Empty"],
+    crew_add => vec!["crew", "add", "Peer", "unused", "--as", "impl"],
+    crew_set => vec!["crew", "set", "Peer", "reviewer", "--effort", "medium"],
+    crew_remove => vec!["crew", "remove", "Peer", "reviewer"],
+    crew_lead => vec!["crew", "lead", "Peer", "reviewer"],
+    crew_order => vec!["crew", "order", "Peer", "reviewer", "coder"],
+    mission_list => vec!["mission", "list", "--crew", "Peer"],
+    mission_show => vec!["mission", "show", MISSION],
+    mission_start => vec!["mission", "start", "--crew", "Peer", "--goal", "ship", "--cwd", "not-a-directory"],
+    mission_stop => vec!["mission", "stop", MISSION],
+    mission_resume => vec!["mission", "resume", MISSION],
+    mission_archive => vec!["mission", "archive", MISSION],
+    mission_unarchive => vec!["mission", "unarchive", ARCHIVED],
+    mission_rename => vec!["mission", "rename", MISSION, "Renamed"],
+    mission_pin => vec!["mission", "pin", MISSION],
+    mission_unpin => vec!["mission", "unpin", MISSION],
+    mission_unfile => vec!["mission", "move", MISSION, "--unfile"],
+    mission_feed => vec!["mission", "feed", MISSION, "--oldest-first"],
+    mission_answer => vec!["mission", "answer", MISSION, EVENTS[1], "yes"],
+    chat_start => vec!["chat", "start", "coder", "--cwd", "not-a-directory"],
+    chat_start_runtime => vec!["chat", "start", "--runtime", "codex", "--cwd", "not-a-directory"],
+    session_list => vec!["session", "list"],
+    session_show => vec!["session", "show", SESSION],
+    session_stop => vec!["session", "stop", SESSION],
+    session_archive => vec!["session", "archive", SESSION],
+    session_resume => vec!["session", "resume", SESSION],
+    session_restart => vec!["session", "restart", SESSION],
+    msg_post => vec!["msg", "post", "Hello", "--mission", MISSION, "--to", "reviewer"],
+    msg_read => vec!["msg", "read"],
+    signal_ask_lead => vec![
+        "signal",
+        "ask_lead",
+        "--mission",
+        MISSION,
+        "--as",
+        "coder",
+        "--payload",
+        r#"{"question":"Review?"}"#
+    ],
+    ask_lead => vec!["ask", "Review?", "--context", "Checks pass", "--mission", MISSION, "--as", "coder"],
+    ask_human => vec![
+        "ask",
+        "--human",
+        "Ship?",
+        "--choices",
+        "yes,no",
+        "--mission",
+        MISSION,
+        "--as",
+        "coder"
+    ],
+    call => vec!["call", "role_get", r#"{"id":"role-coder"}"#],
+    msg_post_running => vec!["msg", "post", "Hello", "--mission", "mission-running"],
+    signal_running => vec![
+        "signal",
+        "ask_lead",
+        "--mission",
+        "mission-running",
+        "--as",
+        "coder",
+        "--payload",
+        r#"{"question":"Review?"}"#
+    ],
+    ask_running => vec!["ask", "Review?", "--mission", "mission-running", "--as", "coder"],
+    ask_human_running => vec![
+        "ask",
+        "--human",
+        "Ship?",
+        "--choices",
+        "yes,no",
+        "--mission",
+        "mission-running",
+        "--as",
+        "coder"
+    ],
+    mission_answer_running => vec!["mission", "answer", "mission-running", EVENTS[1], "yes"],
+    project_missing => vec!["project", "show", "missing"],
+    role_missing => vec!["role", "show", "missing"],
+    crew_missing => vec!["crew", "show", "missing"],
+    mission_missing => vec!["mission", "show", "missing"],
+    session_missing => vec!["session", "show", "missing"],
+    msg_unknown_sender => vec!["msg", "post", "Hello", "--mission", "mission-running", "--as", "ghost"],
+    signal_unknown_sender => vec!["signal", "ask_lead", "--mission", MISSION, "--as", "ghost"],
+    mission_feed_cursor => vec!["mission", "feed", MISSION, "--since", "0", "--limit", "1"],
+    mission_feed_filters => vec!["mission", "feed", MISSION, "--types", "message", "--from", "reviewer"],
+    mission_move => vec!["mission", "move", MISSION, "--project", "Runner"],
+    role_duplicate => vec!["role", "create", "coder"],
+    role_shell => vec!["role", "create", "new", "--runtime", "shell"],
+    mission_move_invalid => vec!["mission", "move", MISSION],
+    signal_unknown => vec!["signal", "unknown", "--mission", MISSION],
 }
 
 fn quote(arg: &str) -> String {
@@ -616,28 +579,32 @@ fn record(result: &mut String, fixture: &Fixture, args: &[&str], inside: bool, r
     result.push('\n');
 }
 
-#[test]
-fn built_cli_goldens() {
-    let platform = if cfg!(windows) { "windows" } else { "unix" };
-    let mut result = format!("{HEADER}# platform {platform}\n");
-    for args in [vec!["status"], vec!["status", "--json"]] {
-        let mut fixture = Fixture::new();
-        fixture.start();
-        record(&mut result, &fixture, &args, false, true);
-    }
-    result.push_str("# platform all\n");
-    for args in cases().into_iter().filter(|args| args[0] != "status") {
-        for json in [false, true] {
-            let mut fixture = Fixture::new();
-            fixture.start();
+#[derive(Debug, PartialEq)]
+struct Case {
+    args: Vec<&'static str>,
+    inside: bool,
+    running: bool,
+}
+
+fn variants(args: Vec<&'static str>, inside: bool, running: bool) -> Vec<Case> {
+    [false, true]
+        .into_iter()
+        .map(|json| {
             let mut args = args.clone();
             if json {
                 args.push("--json");
             }
-            record(&mut result, &fixture, &args, false, true);
-        }
-    }
-    for args in [
+            Case {
+                args,
+                inside,
+                running,
+            }
+        })
+        .collect()
+}
+
+fn inside_cases() -> Vec<Case> {
+    let args = [
         vec!["msg", "read"],
         vec!["msg", "post", "Direct message", "--to", "reviewer"],
         vec![
@@ -648,17 +615,14 @@ fn built_cli_goldens() {
         ],
         vec!["ask", "Review?"],
         vec!["ask", "--human", "Ship?", "--choices", "yes,no"],
-    ] {
-        for json in [false, true] {
-            let fixture = Fixture::new();
-            let mut args = args.clone();
-            if json {
-                args.push("--json");
-            }
-            record(&mut result, &fixture, &args, true, false);
-        }
-    }
-    for args in [
+    ];
+    args.into_iter()
+        .flat_map(|args| variants(args, true, false))
+        .collect()
+}
+
+fn offline_cases() -> Vec<Case> {
+    let args = [
         vec!["status"],
         vec!["status", "--json"],
         vec!["role", "list"],
@@ -666,10 +630,17 @@ fn built_cli_goldens() {
         vec!["daemon", "status"],
         vec!["daemon", "stop"],
         vec!["unknown-command"],
-    ] {
-        let fixture = Fixture::new();
-        record(&mut result, &fixture, &args, false, false);
-    }
+    ];
+    args.into_iter()
+        .map(|args| Case {
+            args,
+            inside: false,
+            running: false,
+        })
+        .collect()
+}
+
+fn help_cases() -> Vec<Case> {
     let mut help_cases = vec![
         vec!["help"],
         vec!["help", "agents"],
@@ -687,13 +658,143 @@ fn built_cli_goldens() {
             help_cases.push(help);
         }
     }
-    for args in help_cases {
-        let fixture = Fixture::new();
-        record(&mut result, &fixture, &args, false, false);
+    help_cases
+        .into_iter()
+        .map(|args| Case {
+            args,
+            inside: false,
+            running: false,
+        })
+        .collect()
+}
+
+fn golden_cases() -> Vec<Case> {
+    cases()
+        .into_iter()
+        .flat_map(|args| variants(args, false, true))
+        .chain(inside_cases())
+        .chain(offline_cases())
+        .chain(help_cases())
+        .collect()
+}
+
+fn heading(case: &Case) -> String {
+    let context = if case.inside {
+        "# context: inside mission\n"
+    } else if !case.running {
+        "# context: not running\n"
+    } else {
+        ""
+    };
+    format!(
+        "{context}$ runner {}",
+        case.args
+            .iter()
+            .map(|arg| quote(arg))
+            .collect::<Vec<_>>()
+            .join(" ")
+    )
+}
+
+fn blocks(text: &str) -> Vec<&str> {
+    let mut starts = Vec::new();
+    let mut offset = 0;
+    let mut context = None;
+    for line in text.split_inclusive('\n') {
+        if line.starts_with("# context: ") {
+            context = Some(offset);
+        } else if line.starts_with("$ runner ") {
+            starts.push(context.take().unwrap_or(offset));
+        }
+        offset += line.len();
     }
-    let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens/cli.txt");
+    starts.push(text.len());
+    starts
+        .windows(2)
+        .map(|pair| &text[pair[0]..pair[1]])
+        .collect()
+}
+
+fn assert_manifest(expected: &str, cases: &[Case]) {
+    assert_eq!(expected, format!("{HEADER}{}", blocks(expected).concat()));
+    assert_eq!(
+        blocks(expected)
+            .iter()
+            .map(|block| block.split_once("\nexit ").unwrap().0)
+            .collect::<Vec<_>>(),
+        cases.iter().map(heading).collect::<Vec<_>>(),
+        "golden cases are missing, extra, or reordered"
+    );
+}
+
+fn render_case(case: &Case) -> String {
+    let mut fixture = Fixture::new();
+    if case.running {
+        fixture.start();
+    }
+    let mut result = String::new();
+    record(&mut result, &fixture, &case.args, case.inside, case.running);
+    result
+}
+
+fn golden_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/goldens/cli.txt")
+}
+
+fn platform() -> &'static str {
+    if cfg!(windows) {
+        "windows"
+    } else {
+        "unix"
+    }
+}
+
+fn check_cases(selected: Vec<Case>) {
+    // The manifest/update test is the only writer, including under nextest's separate processes.
     if std::env::var_os("UPDATE_RUNNER_GOLDENS").is_some() {
-        std::fs::create_dir_all(golden.parent().unwrap()).unwrap();
+        return;
+    }
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _guard = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let expected = select_platform(&std::fs::read_to_string(golden_path()).unwrap(), platform());
+    let all = golden_cases();
+    assert_manifest(&expected, &all);
+    let expected = blocks(&expected);
+    for case in selected {
+        let index = all.iter().position(|candidate| *candidate == case).unwrap();
+        assert_eq!(render_case(&case), expected[index], "{}", heading(&case));
+    }
+}
+
+#[test]
+fn built_cli_goldens_inside_mission() {
+    check_cases(inside_cases());
+}
+
+#[test]
+fn built_cli_goldens_not_running() {
+    check_cases(offline_cases());
+}
+
+#[test]
+fn built_cli_goldens_help() {
+    check_cases(help_cases());
+}
+
+#[test]
+fn built_cli_goldens_manifest_and_update() {
+    let cases = golden_cases();
+    let golden = golden_path();
+    if std::env::var_os("UPDATE_RUNNER_GOLDENS").is_some() {
+        let mut result = format!("{HEADER}# platform {}\n", platform());
+        for (index, case) in cases.iter().enumerate() {
+            if index == 2 {
+                result.push_str("# platform all\n");
+            }
+            result.push_str(&render_case(case));
+        }
         let previous = std::fs::read_to_string(&golden).unwrap_or_default();
         let other = if cfg!(windows) { "unix" } else { "windows" };
         let marker = format!("# platform {other}\n");
@@ -706,19 +807,26 @@ fn built_cli_goldens() {
             &format!("{marker}{other_section}# platform all\n"),
             1,
         );
-        std::fs::write(&golden, &updated).unwrap();
+        std::fs::write(&golden, updated).unwrap();
     }
-    let expected = std::fs::read_to_string(&golden).unwrap();
-    if select_platform(&result, platform) != select_platform(&expected, platform) {
-        let actual =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/cli-golden-actual.txt");
-        std::fs::write(&actual, &result).unwrap();
-        panic!(
-            "CLI output changed; diff {} {}",
-            golden.display(),
-            actual.display()
-        );
-    }
+    let expected = std::fs::read_to_string(golden).unwrap();
+    assert!(expected.starts_with(HEADER));
+    assert_manifest(&select_platform(&expected, platform()), &cases);
+}
+
+#[test]
+fn golden_manifest_rejects_missing_and_reordered_cases() {
+    let cases = offline_cases();
+    let blocks = cases
+        .iter()
+        .map(|case| format!("{}\nexit 0\n\n", heading(case)))
+        .collect::<String>();
+    let expected = format!("{HEADER}{blocks}");
+    assert_manifest(&expected, &cases);
+    assert!(std::panic::catch_unwind(|| assert_manifest(&expected, &cases[1..])).is_err());
+    let mut reordered = cases;
+    reordered.swap(0, 1);
+    assert!(std::panic::catch_unwind(|| assert_manifest(&expected, &reordered)).is_err());
 }
 
 fn select_platform(text: &str, platform: &str) -> String {

@@ -30,6 +30,9 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show active-toolchain
 
+      - name: Install nextest
+        run: curl -LsSf https://get.nexte.st/0.9.148/mac | tar zxf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+
       - name: Hash build settings
         id: cache-key
         shell: bash
@@ -55,7 +58,7 @@ jobs:
         run: cargo clippy --locked -p runner-app --features updater --all-targets --profile ci -- -D warnings
 
       - name: Test
-        run: cargo test --locked --workspace --no-fail-fast --profile ci --timings
+        run: cargo nextest run --locked --workspace --no-fail-fast --cargo-profile ci --timings
 
       - name: Verify lockfile is committed
         run: git diff --exit-code -- Cargo.lock
@@ -81,6 +84,10 @@ jobs:
       - name: Install Rust toolchain
         run: rustup show active-toolchain
 
+      - name: Install nextest
+        shell: bash
+        run: curl -LsSf https://get.nexte.st/0.9.148/windows-tar | tar zxf - -C "${CARGO_HOME:-$HOME/.cargo}/bin"
+
       - name: Hash build settings
         id: cache-key
         shell: bash
@@ -100,7 +107,7 @@ jobs:
         run: cargo clippy --locked --workspace --all-targets --profile ci -- -D warnings
 
       - name: Test
-        run: cargo test --locked --workspace --no-fail-fast --profile ci --timings
+        run: cargo nextest run --locked --workspace --no-fail-fast --cargo-profile ci --timings
 
       - name: Build Runner for resource verification
         run: cargo build --locked -p runner-app --profile ci --timings

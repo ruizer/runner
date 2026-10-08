@@ -13,6 +13,23 @@ use super::seed::{
 };
 use super::{open_in_memory, open_pool};
 
+#[test]
+fn invalid_database_fails_fast_without_shortening_pool_checkout_timeout() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("runner.db");
+    std::fs::write(&path, b"not sqlite").unwrap();
+    let start = std::time::Instant::now();
+    let error = open_pool(&path).unwrap_err();
+    assert!(matches!(error, crate::error::Error::Sqlite(_)), "{error}");
+    assert!(start.elapsed() < std::time::Duration::from_secs(5));
+
+    let pool = open_pool(&root.path().join("valid.db")).unwrap();
+    assert_eq!(
+        pool.connection_timeout(),
+        std::time::Duration::from_secs(30)
+    );
+}
+
 fn insert_crew(conn: &Connection, id: &str) {
     conn.execute(
         "INSERT INTO crews (id, name, created_at, updated_at)
