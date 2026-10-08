@@ -119,6 +119,7 @@ fn terminal_output_reuses_split_siblings_and_title_changes_update_sidebar() {
     counts.0.borrow_mut().clear();
     let model = core.sessions.terminal_model("busy-shell").unwrap();
     model.feed_output(26, b"\x1b]0;Updated shell title\x07");
+    model.flush_events();
     let deadline = std::time::Instant::now() + Duration::from_secs(2);
     while model.title() != "Updated shell title" && std::time::Instant::now() < deadline {
         std::thread::yield_now();
@@ -128,7 +129,8 @@ fn terminal_output_reuses_split_siblings_and_title_changes_update_sidebar() {
     assert_eq!(terminal.title(), "Updated shell title");
     terminal.test_feed(26, b"\x1b]0;Updated shell title\x07");
     cx.run_until_parked();
-    for _ in 0..10 {
+    let deadline = std::time::Instant::now() + Duration::from_secs(2);
+    while std::time::Instant::now() < deadline {
         cx.executor().advance_clock(Duration::from_millis(10));
         cx.run_until_parked();
         if counts
@@ -138,9 +140,11 @@ fn terminal_output_reuses_split_siblings_and_title_changes_update_sidebar() {
             .copied()
             .unwrap_or_default()
             > 0
+            && store.read_with(&cx, |store, _| store.revisions.terminal_wake) != wake_before
         {
             break;
         }
+        std::thread::yield_now();
     }
     let wake_after = store.read_with(&cx, |store, _| store.revisions.terminal_wake);
     assert_ne!(

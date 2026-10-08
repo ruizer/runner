@@ -228,9 +228,15 @@ struct Daemon {
     launch: Launch,
     child: Option<Child>,
     hash: String,
+    _guard: std::sync::MutexGuard<'static, ()>,
 }
 impl Daemon {
     fn new() -> Self {
+        // Plain cargo test shares a process; nextest limits these fixtures across processes.
+        static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let guard = LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let root = tempfile::tempdir().unwrap();
         let bin = root.path().join("bin");
         std::fs::create_dir_all(&bin).unwrap();
@@ -270,6 +276,7 @@ impl Daemon {
             launch,
             child: None,
             hash,
+            _guard: guard,
         }
     }
     fn command(&self) -> Command {
@@ -573,6 +580,7 @@ fn exited_daemon_reports_status_and_log_path() {
             b"not sqlite",
         )
         .unwrap();
+        let start = Instant::now();
         let error = if cli {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -593,6 +601,11 @@ fn exited_daemon_reports_status_and_log_path() {
                 .expect("invalid database must fail startup")
                 .to_string()
         };
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "invalid database startup took {:?}",
+            start.elapsed()
+        );
         assert!(error.contains("exited during startup"), "{error}");
         #[cfg(unix)]
         assert!(error.contains("exit status: 1"), "{error}");

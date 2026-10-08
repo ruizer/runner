@@ -12,7 +12,7 @@ mod tests;
 
 use std::path::Path;
 
-use r2d2::Pool;
+use r2d2::{ManageConnection, Pool};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::Connection;
 
@@ -51,6 +51,8 @@ pub(crate) fn test_connection() -> Result<Connection> {
 }
 
 fn build_pool(manager: SqliteConnectionManager, max_size: u32, seed: bool) -> Result<DbPool> {
+    // r2d2 retries failed initial connections for 30 s, hiding permanent SQLite errors.
+    drop(manager.connect()?);
     let pool = Pool::builder().max_size(max_size).build(manager)?;
     let mut conn = pool.get()?;
     run_migrations(&mut conn)?;
