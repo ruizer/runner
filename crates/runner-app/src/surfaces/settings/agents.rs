@@ -54,7 +54,6 @@ struct RuntimePresentation {
 /// npm has a newer version than the one installed.
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct UpdateAction {
-    disabled: bool,
     caption: Option<String>,
 }
 
@@ -207,7 +206,7 @@ impl AgentsPane {
         cx.notify();
     }
 
-    /// Recounts live sessions per agent, which the Update guard reads, as
+    /// Recounts live sessions per agent, which the Update caption reads, as
     /// sessions start and stop while Settings is open.
     pub(crate) fn refresh_live_sessions(&mut self, cx: &mut Context<Self>) {
         let core = self.app_store.read(cx).client.clone();
@@ -791,15 +790,9 @@ impl AgentsPane {
         let update = update_action(
             runtime,
             self.live_sessions.get(&runtime.name).copied().unwrap_or(0),
-            crate::platform_ui::AGENT_UPDATE_NEEDS_STOPPED_SESSIONS,
         );
-        let update_caption = update.as_ref().and_then(|update| {
-            update
-                .caption
-                .clone()
-                .map(|caption| (caption, update.disabled))
-        });
-        let update_button = update.map(|update| {
+        let update_caption = update.as_ref().and_then(|update| update.caption.clone());
+        let update_button = update.map(|_| {
             let pane = cx.entity();
             let status = runtime.clone();
             div()
@@ -811,7 +804,6 @@ impl AgentsPane {
                     )
                     .size(ButtonSize::Sm)
                     .variant(ButtonVariant::Secondary)
-                    .disabled(update.disabled)
                     .on_press(move |window, cx| {
                         pane.update(cx, |this, pane_cx| {
                             this.open_update(&status, window, pane_cx)
@@ -940,10 +932,9 @@ impl AgentsPane {
                     .caption
                     .map(|caption| runtime_caption(caption, validation.is_some())),
             )
-            .children(update_caption.map(|(caption, blocked)| {
+            .children(update_caption.map(|caption| {
                 runtime_caption(caption, false)
                     .debug_selector(|| format!("AGENT_UPDATE_CAPTION_{}", runtime.name))
-                    .when(blocked, |caption| caption.text_color(theme::warning()))
             }))
             .into_any_element()
     }
@@ -1321,32 +1312,21 @@ fn version_caption(runtime: &RuntimeExecutableStatus) -> Option<String> {
 }
 
 /// Update is offered only while npm has a newer version, and never for a
-/// runtime without an update command. Where the platform locks running
-/// executables it is disabled while any session of the agent is alive;
-/// elsewhere running sessions only earn a caption.
-fn update_action(
-    runtime: &RuntimeExecutableStatus,
-    running: usize,
-    needs_stopped_sessions: bool,
-) -> Option<UpdateAction> {
+/// runtime without an update command. Running sessions only earn a caption.
+fn update_action(runtime: &RuntimeExecutableStatus, running: usize) -> Option<UpdateAction> {
     let installed = runtime.installed_version.as_deref()?;
     runtime.available_version.as_ref()?;
     let name = &runtime.display_name;
-    let caption = match (running, needs_stopped_sessions) {
-        (0, _) => None,
-        (1, true) => Some(format!("Stop the running {name} session first.")),
-        (running, true) => Some(format!("Stop the {running} running {name} sessions first.")),
-        (1, false) => Some(format!(
+    let caption = match running {
+        0 => None,
+        1 => Some(format!(
             "1 running {name} session keeps {installed} until it relaunches."
         )),
-        (running, false) => Some(format!(
+        running => Some(format!(
             "{running} running {name} sessions keep {installed} until they relaunch."
         )),
     };
-    Some(UpdateAction {
-        disabled: needs_stopped_sessions && running > 0,
-        caption,
-    })
+    Some(UpdateAction { caption })
 }
 
 fn runtime_badge(runtime: Runtime, presentation: &RuntimePresentation) -> AnyElement {
@@ -1686,54 +1666,34 @@ mod tests {
     }
 
     #[test]
-    fn update_button_shows_only_with_a_newer_version_and_guards_by_platform() {
+    fn update_button_shows_only_with_a_newer_version_and_allows_running_sessions() {
         let current = versioned(RuntimeRowState::Detected, Some("0.155.0"), None);
-        assert_eq!(update_action(&current, 3, true), None);
+        assert_eq!(update_action(&current, 3), None);
         assert_eq!(
-            update_action(&versioned(RuntimeRowState::Detected, None, None), 0, false),
+            update_action(&versioned(RuntimeRowState::Detected, None, None), 0),
             None
         );
         let mut trae = versioned(RuntimeRowState::Detected, Some("0.1.0"), None);
         trae.name = Runtime::Trae;
         trae.display_name = "TRAE CLI".into();
-        assert_eq!(update_action(&trae, 0, false), None);
+        assert_eq!(update_action(&trae, 0), None);
 
         let stale = versioned(RuntimeRowState::Detected, Some("0.153.4"), Some("0.155.0"));
         assert_eq!(
-            update_action(&stale, 0, false),
+            update_action(&stale, 0),
+            Some(UpdateAction { caption: None })
+        );
+        assert_eq!(
+            update_action(&stale, 1),
             Some(UpdateAction {
-                disabled: false,
-                caption: None
+                caption: Some("1 running Codex session keeps 0.153.4 until it relaunches.".into()),
             })
         );
         assert_eq!(
-            update_action(&stale, 0, true),
+            update_action(&stale, 3),
             Some(UpdateAction {
-                disabled: false,
-                caption: None
-            })
-        );
-        assert_eq!(
-            update_action(&stale, 3, false),
-            Some(UpdateAction {
-                disabled: false,
                 caption: Some("3 running Codex sessions keep 0.153.4 until they relaunch.".into()),
             })
-        );
-        assert_eq!(
-            update_action(&stale, 1, false).and_then(|action| action.caption),
-            Some("1 running Codex session keeps 0.153.4 until it relaunches.".into())
-        );
-        assert_eq!(
-            update_action(&stale, 3, true),
-            Some(UpdateAction {
-                disabled: true,
-                caption: Some("Stop the 3 running Codex sessions first.".into()),
-            })
-        );
-        assert_eq!(
-            update_action(&stale, 1, true).and_then(|action| action.caption),
-            Some("Stop the running Codex session first.".into())
         );
     }
 
