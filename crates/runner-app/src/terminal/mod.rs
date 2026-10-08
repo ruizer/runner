@@ -2,5 +2,6 @@
 
 pub(crate) mod element;
 pub(crate) mod glyphs;
+mod viewport;
 
 pub(crate) use element::{TerminalElement, TerminalInteraction};

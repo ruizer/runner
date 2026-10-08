@@ -68,6 +68,10 @@ fn terminal_titles_persist_topics_and_ignore_directory_status_and_reset() {
         (12, "\x1b]0;◒ Airplane type\x07", "Airplane type", 4),
         (13, "\x1b]0;◓ Airplane type\x07", "Airplane type", 4),
         (14, "\x1b]0;✳ Airplane type\x07", "Airplane type", 4),
+        (15, "\x1b]0;| Airplane type\x07", "Airplane type", 4),
+        (16, "\x1b]0;/ Airplane type\x07", "Airplane type", 4),
+        (17, "\x1b]0;- Airplane type\x07", "Airplane type", 4),
+        (18, "\x1b]0;\\ Airplane type\x07", "Airplane type", 4),
     ] {
         terminal.feed_output(&output(seq, data)).unwrap();
         flush_terminal_events(&terminal);
@@ -84,7 +88,7 @@ fn terminal_titles_persist_topics_and_ignore_directory_status_and_reset() {
         assert_eq!(count, writes);
     }
     terminal
-        .feed_output(&output(15, "\x1b]0;Last topic\x07"))
+        .feed_output(&output(19, "\x1b]0;Last topic\x07"))
         .unwrap();
     flush_terminal_events(&terminal);
     let detail = crate::ops::session::session_get(&core, &row.id)

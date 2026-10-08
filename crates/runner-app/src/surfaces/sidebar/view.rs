@@ -510,6 +510,8 @@ impl Sidebar {
         visible_ids: Vec<String>,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        #[cfg(test)]
+        crate::render_counts::count_render(&format!("sidebar-row:{}", row.node().id), cx);
         match row {
             SidebarRow::Tab {
                 node,

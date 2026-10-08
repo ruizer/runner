@@ -2931,7 +2931,7 @@ pub(super) mod tests {
                             .iter()
                             .any(|leaf| leaf.session_id.is_some())
                     })
-                    .map(|layout| root.render_pane_node(&layout.root, &layout, window, cx));
+                    .map(|layout| root.render_pane_node(&layout.root, &layout, cx));
                 div()
                     .size_full()
                     .children(pane)

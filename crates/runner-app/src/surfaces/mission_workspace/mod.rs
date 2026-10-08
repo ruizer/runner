@@ -232,6 +232,7 @@ struct DeliveryBlocked {
 }
 
 pub(crate) struct MissionWorkspace {
+    pub(super) render_regions: HashMap<String, Entity<super::render_cache::CachedRegion<Self>>>,
     window_label: String,
     shell: WeakEntity<NativeRoot>,
     app_store: Entity<AppStore>,

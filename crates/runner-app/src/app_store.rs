@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash as _, Hasher as _};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
 use futures::{FutureExt as _, StreamExt as _};
-use gpui::{App, AppContext as _, Context, Entity, Global};
+use gpui::{App, AppContext as _, Context, Entity, EventEmitter, Global};
 use runner_core::protocol::crew::CrewListItem;
 use runner_core::protocol::mission::MissionSummary;
 use runner_core::protocol::model::Role;
@@ -243,7 +243,13 @@ impl From<&AppSettings> for ShellSettingsSnapshot {
     }
 }
 
+pub(crate) struct TerminalUpdates;
+
+impl EventEmitter<String> for TerminalUpdates {}
+
 pub(crate) struct AppStore {
+    pub(crate) terminal_updates: Entity<TerminalUpdates>,
+    terminal_labels: BTreeMap<String, (String, Option<PathBuf>)>,
     pub(crate) client: DaemonClient,
     pub(crate) app_data_dir: PathBuf,
     pub(crate) window_entries: Vec<runner_core::protocol::WindowEntry>,
@@ -297,15 +303,17 @@ impl AppStore {
             client: crate::test_support::client(&core),
             app_data_dir: core.app_data_dir.clone(),
         };
-        let (wake_tx, mut wake_rx) = futures::channel::mpsc::unbounded::<()>();
-        let waker: Arc<dyn Fn() + Send + Sync> = Arc::new(move || {
-            let _ = wake_tx.unbounded_send(());
+        let terminal_updates = cx.new(|_| TerminalUpdates);
+        let (wake_tx, mut wake_rx) = futures::channel::mpsc::unbounded::<String>();
+        let waker: Arc<dyn Fn(&str) + Send + Sync> = Arc::new(move |id| {
+            let _ = wake_tx.unbounded_send(id.to_owned());
         });
-        let bridge = TerminalBridge::new(host.client.clone(), Arc::clone(&waker))
+        let bridge = TerminalBridge::with_session_waker(host.client.clone(), waker)
             .expect("terminal event bridge installation is infallible");
 
         cx.spawn(async move |weak, cx| {
-            while wake_rx.next().await.is_some() {
+            while let Some(id) = wake_rx.next().await {
+                let mut changed = BTreeSet::from([id]);
                 let delay = cx
                     .background_executor()
                     .timer(Duration::from_millis(4))
@@ -315,7 +323,9 @@ impl AppStore {
                     futures::select_biased! {
                         _ = delay => break,
                         wake = wake_rx.next().fuse() => {
-                            if wake.is_none() {
+                            if let Some(id) = wake {
+                                changed.insert(id);
+                            } else {
                                 break;
                             }
                         }
@@ -323,8 +333,24 @@ impl AppStore {
                 }
                 if weak
                     .update(cx, |this, cx| {
-                        this.revisions.terminal_wake = this.revisions.terminal_wake.wrapping_add(1);
-                        cx.notify();
+                        let mut labels_changed = false;
+                        for id in changed {
+                            if let Some(terminal) = this.bridge.session(&id) {
+                                let label = (terminal.title(), terminal.live_cwd());
+                                if this.terminal_labels.get(&id) != Some(&label) {
+                                    this.terminal_labels.insert(id.clone(), label);
+                                    labels_changed = true;
+                                }
+                            } else {
+                                labels_changed |= this.terminal_labels.remove(&id).is_some();
+                            }
+                            this.terminal_updates.update(cx, |_, cx| cx.emit(id));
+                        }
+                        if labels_changed {
+                            this.revisions.terminal_wake =
+                                this.revisions.terminal_wake.wrapping_add(1);
+                            cx.notify();
+                        }
                     })
                     .is_err()
                 {
@@ -446,6 +472,8 @@ impl AppStore {
             eprintln!("attach live terminals: {error}");
         }
         let mut store = Self {
+            terminal_updates,
+            terminal_labels: BTreeMap::new(),
             app_data_dir: host.app_data_dir.clone(),
             client,
             window_entries: Vec::new(),

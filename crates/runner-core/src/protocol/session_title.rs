@@ -11,6 +11,10 @@ pub fn provider_title(raw: &str, cwd: Option<&str>) -> Option<String> {
         })
         .collect();
     let mut title = trim_chrome(&clean);
+    // Codex animates ASCII prefixes in its OSC title; keep the topic stable.
+    if let Some(("|" | "/" | "-" | "\\", rest)) = title.split_once(' ') {
+        title = trim_chrome(rest);
+    }
     loop {
         let previous = title;
         for separator in [" | ", " — ", " - "] {
@@ -132,6 +136,24 @@ mod tests {
             assert_eq!(provider_title(&format!("{glyph} Claude Code"), None), None);
             assert_eq!(provider_title(&glyph.to_string(), None), None);
         }
+    }
+
+    #[test]
+    fn codex_ascii_spinner_frames_leave_the_topic_unchanged() {
+        let cwd = Some("/repos/runner");
+        for glyph in ['|', '/', '-', '\\', '⠋', '⠙'] {
+            assert_eq!(
+                provider_title(&format!("{glyph} Discuss cars | runner"), cwd).as_deref(),
+                Some("Discuss cars")
+            );
+            assert_eq!(provider_title(&format!("{glyph} runner"), cwd), None);
+        }
+        assert_eq!(
+            provider_title("-argument handling", cwd).as_deref(),
+            Some("-argument handling")
+        );
+        assert_eq!(provider_title("/repos/runner", cwd), None);
+        assert_eq!(provider_title("C:\\repos\\runner", cwd), None);
     }
 
     /// Codex blinks its Action Required prefix between `[ ! ]` and `[ . ]`
