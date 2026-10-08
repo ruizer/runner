@@ -75,6 +75,8 @@ App and CLI starters keep the child handle until connection succeeds, checking f
 
 A failed client or legacy-sentinel accept is logged and backs off for 100 ms before serving continues; it does not stop sessions or enter teardown. Windows disconnects a failed pipe instance so the next client can connect. Explicit shutdown, an OS termination signal or loss of endpoint ownership ends the serve loop. On Unix, startup raises the soft `RLIMIT_NOFILE` toward the hard limit (capped at `OPEN_MAX` on macOS) and logs the resulting limits or failure.
 
+The socket transport gives only `session_fork` at least 150 seconds, derived from the shared 120-second fork materialization bound plus 30 seconds for the remaining spawn work and response. Every other request, including ordinary non-fast calls such as session lists and sidebar renames, retains the client’s short deadline (10 seconds for the app, 30 seconds for the CLI). Longer model discovery, usage and session-key capture work runs in background workers rather than extending those request deadlines. Terminal attachment and socket writes retain the short budget, and the CLI’s pushed mission feed still bounds snapshot/drain requests separately at 30 seconds.
+
 ## Source map
 
 - [App bootstrap](../../crates/runner-app/src/bootstrap.rs), [quit dialog](../../crates/runner-app/src/surfaces/quit_dialog.rs), and [AppStore](../../crates/runner-app/src/app_store.rs).

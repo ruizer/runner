@@ -575,7 +575,7 @@ pub fn run(cli: Cli) -> i32 {
             return 1;
         }
     };
-    match runtime.block_on(run_remote(&cli, &context)) {
+    let code = match runtime.block_on(run_remote(&cli, &context)) {
         Ok(Some(response)) => {
             let response = postprocess_response(&cli, response);
             output::print(&response, cli.json, cli.quiet, output_view(&cli.command));
@@ -586,7 +586,14 @@ pub fn run(cli: Cli) -> i32 {
             eprintln!("{}", error.message);
             error.code
         }
-    }
+    };
+    finish_runtime(runtime);
+    code
+}
+
+fn finish_runtime(runtime: tokio::runtime::Runtime) {
+    // A cancelled feed call may still be waiting on the longer blocking request deadline.
+    runtime.shutdown_background();
 }
 
 fn output_view(command: &Command) -> output::View {
@@ -2673,6 +2680,29 @@ mod tests {
             })).collect::<Vec<_>>(),
             "last_event_offset": offset,
         })
+    }
+
+    #[test]
+    fn cancelled_requests_do_not_extend_cli_runtime_shutdown() {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (started, ready) = std::sync::mpsc::channel();
+        let (release, blocked) = std::sync::mpsc::channel();
+        let (finished, done) = std::sync::mpsc::channel();
+        runtime.spawn_blocking(move || {
+            started.send(()).unwrap();
+            let _ = blocked.recv_timeout(Duration::from_secs(2));
+            let _ = finished.send(());
+        });
+        ready.recv_timeout(Duration::from_secs(2)).unwrap();
+        let started = std::time::Instant::now();
+        finish_runtime(runtime);
+        let elapsed = started.elapsed();
+        let _ = release.send(());
+        done.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(elapsed < Duration::from_secs(1));
     }
 
     #[cfg(unix)]
