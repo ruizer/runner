@@ -171,11 +171,19 @@ Carbon 和 Runner Light 是 Runner 自己的主题，Catppuccin Mocha 和 Latte 
 
 </td>
 </tr>
-</table>
+<tr>
+<td width="60%">
+  <img src="assets/quit_dialog.png" alt="Quit Runner 对话框 — 10 个会话在运行，选中 Keep them running 而不是 Stop them，带 Don't ask again" width="100%" />
+</td>
+<td width="40%" valign="middle">
 
 ### Runner 关闭后 agent 照样工作
 
 每个 chat 和 mission 都跑在 Runner 的后台服务 `runnerd` 里，而不是应用窗口里。退出 Runner，或者应用崩溃，agent 都会继续干活：crew 成员照样互发消息，给你的问题留在 feed 里等你。重新打开 Runner 会接回同一批正在运行的终端，输出原样都在。**Settings → General → When Runner quits** 可以设为每次询问、让 agent 继续运行，或者停止它们；停止的 agent 会在下次启动时回来，各自接着原来的对话（**Resume running agents on launch**）。在 macOS 上，⌥⌘Q 一步退出并停止会话。应用关闭时 `runner` 命令会自己拉起后台服务，`runner daemon status` 和 `runner daemon stop` 用来查看和停止它。
+
+</td>
+</tr>
+</table>
 
 ### 还有这些
 

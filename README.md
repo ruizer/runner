@@ -171,11 +171,19 @@ Carbon and Runner Light are Runner's own themes; Catppuccin Mocha and Latte ride
 
 </td>
 </tr>
-</table>
+<tr>
+<td width="60%">
+  <img src="assets/quit_dialog.png" alt="Quit Runner dialog — 10 sessions running, Keep them running selected over Stop them, with Don't ask again" width="100%" />
+</td>
+<td width="40%" valign="middle">
 
 ### Agents keep working when Runner is closed
 
 Every chat and mission runs in `runnerd`, Runner's background service, not in the app window. Quit Runner, or let it crash, and the agents carry on: crew members keep messaging each other, and questions for you wait in the feed. Reopening Runner reattaches to the same live terminals with their output intact. **Settings → General → When Runner quits** asks each time, keeps the agents running, or stops them; stopped agents come back on the next launch, each resuming its own conversation (**Resume running agents on launch**). On macOS, ⌥⌘Q quits and stops sessions in one step. The `runner` command starts the service when the app is closed, and `runner daemon status` and `runner daemon stop` inspect and stop it.
+
+</td>
+</tr>
+</table>
 
 ### Also in the box
 
