@@ -22,6 +22,7 @@ use crate::app_settings::{
     TerminalCursorStyle, TerminalFontFamily, TERMINAL_FONT_SIZE_MAX, TERMINAL_FONT_SIZE_MIN,
     TERMINAL_SCROLLBACK_LINES, ZOOM_STEPS,
 };
+use crate::platform_ui::{SETTINGS_CONTENT_TOP, SETTINGS_DRAG_INSET};
 use crate::surfaces::app_shell::TITLEBAR_DRAG_HEIGHT;
 use crate::surfaces::settings::theme_preview::{self, PreviewMode, PreviewPane};
 use crate::theme::{DarkTheme, LightTheme, ThemeIntent};
@@ -530,15 +531,13 @@ struct ShortcutConflict {
     message: String,
 }
 
-/// The content column: the titlebar drag strip, the padded scroll container
-/// with its centered column, and the scrollbar in an overlay. Outside
-/// Windows the strip and a matching top inset keep the thumb out from under
-/// the traffic lights. Windows already reserves that band in the chrome
-/// titlebar, so the strip and top inset are omitted and the scroll padding
-/// is 24px instead of 56. The bottom inset stays on every platform so the
-/// thumb never runs into the window's bottom corner (#553). The overlay has
-/// no id or handlers, so wheel and click pass through it to the scroll
-/// container.
+/// The content column: the platform's titlebar drag strip, if it draws one,
+/// the padded scroll container with its centered column, and the scrollbar
+/// in an overlay. The overlay's top inset keeps the thumb out from under the
+/// traffic lights where the page draws its own strip, and its bottom inset
+/// keeps it out of the window's bottom corner on every platform (#553). The
+/// overlay has no id or handlers, so wheel and click pass through it to the
+/// scroll container.
 fn settings_content_column(
     titlebar_drag_area: Option<impl IntoElement>,
     content: Option<AnyElement>,
@@ -563,11 +562,7 @@ fn settings_content_column(
                 .track_scroll(scroll)
                 .px(rems(40. / 16.))
                 .pb(rems(64. / 16.))
-                .pt(if cfg!(windows) {
-                    rems(24. / 16.)
-                } else {
-                    rems(56. / 16.)
-                })
+                .pt(rems(SETTINGS_CONTENT_TOP / 16.))
                 .children(content.map(|content| {
                     div()
                         .mx_auto()
@@ -579,11 +574,7 @@ fn settings_content_column(
         .child(
             div()
                 .absolute()
-                .top(if cfg!(windows) {
-                    px(0.)
-                } else {
-                    px(TITLEBAR_DRAG_HEIGHT * zoom)
-                })
+                .top(px(SETTINGS_DRAG_INSET * zoom))
                 .bottom(px(TITLEBAR_DRAG_HEIGHT * zoom))
                 .left_0()
                 .right_0()
@@ -1200,13 +1191,11 @@ impl NativeRoot {
                     .bg(theme::sidebar())
                     .border_r_1()
                     .border_color(theme::border())
-                    .when(!cfg!(windows), |sidebar| {
-                        sidebar.child(self.render_titlebar_drag_area(
-                            "settings-sidebar-titlebar-drag",
-                            div().h(px(32. * self.settings(cx).app_zoom)).flex_none(),
-                            cx,
-                        ))
-                    })
+                    .children(self.render_settings_titlebar_drag_area(
+                        "settings-sidebar-titlebar-drag",
+                        div().h(px(32. * self.settings(cx).app_zoom)).flex_none(),
+                        cx,
+                    ))
                     .child(
                         div()
                             .flex_none()
@@ -1275,24 +1264,20 @@ impl NativeRoot {
                     .children(self.render_daemon_banner(cx).map(|banner| {
                         div()
                             .flex_none()
-                            .when(!cfg!(windows), |row| {
-                                row.pt(rems(TITLEBAR_DRAG_HEIGHT / 16.))
-                            })
+                            .pt(rems(SETTINGS_DRAG_INSET / 16.))
                             .child(banner)
                     }))
                     .child(settings_content_column(
-                        (!cfg!(windows)).then(|| {
-                            self.render_titlebar_drag_area(
-                                "settings-content-titlebar-drag",
-                                div()
-                                    .absolute()
-                                    .top_0()
-                                    .left_0()
-                                    .right_0()
-                                    .h(px(TITLEBAR_DRAG_HEIGHT * zoom)),
-                                cx,
-                            )
-                        }),
+                        self.render_settings_titlebar_drag_area(
+                            "settings-content-titlebar-drag",
+                            div()
+                                .absolute()
+                                .top_0()
+                                .left_0()
+                                .right_0()
+                                .h(px(TITLEBAR_DRAG_HEIGHT * zoom)),
+                            cx,
+                        ),
                         content,
                         &self.settings_page.content_scroll,
                         self.settings_page.content_scrollbar.clone(),
@@ -3231,7 +3216,7 @@ mod tests {
                     .flex()
                     .child(div().flex_none().h_full().w(px(SIDEBAR_DEFAULT * zoom)))
                     .child(settings_content_column(
-                        (!cfg!(windows)).then(|| {
+                        (SETTINGS_DRAG_INSET > 0.).then(|| {
                             div()
                                 .absolute()
                                 .top_0()
@@ -3286,16 +3271,8 @@ mod tests {
         for width in [1000., 2000.] {
             for rem in [16., 20.8] {
                 let zoom = rem / 16.;
-                let track_top = if cfg!(windows) {
-                    px(0.)
-                } else {
-                    px(TITLEBAR_DRAG_HEIGHT * zoom)
-                };
-                let content_top = if cfg!(windows) {
-                    px(24. * zoom)
-                } else {
-                    px(56. * zoom)
-                };
+                let track_top = px(SETTINGS_DRAG_INSET * zoom);
+                let content_top = px(SETTINGS_CONTENT_TOP * zoom);
                 window.simulate_resize(size(px(width), px(HEIGHT)));
                 scroll.set_offset(point(px(0.), px(0.)));
                 host.update(&mut window, |_, window, _| {
@@ -3359,7 +3336,7 @@ mod tests {
                     near(click_from(-max, point(outside_left, below_top)), -max),
                     "{label}: a click left of the gutter should not scroll"
                 );
-                if !cfg!(windows) {
+                if SETTINGS_DRAG_INSET > 0. {
                     assert!(
                         near(
                             click_from(-max, point(inside_right, track.top() - px(1.))),
