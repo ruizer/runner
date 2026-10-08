@@ -16,7 +16,7 @@ There is a second ceiling underneath the coordination one, and it is the person.
 
 Runner is a **working environment for terminal agents**: the place several coding agents share while they work on one task. It is opinionated about the workflow — roles, crews, exactly one lead, signals and messages, a pull-based inbox — and neutral about the provider. Any provider, one workflow.
 
-That neutrality is the product, and it is cheap to honor, because everything an agent needs in order to take part is something every CLI agent already has: a shell, a PTY, and a binary on PATH. Runner supplies the place (a mission), the identity (a handle in a roster), the channel (an append-only bus), and the escalation path (the lead, then the human). It does not wrap editing, diffing, or review surfaces around an agent — the agent brings its own tools. Runner is what sits *between* agents.
+That neutrality is the product, and it is cheap to honor, because everything an agent needs in order to take part is something every CLI agent already has: a shell, a PTY, and a binary on PATH. Runner supplies the place (a mission), the identity (a handle in a roster), the channel (an append-only bus), and the escalation path (the lead, then the human). It does not wrap an editor around an agent — the agent brings its own tools. The one view of the work it adds is read-only, so that a person's review goes back to the agent that made the change. Runner is what sits *between* agents.
 
 A local desktop app where one person can:
 
@@ -131,7 +131,7 @@ If this loop doesn't work end-to-end without the user touching a terminal outsid
 
 These are intentionally out of scope — they belong to a different product or a later phase.
 
-- **An agent development environment.** Editing, diffing, and review surfaces wrapped around a single agent belong to the agent's own tools or to an IDE. Runner is the environment agents work *in*, not a workbench for building them. The same goes for the workspace around them: Runner does not create git worktrees, show a project tree, or render diffs. Git, the agents and the editor already own those, and a crew that needs its own checkout makes one from its brief. Worktree isolation ([#403](https://github.com/yicheng47/runner/issues/403)) and a project tree with a read-only diff viewer ([#634](https://github.com/yicheng47/runner/issues/634)) were both closed as not planned on 2026-09-22 for this reason.
+- **An agent development environment.** Editing, staging, committing and pushing belong to the agent's own tools, git or an IDE. Runner is the environment agents work *in*, not a workbench for building them. It does not create git worktrees: a crew that needs its own checkout makes one from its brief, and worktree isolation ([#403](https://github.com/yicheng47/runner/issues/403)) was closed as not planned on 2026-09-22. Reading the work is the exception: a read-only file and diff viewer whose review comments go back to the agent ([#634](https://github.com/yicheng47/runner/issues/634)), closed on 2026-09-22 and reopened for 0.15 on 2026-10-08, because reading an agent's changes was still the most common reason to leave Runner.
 - Cross-mission memory / persistent crew brain.
 - A multi-host coordination bus. Sessions on other machines come through the session host ([#645](https://github.com/yicheng47/runner/issues/645), 0.13), which runs the process half of the backend next to the agent; the bus itself stays local.
 - Sandboxing beyond the child process's own permissions.

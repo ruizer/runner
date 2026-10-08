@@ -104,7 +104,7 @@ Settings → General (`surfaces/settings_page.rs:1965`) gains a row, **Notify wh
 - The macOS Notification Center or Windows notifications, and permission prompts.
 - Sound.
 - Settings for each trigger or each session, snoozing, and Focus / Do Not Disturb integration.
-- Notification history, a tray or menu-bar icon, and a Dock badge count. The place you go to check what needs you is the Activity / Needs you view, [#552](https://github.com/yicheng47/runner/issues/552); this feature is the alert that comes to you.
+- Notification history, a tray or menu-bar icon, and a Dock badge count. A view of everything that needs you was [#552](https://github.com/yicheng47/runner/issues/552), closed for the desktop app on 2026-10-08 because it belongs in a future mobile companion; this feature is the alert that comes to you.
 - A popup for each crew turn that finishes.
 
 ## Implementation phases
