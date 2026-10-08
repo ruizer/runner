@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use super::socket::SocketTransport;
 use super::terminal::*;
 use super::*;
-use crate::daemon_process::{wait_unlocked, Launch};
+use crate::daemon_process::{wait_unlocked, Launch, DAEMON_STOP_TIMEOUT};
 
 pub const RESTART_LIMIT_NOTICE: &str =
     "Runner's background service keeps crashing. Sessions are stopped until it runs again.";
@@ -224,7 +224,7 @@ impl ManagedTransport {
         }
         wait_unlocked(
             &self.launch.paths.app_data_dir,
-            Duration::from_secs(10).saturating_sub(started.elapsed()),
+            DAEMON_STOP_TIMEOUT.saturating_sub(started.elapsed()),
         )
         .map_err(|error| ClientError::msg(format!("wait for runnerd exit: {error}")))
     }

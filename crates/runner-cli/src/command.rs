@@ -905,11 +905,8 @@ fn daemon_command(command: &DaemonCommand) -> Result<ToolResponse, CliError> {
             client
                 .shutdown(true)
                 .map_err(|error| CliError::from(ClientError::Protocol(error.to_string())))?;
-            daemon_process::wait_unlocked(
-                &paths.app_data_dir,
-                Duration::from_secs(10).saturating_sub(started.elapsed()),
-            )
-            .map_err(|error| CliError::from(ClientError::Protocol(error.to_string())))?;
+            wait_for_daemon_stop(&paths.app_data_dir, started)
+                .map_err(|error| CliError::from(ClientError::Protocol(error.to_string())))?;
             json!({ "stopped": true })
         }
     };
@@ -917,6 +914,13 @@ fn daemon_command(command: &DaemonCommand) -> Result<ToolResponse, CliError> {
         raw_json: value.to_string(),
         value,
     })
+}
+
+fn wait_for_daemon_stop(data: &Path, started: std::time::Instant) -> std::io::Result<()> {
+    runner_core::daemon_process::wait_unlocked(
+        data,
+        runner_core::daemon_process::DAEMON_STOP_TIMEOUT.saturating_sub(started.elapsed()),
+    )
 }
 
 async fn run_remote(cli: &Cli, context: &BusContext) -> Result<Option<ToolResponse>, CliError> {
@@ -2669,6 +2673,30 @@ mod tests {
             })).collect::<Vec<_>>(),
             "last_event_offset": offset,
         })
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn daemon_stop_waits_past_ten_seconds_for_the_daemon_lock() {
+        use std::os::fd::AsRawFd;
+        let root = tempfile::tempdir().unwrap();
+        let daemon = runner_core::daemon_process::lock_file(root.path()).unwrap();
+        assert_eq!(unsafe { libc::flock(daemon.as_raw_fd(), libc::LOCK_EX) }, 0);
+        let data = root.path().to_owned();
+        let (done, result) = std::sync::mpsc::channel();
+        let wait = std::thread::spawn(move || {
+            done.send(wait_for_daemon_stop(&data, std::time::Instant::now()))
+                .unwrap();
+        });
+        let held = result.recv_timeout(Duration::from_secs(11));
+        drop(daemon);
+        let released = result.recv_timeout(Duration::from_secs(2));
+        wait.join().unwrap();
+        assert!(matches!(
+            held,
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+        ));
+        released.unwrap().unwrap();
     }
 
     #[test]

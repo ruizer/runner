@@ -99,18 +99,29 @@ impl SocketClient {
             result => return result,
         }
         let mut child = launch.spawn().map_err(|_| ClientError::NotRunning)?;
+        let result = async {
+            let deadline =
+                tokio::time::Instant::now() + runner_core::daemon_process::DAEMON_START_TIMEOUT;
+            loop {
+                launch
+                    .check_startup(&mut child)
+                    .map_err(|error| ClientError::Protocol(error.to_string()))?;
+                match Self::connect_endpoint(launch.daemon_endpoint.clone()).await {
+                    Err(ClientError::NotRunning) if tokio::time::Instant::now() < deadline => {
+                        tokio::time::sleep(Duration::from_millis(20)).await
+                    }
+                    Err(ClientError::NotRunning) => {
+                        return Err(ClientError::Protocol(launch.startup_timeout().to_string()));
+                    }
+                    result => return result,
+                }
+            }
+        }
+        .await;
         std::thread::spawn(move || {
             let _ = child.wait();
         });
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
-        loop {
-            match Self::connect_endpoint(launch.daemon_endpoint.clone()).await {
-                Err(ClientError::NotRunning) if tokio::time::Instant::now() < deadline => {
-                    tokio::time::sleep(Duration::from_millis(20)).await
-                }
-                result => return result,
-            }
-        }
+        result
     }
 
     pub async fn connect_endpoint(endpoint: IpcEndpoint) -> Result<Self, ClientError> {

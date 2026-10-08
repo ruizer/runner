@@ -5,7 +5,9 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use runner_core::app_paths::IpcEndpoint;
-use runner_core::daemon_process::{self, NativePaths};
+use runner_core::daemon_process::{
+    self, NativePaths, RESUME_SHUTDOWN_TIMEOUT, RUNTIME_SHUTDOWN_TIMEOUT, SHUTDOWN_TIMEOUT,
+};
 use runner_core::protocol::terminal::{TerminalAttachment, TerminalFrame};
 use runner_core::protocol::wire::{self, Binary, Frame};
 use runner_core::protocol::{ClientError, Request, Response};
@@ -16,7 +18,6 @@ use tokio_util::sync::CancellationToken;
 use crate::ipc::{IpcListener, IpcStream};
 use crate::AppCore;
 
-pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(8);
 pub struct Config {
     pub paths: NativePaths,
     pub endpoint: IpcEndpoint,
@@ -83,7 +84,7 @@ pub fn run(config: Config) -> Result<()> {
         .enable_all()
         .build()?;
     let result = runtime.block_on(serve(config, core, hash, settings));
-    runtime.shutdown_timeout(Duration::from_secs(1));
+    runtime.shutdown_timeout(RUNTIME_SHUTDOWN_TIMEOUT);
     drop(lock);
     result
 }
@@ -247,7 +248,7 @@ async fn serve(config: Config, core: AppCore, hash: String, settings: Settings) 
             SHUTDOWN_TIMEOUT.as_secs()
         ),
     }
-    let _ = tokio::time::timeout(Duration::from_secs(1), resume).await;
+    let _ = tokio::time::timeout(RESUME_SHUTDOWN_TIMEOUT, resume).await;
     connections.abort_all();
     while connections.join_next().await.is_some() {}
     mcp_file.remove();
