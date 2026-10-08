@@ -73,6 +73,8 @@ The daemon keeps running without clients or live sessions; it pauses UI-only usa
 
 App and CLI starters keep the child handle until connection succeeds, checking for an early exit on every retry. An exited daemon fails immediately with its exit status and `runnerd.log` path; a live daemon gets a 60-second startup budget. The startup lock covers both a 15-second replacement stop and that startup budget, with five seconds of margin. Stop waits use the shared teardown budgets: eight seconds for session teardown, one second for launch-resume completion, one second for the Tokio runtime and five seconds of margin. The app’s Stop action and `runner daemon stop` use the same stop budget. These durations are defined together in `runner-core::daemon_process` and used by both clients and the server.
 
+A failed client or legacy-sentinel accept is logged and backs off for 100 ms before serving continues; it does not stop sessions or enter teardown. Windows disconnects a failed pipe instance so the next client can connect. Explicit shutdown, an OS termination signal or loss of endpoint ownership ends the serve loop. On Unix, startup raises the soft `RLIMIT_NOFILE` toward the hard limit (capped at `OPEN_MAX` on macOS) and logs the resulting limits or failure.
+
 ## Source map
 
 - [App bootstrap](../../crates/runner-app/src/bootstrap.rs), [quit dialog](../../crates/runner-app/src/surfaces/quit_dialog.rs), and [AppStore](../../crates/runner-app/src/app_store.rs).

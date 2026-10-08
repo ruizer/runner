@@ -15,6 +15,8 @@ use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio::net::{UnixListener, UnixStream};
 
 pub struct IpcListener {
+    #[cfg(test)]
+    pub(crate) accept_error: Option<io::Error>,
     #[cfg(unix)]
     listener: UnixListener,
     #[cfg(windows)]
@@ -33,7 +35,11 @@ impl IpcListener {
                     "runnerd: failed to attach listener to tokio runtime: {e}"
                 ))
             })?;
-            Ok(Self { listener })
+            Ok(Self {
+                listener,
+                #[cfg(test)]
+                accept_error: None,
+            })
         }
         #[cfg(windows)]
         {
@@ -43,6 +49,8 @@ impl IpcListener {
             Ok(Self {
                 listener,
                 endpoint: endpoint.clone(),
+                #[cfg(test)]
+                accept_error: None,
             })
         }
     }
@@ -54,6 +62,10 @@ impl IpcListener {
     }
 
     pub async fn accept(&mut self) -> io::Result<IpcStream> {
+        #[cfg(test)]
+        if let Some(error) = self.accept_error.take() {
+            return Err(error);
+        }
         #[cfg(unix)]
         {
             let (stream, _) = self.listener.accept().await?;
@@ -61,8 +73,17 @@ impl IpcListener {
         }
         #[cfg(windows)]
         {
-            self.listener.connect().await?;
-            let next = secure_pipe(&self.endpoint, false)?;
+            if let Err(error) = self.listener.connect().await {
+                let _ = self.listener.disconnect();
+                return Err(error);
+            }
+            let next = match secure_pipe(&self.endpoint, false) {
+                Ok(next) => next,
+                Err(error) => {
+                    let _ = self.listener.disconnect();
+                    return Err(error);
+                }
+            };
             Ok(IpcStream(std::mem::replace(&mut self.listener, next)))
         }
     }
@@ -222,6 +243,45 @@ mod tests {
 mod transport_tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn early_pipe_disconnect_allows_the_next_accept() {
+        let dir = tempfile::tempdir().unwrap();
+        let endpoint = IpcEndpoint(std::path::PathBuf::from(format!(
+            r"\\.\pipe\runner-early-close-test-{}",
+            dir.path().file_name().unwrap().to_string_lossy()
+        )));
+        let mut listener = IpcListener::bind(&endpoint).unwrap();
+        let _owner = listener.duplicate_handle().unwrap();
+        let client = tokio::net::windows::named_pipe::ClientOptions::new()
+            .open(&endpoint.0)
+            .unwrap();
+        drop(client);
+        let accepted = tokio::time::timeout(std::time::Duration::from_secs(2), listener.accept())
+            .await
+            .expect("the closed client must not leave accept pending");
+        if let Ok(stream) = accepted {
+            let _ = stream.disconnect();
+            drop(stream);
+        }
+        let mut client = tokio::net::windows::named_pipe::ClientOptions::new()
+            .open(&endpoint.0)
+            .unwrap();
+        let stream = tokio::time::timeout(std::time::Duration::from_secs(2), listener.accept())
+            .await
+            .unwrap()
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            let (mut read, mut write) = stream.into_split();
+            client.write_all(&[42]).await.unwrap();
+            assert_eq!(read.read_u8().await.unwrap(), 42);
+            write.write_all(&[43]).await.unwrap();
+            assert_eq!(client.read_u8().await.unwrap(), 43);
+        })
+        .await
+        .expect("the next client must exchange data after the early close");
+    }
 
     #[cfg(windows)]
     #[tokio::test]
