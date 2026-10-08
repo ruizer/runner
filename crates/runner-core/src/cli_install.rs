@@ -45,7 +45,7 @@ pub fn install_from_source(app_data_dir: &Path, source: &Path) -> Result<()> {
     std::fs::create_dir_all(app_data_dir)?;
     let lock = crate::daemon_process::lock_file(app_data_dir)?;
     install_binary(app_data_dir, source, AGENT_DEST_BIN_NAME)?;
-    match fs2::FileExt::try_lock_exclusive(&lock) {
+    match lock.try_lock_exclusive() {
         Ok(()) => {
             install_binary(app_data_dir, source, DAEMON_DEST_BIN_NAME)?;
             #[cfg(windows)]
@@ -125,6 +125,37 @@ mod tests {
     use super::*;
     use std::fs;
     use std::io::Write;
+
+    #[cfg(unix)]
+    struct ForkedLockHolder(libc::pid_t);
+
+    #[cfg(unix)]
+    impl ForkedLockHolder {
+        fn new() -> Self {
+            let pid = unsafe { libc::fork() };
+            assert!(pid >= 0, "fork: {}", std::io::Error::last_os_error());
+            if pid == 0 {
+                // Keep inherited descriptors open using only async-signal-safe calls.
+                loop {
+                    unsafe { libc::pause() };
+                }
+            }
+            Self(pid)
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for ForkedLockHolder {
+        fn drop(&mut self) {
+            unsafe { libc::kill(self.0, libc::SIGKILL) };
+            while unsafe { libc::waitpid(self.0, std::ptr::null_mut(), 0) } < 0 {
+                if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+                    break;
+                }
+            }
+        }
+    }
+
     #[test]
     fn installing_while_daemon_is_locked_updates_only_the_cli() {
         let root = tempfile::tempdir().unwrap();
@@ -139,7 +170,9 @@ mod tests {
         let data = root.path().join("data");
         install_from_source(&data, &source).unwrap();
         let daemon_lock = crate::daemon_process::lock_file(&data).unwrap();
-        fs2::FileExt::try_lock_exclusive(&daemon_lock).unwrap();
+        daemon_lock.try_lock_exclusive().unwrap();
+        #[cfg(unix)]
+        let _fork = ForkedLockHolder::new();
         fs::write(&source, b"NEW-BUILD").unwrap();
         #[cfg(windows)]
         for name in ["conpty.dll", "OpenConsole.exe"] {

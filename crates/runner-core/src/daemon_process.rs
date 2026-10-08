@@ -235,17 +235,34 @@ impl Launch {
         ))
     }
 }
-pub fn startup_lock(data: &Path) -> io::Result<File> {
+pub struct LockFile(File);
+
+impl LockFile {
+    pub fn try_lock_exclusive(&self) -> io::Result<()> {
+        fs2::FileExt::try_lock_exclusive(&self.0)
+    }
+}
+
+impl Drop for LockFile {
+    fn drop(&mut self) {
+        // A forked child's descriptor can outlive ours; closing alone leaves flock held.
+        let _ = fs2::FileExt::unlock(&self.0);
+    }
+}
+
+pub fn startup_lock(data: &Path) -> io::Result<LockFile> {
     std::fs::create_dir_all(data)?;
-    let lock = OpenOptions::new()
-        .create(true)
-        .truncate(false)
-        .read(true)
-        .write(true)
-        .open(data.join("runnerd-start.lock"))?;
+    let lock = LockFile(
+        OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(data.join("runnerd-start.lock"))?,
+    );
     let deadline = Instant::now() + STARTUP_LOCK_TIMEOUT;
     loop {
-        match fs2::FileExt::try_lock_exclusive(&lock) {
+        match lock.try_lock_exclusive() {
             Ok(()) => return Ok(lock),
             Err(error)
                 if error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
@@ -257,19 +274,20 @@ pub fn startup_lock(data: &Path) -> io::Result<File> {
         }
     }
 }
-pub fn lock_file(data: &Path) -> io::Result<File> {
+pub fn lock_file(data: &Path) -> io::Result<LockFile> {
     OpenOptions::new()
         .create(true)
         .truncate(false)
         .read(true)
         .write(true)
         .open(data.join("runnerd.lock"))
+        .map(LockFile)
 }
 pub fn wait_unlocked(data: &Path, timeout: Duration) -> io::Result<()> {
     let deadline = Instant::now() + timeout;
     let lock = lock_file(data)?;
     loop {
-        match fs2::FileExt::try_lock_exclusive(&lock) {
+        match lock.try_lock_exclusive() {
             Ok(()) => return Ok(()),
             Err(error)
                 if error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
@@ -403,7 +421,7 @@ mod tests {
     fn shutdown_waits_for_the_daemon_lock_to_be_released() {
         let root = tempfile::tempdir().unwrap();
         let daemon = lock_file(root.path()).unwrap();
-        fs2::FileExt::try_lock_exclusive(&daemon).unwrap();
+        daemon.try_lock_exclusive().unwrap();
         let data = root.path().to_owned();
         let (done, result) = std::sync::mpsc::channel();
         let wait = std::thread::spawn(move || {
