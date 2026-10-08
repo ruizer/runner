@@ -153,6 +153,7 @@ impl MissionWorkspace {
         .detach();
         let store_revisions = app_store.read(cx).revisions;
         Self {
+            render_regions: HashMap::new(),
             window_label,
             shell,
             app_store: app_store.clone(),

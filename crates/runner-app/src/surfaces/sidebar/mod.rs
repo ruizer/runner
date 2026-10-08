@@ -268,6 +268,8 @@ pub(crate) struct Sidebar {
 
 impl Render for Sidebar {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        #[cfg(test)]
+        crate::render_counts::count_render("sidebar", cx);
         self.window_id = window.window_handle().window_id().as_u64();
         self.render_sidebar_contents(cx)
     }

@@ -355,6 +355,9 @@ impl PopoverMenu {
     }
 
     pub fn set_items(&mut self, items: Vec<MenuItem>, cx: &mut Context<Self>) {
+        if self.items == items {
+            return;
+        }
         self.items = items;
         if self.items.is_empty() {
             self.state.close();

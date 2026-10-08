@@ -1,5 +1,9 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 #[cfg(test)]
+mod render_counts;
+#[cfg(test)]
+mod terminal_redraw_tests;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod theme_snapshot;
@@ -504,6 +508,8 @@ impl SidebarVisibilityTransition {
 }
 
 struct NativeRoot {
+    composition: Entity<surfaces::render_cache::ShellComposition>,
+    render_regions: HashMap<String, Entity<surfaces::render_cache::CachedRegion<Self>>>,
     window_label: String,
     log_dir: PathBuf,
     closing: bool,
@@ -887,7 +893,11 @@ impl NativeRoot {
         };
         let runtime_navigation_index = (!runtime_navigation_history.is_empty()).then_some(0);
         let updater = global_updater(cx);
+        let root_entity = cx.entity().downgrade();
+        let composition = cx.new(|_| surfaces::render_cache::ShellComposition::new(root_entity));
         let mut root = Self {
+            composition,
+            render_regions: HashMap::new(),
             window_label: window_label.clone(),
             log_dir,
             closing: false,
@@ -1188,11 +1198,8 @@ impl NativeRoot {
 }
 
 impl Render for NativeRoot {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !cx.has_active_drag() {
-            self.pane_drop = None;
-        }
-        self.render_app_shell(window, cx)
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        self.composition.clone()
     }
 }
 

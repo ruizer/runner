@@ -650,7 +650,6 @@ impl NativeRoot {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         self.sync_theme(window, cx);
-        self.sync_sidebar_shortcut_rows(cx);
         window.set_rem_size(px(16. * self.settings(cx).app_zoom));
         if let Some(error) = self.error.take() {
             self.show_toast(error, ToastTone::Error, cx);
@@ -902,6 +901,63 @@ impl NativeRoot {
         }
         let preview =
             self.sidebar_collapsed && (self.sidebar_preview_open || self.sidebar_preview_peeking);
+        let content = self.cached_region(
+            "sidebar",
+            gpui::StyleRefinement::default()
+                .w(px(full_width))
+                .h_full()
+                .flex_none(),
+            move |root, window, cx| root.render_sidebar_content(full_width, window, cx),
+            cx,
+        );
+        let mut sidebar = div()
+            .id("app-sidebar")
+            .relative()
+            .w(px(width))
+            .h_full()
+            .flex_none()
+            .overflow_hidden()
+            .opacity(visibility)
+            .bg(theme::sidebar())
+            .map(|element| {
+                #[cfg(test)]
+                let element = crate::theme_snapshot::record_fill("APP_SIDEBAR", element);
+                element
+            })
+            .border_r_1()
+            .border_color(theme::border())
+            .child(content);
+        // The 1px right border is the divider; the handle centres on it.
+        let divider = visible.then_some(width - 0.5);
+        if preview {
+            sidebar = sidebar
+                .absolute()
+                .left_0()
+                .top_0()
+                .rounded_tr(px(12. * self.settings(cx).app_zoom))
+                .rounded_br(px(12. * self.settings(cx).app_zoom))
+                .shadow_2xl()
+                .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                    if !*hovered && this.sidebar_collapsed {
+                        this.sidebar_preview_open = false;
+                        cx.notify();
+                    }
+                }));
+            return (
+                Some(deferred(sidebar).with_priority(1).into_any_element()),
+                divider,
+            );
+        }
+        (Some(sidebar.into_any_element()), divider)
+    }
+
+    fn render_sidebar_content(
+        &mut self,
+        full_width: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.sync_sidebar_shortcut_rows(cx);
         let titlebar = self.render_sidebar_titlebar(window, cx);
         let search_button = div()
             .id("sidebar-search")
@@ -1154,45 +1210,7 @@ impl NativeRoot {
                     })
                     .flatten(),
             );
-        let mut sidebar = div()
-            .id("app-sidebar")
-            .relative()
-            .w(px(width))
-            .h_full()
-            .flex_none()
-            .overflow_hidden()
-            .opacity(visibility)
-            .bg(theme::sidebar())
-            .map(|element| {
-                #[cfg(test)]
-                let element = crate::theme_snapshot::record_fill("APP_SIDEBAR", element);
-                element
-            })
-            .border_r_1()
-            .border_color(theme::border())
-            .child(content);
-        // The 1px right border is the divider; the handle centres on it.
-        let divider = visible.then_some(width - 0.5);
-        if preview {
-            sidebar = sidebar
-                .absolute()
-                .left_0()
-                .top_0()
-                .rounded_tr(px(12. * self.settings(cx).app_zoom))
-                .rounded_br(px(12. * self.settings(cx).app_zoom))
-                .shadow_2xl()
-                .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
-                    if !*hovered && this.sidebar_collapsed {
-                        this.sidebar_preview_open = false;
-                        cx.notify();
-                    }
-                }));
-            return (
-                Some(deferred(sidebar).with_priority(1).into_any_element()),
-                divider,
-            );
-        }
-        (Some(sidebar.into_any_element()), divider)
+        content.into_any_element()
     }
 
     fn finish_sidebar_resize(&mut self, cx: &mut Context<Self>) {
@@ -1770,6 +1788,7 @@ impl NativeRoot {
     }
 
     fn select_sidebar_shortcut(&mut self, index: u8, window: &mut Window, cx: &mut Context<Self>) {
+        self.sync_sidebar_shortcut_rows(cx);
         self.sidebar.update(cx, |sidebar, sidebar_cx| {
             sidebar.select_shortcut_row(index, window, sidebar_cx)
         });

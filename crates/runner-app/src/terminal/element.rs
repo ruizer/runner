@@ -660,18 +660,19 @@ pub(crate) fn to_hsla(rgb: Rgb, alpha: f32) -> Hsla {
     rgba.into()
 }
 
+#[derive(Clone)]
 pub struct TerminalElement {
-    session: Arc<TerminalMirror>,
-    interaction: Entity<TerminalInteraction>,
-    input: Entity<TerminalInput>,
-    focus_handle: FocusHandle,
-    interactive: bool,
-    scrollable: bool,
-    resize_owner: bool,
-    style: TerminalStyle,
+    pub(super) session: Arc<TerminalMirror>,
+    pub(super) interaction: Entity<TerminalInteraction>,
+    pub(super) input: Entity<TerminalInput>,
+    pub(super) focus_handle: FocusHandle,
+    pub(super) interactive: bool,
+    pub(super) scrollable: bool,
+    pub(super) resize_owner: bool,
+    pub(super) style: TerminalStyle,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub struct TerminalStyle {
     pub palette: TerminalPalette,
     pub font: Font,
@@ -704,6 +705,10 @@ impl TerminalElement {
     pub fn scrollable(mut self, scrollable: bool) -> Self {
         self.scrollable = scrollable;
         self
+    }
+
+    pub(crate) fn cached(self) -> super::viewport::TerminalViewportElement {
+        super::viewport::TerminalViewportElement::new(self)
     }
 
     fn register_mouse_listeners(
@@ -879,6 +884,8 @@ impl Element for TerminalElement {
         window: &mut Window,
         cx: &mut App,
     ) -> GridPrepaint {
+        #[cfg(test)]
+        crate::render_counts::count_render(&format!("terminal:{}", self.session.session_id()), cx);
         let text_system = window.text_system();
         let base_font = self.style.font.clone();
         let font_size = px(self.style.font_size);

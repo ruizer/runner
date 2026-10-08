@@ -171,10 +171,20 @@ impl MissionWorkspace {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        if self.mission.is_some() {
-            self.configure_mission_action_menu(cx);
-        }
-        let header = self.render_mission_header(window, cx);
+        let header = self.cached_region(
+            "mission-header",
+            gpui::StyleRefinement::default()
+                .w_full()
+                .h(rems(WORKSPACE_HEADER_HEIGHT / 16.))
+                .flex_none(),
+            |workspace, window, cx| {
+                if workspace.mission.is_some() {
+                    workspace.configure_mission_action_menu(cx);
+                }
+                workspace.render_mission_header(window, cx)
+            },
+            cx,
+        );
         let notices = self.render_mission_notices(cx);
         let body = if self.loading {
             div()
@@ -231,11 +241,23 @@ impl MissionWorkspace {
         if rail_animating {
             window.request_animation_frame();
         }
-        let rail = self.render_mission_rail(
-            rail_visibility,
-            rail_open || rail_animating,
-            rail_open && !rail_animating,
-            window,
+        let rail = self.cached_region(
+            "mission-rail",
+            gpui::StyleRefinement::default()
+                .w(rems(
+                    self.settings(cx).mission_rail_width * rail_visibility / 16.,
+                ))
+                .h_full()
+                .flex_none(),
+            move |workspace, window, cx| {
+                workspace.render_mission_rail(
+                    rail_visibility,
+                    rail_open || rail_animating,
+                    rail_open && !rail_animating,
+                    window,
+                    cx,
+                )
+            },
             cx,
         );
         div()
@@ -538,45 +560,14 @@ impl MissionWorkspace {
 
     fn render_mission_terminal_drawer(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let active_id = self.layout.drawer.active_shell().map(str::to_owned);
-        let labels = self
-            .layout
-            .drawer
-            .shells()
-            .iter()
-            .map(|session_id| {
-                self.drawer_session_entry(session_id, cx)
-                    .map(default_session_label)
-                    .unwrap_or_else(|| "shell".into())
-            })
-            .collect::<Vec<_>>();
-        let root = cx.entity();
-        let activate_root = root.clone();
-        let close_root = root.clone();
-        let add_root = root.clone();
-        let hide_root = root;
-        let strip = super::panes::render_terminal_drawer_strip(
-            "mission",
-            self.layout.drawer.shells(),
-            active_id.as_deref(),
-            &labels,
-            super::panes::TerminalDrawerCallbacks {
-                activate: Rc::new(move |session_id, window, cx| {
-                    activate_root.update(cx, |this, cx| {
-                        this.activate_terminal_drawer_shell(&session_id, window, cx)
-                    });
-                }),
-                close: Rc::new(move |session_id, window, cx| {
-                    close_root.update(cx, |this, cx| {
-                        this.request_close_terminal_drawer_shell(&session_id, window, cx)
-                    });
-                }),
-                add: Rc::new(move |window, cx| {
-                    add_root.update(cx, |this, cx| this.add_terminal_drawer_shell(window, cx));
-                }),
-                hide: Rc::new(move |window, cx| {
-                    hide_root.update(cx, |this, cx| this.hide_terminal_drawer(window, cx));
-                }),
-            },
+        let strip = self.cached_region(
+            "mission-drawer-strip",
+            gpui::StyleRefinement::default()
+                .w_full()
+                .h(rems(32. / 16.))
+                .flex_none(),
+            |workspace, _, cx| workspace.render_mission_drawer_strip(cx),
+            cx,
         );
         let body = active_id
             .as_deref()
@@ -605,6 +596,50 @@ impl MissionWorkspace {
             .child(strip)
             .child(body)
             .into_any_element()
+    }
+
+    fn render_mission_drawer_strip(&mut self, cx: &mut Context<Self>) -> AnyElement {
+        let active_id = self.layout.drawer.active_shell().map(str::to_owned);
+        let labels = self
+            .layout
+            .drawer
+            .shells()
+            .iter()
+            .map(|session_id| {
+                self.drawer_session_entry(session_id, cx)
+                    .map(default_session_label)
+                    .unwrap_or_else(|| "shell".into())
+            })
+            .collect::<Vec<_>>();
+        let root = cx.entity();
+        let activate_root = root.clone();
+        let close_root = root.clone();
+        let add_root = root.clone();
+        let hide_root = root;
+        super::panes::render_terminal_drawer_strip(
+            "mission",
+            self.layout.drawer.shells(),
+            active_id.as_deref(),
+            &labels,
+            super::panes::TerminalDrawerCallbacks {
+                activate: Rc::new(move |session_id, window, cx| {
+                    activate_root.update(cx, |this, cx| {
+                        this.activate_terminal_drawer_shell(&session_id, window, cx)
+                    });
+                }),
+                close: Rc::new(move |session_id, window, cx| {
+                    close_root.update(cx, |this, cx| {
+                        this.request_close_terminal_drawer_shell(&session_id, window, cx)
+                    });
+                }),
+                add: Rc::new(move |window, cx| {
+                    add_root.update(cx, |this, cx| this.add_terminal_drawer_shell(window, cx));
+                }),
+                hide: Rc::new(move |window, cx| {
+                    hide_root.update(cx, |this, cx| this.hide_terminal_drawer(window, cx));
+                }),
+            },
+        )
     }
 
     fn render_mission_drawer_terminal(
@@ -684,7 +719,8 @@ impl MissionWorkspace {
                                 scrollable,
                                 terminal_style,
                             )
-                            .scrollable(scrollable),
+                            .scrollable(scrollable)
+                            .cached(),
                         )
                         .child(terminal_scrollbar),
                 );
@@ -795,9 +831,22 @@ impl MissionWorkspace {
 
     fn render_loaded_mission(&mut self, window: &mut Window, cx: &mut Context<Self>) -> AnyElement {
         let feed_active = self.secondary || self.active_tab == MissionTab::Feed;
-        let tabs = self.render_mission_tabs(feed_active, cx);
+        let tabs = self.cached_region(
+            "mission-tabs",
+            gpui::StyleRefinement::default()
+                .w_full()
+                .h(rems(WORKSPACE_TABS_HEIGHT / 16.))
+                .flex_none(),
+            move |workspace, _, cx| workspace.render_mission_tabs(feed_active, cx),
+            cx,
+        );
         let pane = if feed_active {
-            self.render_mission_feed_surface(window, cx)
+            self.cached_region(
+                "mission-feed",
+                gpui::StyleRefinement::default().size_full(),
+                |workspace, window, cx| workspace.render_mission_feed_surface(window, cx),
+                cx,
+            )
         } else {
             match &self.active_tab {
                 MissionTab::Session(session_id) => {
@@ -810,7 +859,12 @@ impl MissionWorkspace {
                         .map(|session| self.render_mission_terminal_pane(session, window, cx))
                         .unwrap_or_else(|| self.render_mission_feed_surface(window, cx))
                 }
-                MissionTab::Feed => self.render_mission_feed_surface(window, cx),
+                MissionTab::Feed => self.cached_region(
+                    "mission-feed",
+                    gpui::StyleRefinement::default().size_full(),
+                    |workspace, window, cx| workspace.render_mission_feed_surface(window, cx),
+                    cx,
+                ),
             }
         };
         let mut panes = div()

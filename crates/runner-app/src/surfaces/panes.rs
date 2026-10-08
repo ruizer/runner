@@ -355,189 +355,28 @@ impl NativeRoot {
                 .child(empty)
                 .into_any_element();
         };
-        let session_ids = layout.session_ids();
         let grouped = pane_identity_visible(layout.root.leaves().len());
-        let focused_session_id = layout.focused_session_id().map(str::to_owned);
-        let focused_entry = focused_session_id
-            .as_deref()
-            .and_then(|session_id| self.session_entry(session_id, cx))
-            .cloned();
-        let focused_shell = focused_entry.as_ref().is_some_and(|entry| {
-            Runtime::parse(&entry.agent_runtime).is_some_and(Runtime::is_shell)
-        });
-        let terminal_tab = self.active_tab_is_terminal(cx);
-        let focused_secondary = focused_session_id
-            .as_deref()
-            .is_some_and(|session_id| self.cached_chat_secondary_state(session_id).secondary);
-        let label = self.tab_label(&layout, cx);
-        let lifecycle_busy = session_ids
-            .iter()
-            .filter(|session_id| {
-                self.session_entry(session_id, cx).is_some_and(|entry| {
-                    !Runtime::parse(&entry.agent_runtime).is_some_and(Runtime::is_shell)
-                })
-            })
-            .any(|session_id| self.session_lifecycle_disabled(session_id, cx));
-        self.configure_chat_action_menu(&layout, lifecycle_busy, cx);
+        let focused_shell = layout
+            .focused_session_id()
+            .and_then(|id| self.session_entry(id, cx))
+            .is_some_and(|entry| {
+                Runtime::parse(&entry.agent_runtime).is_some_and(Runtime::is_shell)
+            });
         self.prune_pane_state(&layout);
-        let pane_tree = self.render_pane_node(&layout.root, &layout, window, cx);
-        let tab_archiving = split_tab_archiving(&layout, |session_id| {
-            self.sidebar_archiving_session(session_id, cx)
-        });
-        let sidebar_toggle = self.render_open_sidebar_button(cx);
-        let root = cx.entity();
-        let fork_root = root.clone();
-        let drawer_root = root.clone();
-        let panel_root = root.clone();
-        let control = (!focused_secondary)
-            .then(|| self.render_topbar_session_control(&layout, window, cx))
-            .flatten();
-        let fork_pending = focused_session_id.as_deref().is_some_and(|session_id| {
-            self.fork_confirm
-                .as_ref()
-                .is_some_and(|confirm| confirm.pending && confirm.session_id == session_id)
-                || super::chat::fork_in_progress(&self.forking_sessions, session_id)
-        });
-        let fork_action = focused_session_id.clone().and_then(|session_id| {
-            let (disabled, tooltip) =
-                match header_fork_state(focused_entry.as_ref(), focused_secondary) {
-                    HeaderForkState::Enabled if fork_pending => (true, None),
-                    HeaderForkState::Enabled => (false, Some("Fork chat into a new tab")),
-                    HeaderForkState::Disabled(_) if fork_pending => (true, None),
-                    HeaderForkState::Disabled(caption) => (true, caption),
-                    HeaderForkState::Hidden => return None,
-                };
-            let mut button = IconButton::new("fork-chat", "git-fork.svg")
-                .disabled(disabled)
-                .on_press(move |window, cx| {
-                    fork_root.update(cx, |this, cx| this.fork_chat(&session_id, window, cx));
-                });
-            if let Some(tooltip) = tooltip {
-                button = button.tooltip(tooltip);
-            }
-            Some(button.into_any_element())
-        });
-        let single_status = (!grouped && !focused_shell)
-            .then_some(focused_entry.as_ref())
-            .flatten()
-            .map(|entry| {
-                let mut status = direct_chat_display_status(
-                    entry,
-                    self.app_store
-                        .read(cx)
-                        .session_statuses
-                        .get(&entry.session_id),
-                );
-                if let Some(transition) = self.chat_transitions.get(&entry.session_id) {
-                    status.kind = if transition.kind == TransitionKind::Resuming {
-                        runner_app::ui::agent_status::StatusKind::Resuming
-                    } else {
-                        runner_app::ui::agent_status::StatusKind::Starting
-                    };
-                    status.estimated = false;
-                }
-                let target = layout.focused_pane_id.clone();
-                let width = self
-                    .pane_bounds
-                    .get(&PaneKey::new(&layout.id, &target))
-                    .map_or(480., |size| {
-                        f32::from(size.width) / (f32::from(window.rem_size()) / 16.)
-                    });
-                div()
-                    .id("single-pane-status")
-                    .flex_none()
-                    .child(runner_app::ui::agent_status::header_status_indicator(
-                        status,
-                        status.shows_label(width),
-                        status.shows_detail(width),
-                        "tab-status",
-                        window,
-                        cx,
-                    ))
-                    .on_click(cx.listener(move |this, _, window, cx| {
-                        cx.stop_propagation();
-                        this.focus_pane(&target, cx);
-                        this.mark_active_tab_viewed(window, cx);
-                        this.focus_active_terminal(window, cx);
-                    }))
-                    .into_any_element()
-            });
-        let title_actions = (!session_ids.is_empty() && !focused_secondary)
-            .then(|| self.chat_action_menu.clone().into_any_element())
-            .into_iter()
-            .chain(control)
-            .chain(fork_action)
-            .chain(single_status);
-        let keymap_overrides = self.settings(cx).keymap_overrides.clone();
-        // A single-pane tab has no identity line, so the header carries its
-        // split menu; once split, every identity line carries its own.
-        let split_action = (!grouped).then(|| {
-            let tab_id = layout.id.clone();
-            let pane_id = layout.focused_pane_id.clone();
-            self.split_menu(SplitMenuSurface::Header, &tab_id, &pane_id, cx)
-                .into_any_element()
-        });
-        let drawer_action = (!terminal_tab).then(|| {
-            let open = layout.drawer_open();
-            let tooltip = terminal_drawer_tooltip(open, &keymap_overrides);
-            IconButton::new(
-                "terminal-drawer-toggle",
-                if open {
-                    "panel-bottom-open.svg"
-                } else {
-                    "panel-bottom-hidden.svg"
-                },
-            )
-            .tooltip(tooltip)
-            .on_press(move |window, cx| {
-                drawer_root.update(cx, |this, cx| this.toggle_terminal_drawer(window, cx));
-            })
-            .into_any_element()
-        });
-        let panel_action = (!side_panel_open(self.settings(cx).chat_panel_open, focused_shell)
-            && !focused_shell)
-            .then(|| {
-                IconButton::new("open-chat-panel", "panel-right-hidden.svg")
-                    .tooltip("Open side panel")
-                    .on_press(move |_, cx| {
-                        panel_root.update(cx, |this, cx| {
-                            this.update_app_settings(cx, true, |settings| {
-                                settings.chat_panel_open = true;
-                                true
-                            });
-                            cx.notify();
-                        });
-                    })
-                    .into_any_element()
-            });
-        let header_icon = workspace_header_icon(
-            grouped,
-            focused_session_id.as_deref(),
-            focused_entry
-                .as_ref()
-                .map(|entry| entry.agent_runtime.as_str()),
+        let pane_tree = self.render_pane_node(&layout.root, &layout, cx);
+        let tab_archiving =
+            split_tab_archiving(&layout, |id| self.sidebar_archiving_session(id, cx));
+        let header_layout = layout.clone();
+        let header = self.cached_region(
+            "tab-bar",
+            gpui::StyleRefinement::default()
+                .w_full()
+                .h(rems(WORKSPACE_HEADER_HEIGHT / 16.))
+                .flex_none(),
+            move |root, window, cx| root.render_chat_tab_header(&header_layout, window, cx),
+            cx,
         );
-        let header_live = focused_entry
-            .as_ref()
-            .is_some_and(|entry| entry.status == SessionStatus::Running);
-        let header = WorkspaceHeader::new(
-            px(self.workspace_titlebar_padding(window, cx)),
-            header_icon.render(
-                rems(15. / 16.),
-                header_icon.color(theme::accent(), header_live),
-                header_live,
-            ),
-            label,
-        )
-        .sidebar_toggle(sidebar_toggle)
-        .title_actions(title_actions)
-        .trailing_actions(
-            split_action
-                .into_iter()
-                .chain(drawer_action)
-                .chain(panel_action),
-        )
-        .into_div();
+        let root = cx.entity();
         let error_banner = self
             .chat_error
             .clone()
@@ -629,7 +468,7 @@ impl NativeRoot {
                 div()
                     .flex_none()
                     .debug_selector(|| "CHAT_TAB_HEADER".into())
-                    .child(self.render_titlebar_drag_area("chat-titlebar-drag", header, cx)),
+                    .child(header),
             )
             .children(
                 (self.route != AppRoute::Settings)
@@ -653,12 +492,24 @@ impl NativeRoot {
                 .as_ref()
                 .map(|chat| chat.session_id.clone()),
         );
-        let side_panel = self.render_chat_side_panel(
-            self.active_chat_detail.as_ref(),
-            self.session_key_copy.clone(),
-            panel_visibility,
-            panel_open || panel_animating,
-            panel_open && !panel_animating,
+        let side_panel = self.cached_region(
+            "side-panel",
+            gpui::StyleRefinement::default()
+                .w(rems(
+                    self.settings(cx).chat_panel_width * panel_visibility / 16.,
+                ))
+                .h_full()
+                .flex_none(),
+            move |root, _, cx| {
+                root.render_chat_side_panel(
+                    root.active_chat_detail.as_ref(),
+                    root.session_key_copy.clone(),
+                    panel_visibility,
+                    panel_open || panel_animating,
+                    panel_open && !panel_animating,
+                    cx,
+                )
+            },
             cx,
         );
         // The panel clips its own content, so its splitter sits out here and
@@ -950,6 +801,196 @@ impl NativeRoot {
         }
     }
 
+    fn render_chat_tab_header(
+        &mut self,
+        layout: &PaneLayout,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        #[cfg(test)]
+        crate::render_counts::count_render("tab-bar", cx);
+        let session_ids = layout.session_ids();
+        let grouped = pane_identity_visible(layout.root.leaves().len());
+        let focused_session_id = layout.focused_session_id().map(str::to_owned);
+        let focused_entry = focused_session_id
+            .as_deref()
+            .and_then(|session_id| self.session_entry(session_id, cx))
+            .cloned();
+        let focused_shell = focused_entry.as_ref().is_some_and(|entry| {
+            Runtime::parse(&entry.agent_runtime).is_some_and(Runtime::is_shell)
+        });
+        let terminal_tab = self.active_tab_is_terminal(cx);
+        let focused_secondary = focused_session_id
+            .as_deref()
+            .is_some_and(|session_id| self.cached_chat_secondary_state(session_id).secondary);
+        let label = self.tab_label(layout, cx);
+        let lifecycle_busy = session_ids
+            .iter()
+            .filter(|session_id| {
+                self.session_entry(session_id, cx).is_some_and(|entry| {
+                    !Runtime::parse(&entry.agent_runtime).is_some_and(Runtime::is_shell)
+                })
+            })
+            .any(|session_id| self.session_lifecycle_disabled(session_id, cx));
+        self.configure_chat_action_menu(layout, lifecycle_busy, cx);
+        let sidebar_toggle = self.render_open_sidebar_button(cx);
+        let root = cx.entity();
+        let fork_root = root.clone();
+        let drawer_root = root.clone();
+        let panel_root = root.clone();
+        let control = (!focused_secondary)
+            .then(|| self.render_topbar_session_control(layout, window, cx))
+            .flatten();
+        let fork_pending = focused_session_id.as_deref().is_some_and(|session_id| {
+            self.fork_confirm
+                .as_ref()
+                .is_some_and(|confirm| confirm.pending && confirm.session_id == session_id)
+                || super::chat::fork_in_progress(&self.forking_sessions, session_id)
+        });
+        let fork_action = focused_session_id.clone().and_then(|session_id| {
+            let (disabled, tooltip) =
+                match header_fork_state(focused_entry.as_ref(), focused_secondary) {
+                    HeaderForkState::Enabled if fork_pending => (true, None),
+                    HeaderForkState::Enabled => (false, Some("Fork chat into a new tab")),
+                    HeaderForkState::Disabled(_) if fork_pending => (true, None),
+                    HeaderForkState::Disabled(caption) => (true, caption),
+                    HeaderForkState::Hidden => return None,
+                };
+            let mut button = IconButton::new("fork-chat", "git-fork.svg")
+                .disabled(disabled)
+                .on_press(move |window, cx| {
+                    fork_root.update(cx, |this, cx| this.fork_chat(&session_id, window, cx));
+                });
+            if let Some(tooltip) = tooltip {
+                button = button.tooltip(tooltip);
+            }
+            Some(button.into_any_element())
+        });
+        let single_status = (!grouped && !focused_shell)
+            .then_some(focused_entry.as_ref())
+            .flatten()
+            .map(|entry| {
+                let mut status = direct_chat_display_status(
+                    entry,
+                    self.app_store
+                        .read(cx)
+                        .session_statuses
+                        .get(&entry.session_id),
+                );
+                if let Some(transition) = self.chat_transitions.get(&entry.session_id) {
+                    status.kind = if transition.kind == TransitionKind::Resuming {
+                        runner_app::ui::agent_status::StatusKind::Resuming
+                    } else {
+                        runner_app::ui::agent_status::StatusKind::Starting
+                    };
+                    status.estimated = false;
+                }
+                let target = layout.focused_pane_id.clone();
+                let width = self
+                    .pane_bounds
+                    .get(&PaneKey::new(&layout.id, &target))
+                    .map_or(480., |size| {
+                        f32::from(size.width) / (f32::from(window.rem_size()) / 16.)
+                    });
+                div()
+                    .id("single-pane-status")
+                    .flex_none()
+                    .child(runner_app::ui::agent_status::header_status_indicator(
+                        status,
+                        status.shows_label(width),
+                        status.shows_detail(width),
+                        "tab-status",
+                        window,
+                        cx,
+                    ))
+                    .on_click(cx.listener(move |this, _, window, cx| {
+                        cx.stop_propagation();
+                        this.focus_pane(&target, cx);
+                        this.mark_active_tab_viewed(window, cx);
+                        this.focus_active_terminal(window, cx);
+                    }))
+                    .into_any_element()
+            });
+        let title_actions = (!session_ids.is_empty() && !focused_secondary)
+            .then(|| self.chat_action_menu.clone().into_any_element())
+            .into_iter()
+            .chain(control)
+            .chain(fork_action)
+            .chain(single_status);
+        let keymap_overrides = self.settings(cx).keymap_overrides.clone();
+        // A single-pane tab has no identity line, so the header carries its
+        // split menu; once split, every identity line carries its own.
+        let split_action = (!grouped).then(|| {
+            let tab_id = layout.id.clone();
+            let pane_id = layout.focused_pane_id.clone();
+            self.split_menu(SplitMenuSurface::Header, &tab_id, &pane_id, cx)
+                .into_any_element()
+        });
+        let drawer_action = (!terminal_tab).then(|| {
+            let open = layout.drawer_open();
+            let tooltip = terminal_drawer_tooltip(open, &keymap_overrides);
+            IconButton::new(
+                "terminal-drawer-toggle",
+                if open {
+                    "panel-bottom-open.svg"
+                } else {
+                    "panel-bottom-hidden.svg"
+                },
+            )
+            .tooltip(tooltip)
+            .on_press(move |window, cx| {
+                drawer_root.update(cx, |this, cx| this.toggle_terminal_drawer(window, cx));
+            })
+            .into_any_element()
+        });
+        let panel_action = (!side_panel_open(self.settings(cx).chat_panel_open, focused_shell)
+            && !focused_shell)
+            .then(|| {
+                IconButton::new("open-chat-panel", "panel-right-hidden.svg")
+                    .tooltip("Open side panel")
+                    .on_press(move |_, cx| {
+                        panel_root.update(cx, |this, cx| {
+                            this.update_app_settings(cx, true, |settings| {
+                                settings.chat_panel_open = true;
+                                true
+                            });
+                            cx.notify();
+                        });
+                    })
+                    .into_any_element()
+            });
+        let header_icon = workspace_header_icon(
+            grouped,
+            focused_session_id.as_deref(),
+            focused_entry
+                .as_ref()
+                .map(|entry| entry.agent_runtime.as_str()),
+        );
+        let header_live = focused_entry
+            .as_ref()
+            .is_some_and(|entry| entry.status == SessionStatus::Running);
+        let header = WorkspaceHeader::new(
+            px(self.workspace_titlebar_padding(window, cx)),
+            header_icon.render(
+                rems(15. / 16.),
+                header_icon.color(theme::accent(), header_live),
+                header_live,
+            ),
+            label,
+        )
+        .sidebar_toggle(sidebar_toggle)
+        .title_actions(title_actions)
+        .trailing_actions(
+            split_action
+                .into_iter()
+                .chain(drawer_action)
+                .chain(panel_action),
+        )
+        .into_div();
+        self.render_titlebar_drag_area("chat-titlebar-drag", header, cx)
+            .into_any_element()
+    }
+
     fn render_chat_side_panel(
         &self,
         detail: Option<&DirectSessionEntry>,
@@ -959,6 +1000,8 @@ impl NativeRoot {
         border_on: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        #[cfg(test)]
+        crate::render_counts::count_render("side-panel", cx);
         let width = self.settings(cx).chat_panel_width;
         let visible_width = width * visibility;
         if !show_panel {
@@ -1316,6 +1359,12 @@ impl NativeRoot {
             .map(|leaf| leaf.id.as_str())
             .collect::<HashSet<_>>();
         let tab_id = layout.id.as_str();
+        let region_keys = panes
+            .iter()
+            .map(|pane| format!("pane:{tab_id}:{pane}"))
+            .collect::<HashSet<_>>();
+        self.render_regions
+            .retain(|key, _| !key.starts_with("pane:") || region_keys.contains(key));
         self.split_menus
             .retain(|key, _| key.tab_id == tab_id && panes.contains(key.pane_id.as_str()));
         self.pane_bounds
@@ -1383,14 +1432,23 @@ impl NativeRoot {
         &mut self,
         node: &PaneNode,
         layout: &PaneLayout,
-        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         match node {
-            PaneNode::Leaf(leaf) => self.render_pane(leaf, layout, window, cx),
+            PaneNode::Leaf(leaf) => {
+                let key = format!("pane:{}:{}", layout.id, leaf.id);
+                let leaf = leaf.clone();
+                let layout = layout.clone();
+                self.cached_region(
+                    key,
+                    gpui::StyleRefinement::default().size_full(),
+                    move |root, window, cx| root.render_pane(&leaf, &layout, window, cx),
+                    cx,
+                )
+            }
             PaneNode::Split(split) => {
-                let a = self.render_pane_node(&split.a, layout, window, cx);
-                let b = self.render_pane_node(&split.b, layout, window, cx);
+                let a = self.render_pane_node(&split.a, layout, cx);
+                let b = self.render_pane_node(&split.b, layout, cx);
                 let first = split.sizes[0] / 100.;
                 let second = split.sizes[1] / 100.;
                 let split_id = split.id.clone();
@@ -1558,42 +1616,15 @@ impl NativeRoot {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let active_id = layout.active_drawer_shell().map(str::to_owned);
-        let labels = layout
-            .drawer_shells()
-            .iter()
-            .map(|session_id| {
-                self.session_entry(session_id, cx)
-                    .map(default_session_label)
-                    .unwrap_or_else(|| "shell".into())
-            })
-            .collect::<Vec<_>>();
-        let activate_root = cx.entity();
-        let close_root = activate_root.clone();
-        let add_root = activate_root.clone();
-        let hide_root = activate_root.clone();
-        let strip = render_terminal_drawer_strip(
-            "chat",
-            layout.drawer_shells(),
-            active_id.as_deref(),
-            &labels,
-            TerminalDrawerCallbacks {
-                activate: Rc::new(move |session_id, window, cx| {
-                    activate_root.update(cx, |this, cx| {
-                        this.activate_terminal_drawer_shell(&session_id, window, cx)
-                    });
-                }),
-                close: Rc::new(move |session_id, window, cx| {
-                    close_root.update(cx, |this, cx| {
-                        this.request_close_drawer_shell(&session_id, window, cx)
-                    });
-                }),
-                add: Rc::new(move |window, cx| {
-                    add_root.update(cx, |this, cx| this.add_terminal_drawer_shell(window, cx));
-                }),
-                hide: Rc::new(move |window, cx| {
-                    hide_root.update(cx, |this, cx| this.hide_terminal_drawer(window, cx));
-                }),
-            },
+        let strip_layout = layout.clone();
+        let strip = self.cached_region(
+            "chat-drawer-strip",
+            gpui::StyleRefinement::default()
+                .w_full()
+                .h(rems(32. / 16.))
+                .flex_none(),
+            move |root, _, cx| root.render_chat_drawer_strip(&strip_layout, cx),
+            cx,
         );
 
         let body = active_id
@@ -1623,6 +1654,51 @@ impl NativeRoot {
             .child(strip)
             .child(body)
             .into_any_element()
+    }
+
+    fn render_chat_drawer_strip(
+        &mut self,
+        layout: &PaneLayout,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let active_id = layout.active_drawer_shell().map(str::to_owned);
+        let labels = layout
+            .drawer_shells()
+            .iter()
+            .map(|session_id| {
+                self.session_entry(session_id, cx)
+                    .map(default_session_label)
+                    .unwrap_or_else(|| "shell".into())
+            })
+            .collect::<Vec<_>>();
+        let activate_root = cx.entity();
+        let close_root = activate_root.clone();
+        let add_root = activate_root.clone();
+        let hide_root = activate_root.clone();
+        render_terminal_drawer_strip(
+            "chat",
+            layout.drawer_shells(),
+            active_id.as_deref(),
+            &labels,
+            TerminalDrawerCallbacks {
+                activate: Rc::new(move |session_id, window, cx| {
+                    activate_root.update(cx, |this, cx| {
+                        this.activate_terminal_drawer_shell(&session_id, window, cx)
+                    });
+                }),
+                close: Rc::new(move |session_id, window, cx| {
+                    close_root.update(cx, |this, cx| {
+                        this.request_close_drawer_shell(&session_id, window, cx)
+                    });
+                }),
+                add: Rc::new(move |window, cx| {
+                    add_root.update(cx, |this, cx| this.add_terminal_drawer_shell(window, cx));
+                }),
+                hide: Rc::new(move |window, cx| {
+                    hide_root.update(cx, |this, cx| this.hide_terminal_drawer(window, cx));
+                }),
+            },
+        )
     }
 
     fn render_drawer_terminal(
@@ -1700,7 +1776,8 @@ impl NativeRoot {
                                 resize_owner,
                                 terminal_style,
                             )
-                            .scrollable(scrollable),
+                            .scrollable(scrollable)
+                            .cached(),
                         )
                         .child(terminal_scrollbar),
                 )
@@ -1797,6 +1874,8 @@ impl NativeRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        #[cfg(test)]
+        crate::render_counts::count_render(&format!("pane:{}", leaf.id), cx);
         let focused = layout.focused_pane_id == leaf.id;
         let grouped = layout.root.leaves().len() > 1;
         let pane_id = leaf.id.clone();
@@ -2179,7 +2258,8 @@ impl NativeRoot {
                                     resize_owner,
                                     terminal_style,
                                 )
-                                .scrollable(scrollable),
+                                .scrollable(scrollable)
+                                .cached(),
                             )
                             .child(terminal_scrollbar),
                     )

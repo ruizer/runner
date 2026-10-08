@@ -1285,11 +1285,18 @@ pub struct TerminalBridge {
     client: DaemonClient,
     sessions: Mutex<HashMap<String, Arc<TerminalMirror>>>,
     palette: Mutex<palette::TerminalPalette>,
-    waker: Arc<dyn Fn() + Send + Sync>,
+    waker: Arc<dyn Fn(&str) + Send + Sync>,
 }
 
 impl TerminalBridge {
     pub fn new(client: DaemonClient, waker: Arc<dyn Fn() + Send + Sync>) -> Result<Arc<Self>> {
+        Self::with_session_waker(client, Arc::new(move |_| waker()))
+    }
+
+    pub fn with_session_waker(
+        client: DaemonClient,
+        waker: Arc<dyn Fn(&str) + Send + Sync>,
+    ) -> Result<Arc<Self>> {
         let bridge = Arc::new(Self {
             client,
             sessions: Mutex::default(),
@@ -1306,10 +1313,12 @@ impl TerminalBridge {
         if let Some(mirror) = sessions.get(session_id) {
             return Ok(Arc::clone(mirror));
         }
+        let wake = Arc::clone(&self.waker);
+        let id = session_id.to_owned();
         let mirror = TerminalMirror::attach(
             self.client.clone(),
             session_id.to_owned(),
-            Arc::clone(&self.waker),
+            Arc::new(move || wake(&id)),
         )?;
         mirror.set_palette(*self.palette.lock().unwrap());
         sessions.insert(session_id.to_owned(), Arc::clone(&mirror));
@@ -1333,7 +1342,6 @@ impl TerminalBridge {
             if let Err(error) = self.attach_live_sessions() {
                 log::error!("reattach live terminals: {error}");
             }
-            (self.waker)();
             return;
         }
 
@@ -1357,7 +1365,7 @@ impl TerminalBridge {
             }
             _ => return,
         }
-        (self.waker)();
+        (self.waker)(id);
     }
     pub fn session(&self, session_id: &str) -> Option<Arc<TerminalMirror>> {
         self.sessions.lock().unwrap().get(session_id).cloned()

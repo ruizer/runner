@@ -109,7 +109,8 @@ impl MissionWorkspace {
                             true,
                             self.terminal_style(cx),
                         )
-                        .scrollable(interactive),
+                        .scrollable(interactive)
+                        .cached(),
                     )
                     .child(terminal_scrollbar),
             );
