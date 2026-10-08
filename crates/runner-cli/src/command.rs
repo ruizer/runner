@@ -2708,10 +2708,9 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn daemon_stop_waits_past_ten_seconds_for_the_daemon_lock() {
-        use std::os::fd::AsRawFd;
         let root = tempfile::tempdir().unwrap();
         let daemon = runner_core::daemon_process::lock_file(root.path()).unwrap();
-        assert_eq!(unsafe { libc::flock(daemon.as_raw_fd(), libc::LOCK_EX) }, 0);
+        daemon.try_lock_exclusive().unwrap();
         let data = root.path().to_owned();
         let (done, result) = std::sync::mpsc::channel();
         let wait = std::thread::spawn(move || {

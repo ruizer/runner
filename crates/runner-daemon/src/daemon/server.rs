@@ -57,7 +57,7 @@ impl Settings {
 pub fn run(config: Config) -> Result<()> {
     std::fs::create_dir_all(&config.paths.app_data_dir)?;
     let lock = daemon_process::lock_file(&config.paths.app_data_dir)?;
-    match fs2::FileExt::try_lock_exclusive(&lock) {
+    match lock.try_lock_exclusive() {
         Ok(()) => (),
         Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
             return Ok(())
