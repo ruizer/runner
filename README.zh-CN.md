@@ -265,7 +265,7 @@ runner mission archive "$mission"
 
 ### Antigravity CLI 支持清单
 
-Antigravity CLI 从 0.12.3 起提供；实际运行验证见[冒烟测试清单](./docs/tests/644-antigravity-smoke.md)。
+Antigravity CLI 从 0.12.3 起提供；实际运行验证见[冒烟测试清单](./docs/tests/archive/644-antigravity-smoke.md)。
 
 - [x] 直接聊天和 crew mission 槽位。
 - [x] 在首轮消息中传入角色人设。

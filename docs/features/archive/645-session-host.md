@@ -222,7 +222,7 @@ Phase 3's host picker and disconnected pane get designed with phase 3.
 - Reading a remote machine's files from the app; Runner is not an ADE.
 - Registering MCP servers or managing skills on a remote machine in v1.
 - Sandboxing, federation between two daemons, and any hosted relay.
-- Adopting alacritty's event loop (#709; see The terminal), and moving hook status to local IPC ([#797](../797-hook-status-ipc.md)). When #797 lands, its listener belongs in the daemon, which is now always running.
+- Adopting alacritty's event loop (#709; see The terminal), and moving hook status to local IPC ([#797](./797-hook-status-ipc.md)). When #797 lands, its listener belongs in the daemon, which is now always running.
 
 ## Decisions
 

@@ -265,7 +265,7 @@ Commands start Runner's background service when it is not running, so they work 
 
 ### Antigravity CLI checklist
 
-Antigravity CLI shipped in 0.12.3. The [smoke checklist](./docs/tests/644-antigravity-smoke.md) tracks live validation.
+Antigravity CLI shipped in 0.12.3. The [smoke checklist](./docs/tests/archive/644-antigravity-smoke.md) tracks live validation.
 
 - [x] Direct chats and crew mission slots.
 - [x] Role persona delivered with the first turn.

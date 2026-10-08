@@ -36,7 +36,7 @@ Surface hierarchy (strict — do not blur these in code, docs, or UI copy):
 ## Project Map
 
 - `crates/runner-app/`: GPUI application, terminal renderer, and terminal fixture corpus.
-- `crates/runner-daemon/`: `runnerd` and its UI-agnostic application core, including SQLite, session manager, event bus, router, and MCP server.
+- `crates/runner-daemon/`: `runnerd` and its UI-agnostic application core, including SQLite, the session manager, event bus and router, and the client-protocol server the app and CLI connect to.
 - `crates/runner-cli/`: the bundled `runner` CLI, used by spawned agents inside a mission and by people, scripts and agents outside one.
 - `crates/runner-core/`: shared types, event-log primitives, client protocol and daemon launch/connection.
 - `design/`: Pencil source files.

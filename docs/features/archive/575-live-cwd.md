@@ -86,7 +86,7 @@ In bash, Runner's hook takes the bootstrap's place in `PROMPT_COMMAND`, and it p
 - `runner-backend`: the injected environment and unchanged argv for zsh and bash, including a user `ZDOTDIR` and an inherited `PROMPT_COMMAND`; no change for fish, a role-backed shell, a mission shell or an agent runtime; script files written and rewritten when stale. Real shells: `/bin/zsh` and `/bin/bash` spawned through the PTY runtime with a temporary `HOME` (and a `ZDOTDIR` case), `cd` into a directory with a space and CJK characters, asserting the OSC 7 arrives, percent-encoded, and that the user's startup files printed their markers. For both shells, an rc that already sends OSC 7 directly, through a helper function, from `PS1`, or (zsh) through an autoloaded function, or that adds its emitter to the hook list or to `PS1` after the first prompt, gets exactly one report per prompt, and Runner's hook is gone from the hook list.
 - `runner-app`: the cwd choice for split and New terminal: a live cwd that exists wins; a missing, removed or non-directory live cwd falls back to the spawn cwd, then the existing chain.
 - The six gates in the brief, with exit codes.
-- Jason's smoke test: [`docs/tests/575-live-cwd-smoke.md`](../../tests/575-live-cwd-smoke.md).
+- Jason's smoke test: [`docs/tests/575-live-cwd-smoke.md`](../../tests/archive/575-live-cwd-smoke.md).
 
 ## References
 

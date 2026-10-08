@@ -6,12 +6,11 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Active
 
-- [797 — Replace hook-status file feeds with local IPC](./797-hook-status-ipc.md) — persistent Windows Codex hook reporter and shared daemon admission, followed by the remaining file reporters; spec ready for crew method review, with optional startup recovery and explicit latency targets ([#797](https://github.com/yicheng47/runner/issues/797), P2, 0.13.x, for the Windows Codex hook stall).
+- [826 — Targeted crew messaging that scales past three agents](./826-targeted-messaging.md) — a message wakes only its recipients (repeatable `--to`, leading `@mentions`), the wake-up carries the message itself with a catch-up digest, the reconciliation tick re-delivers to idle slots, and `msg read` returns unread by default ([#826](https://github.com/yicheng47/runner/issues/826), P2; draft).
 - [795 — Separate shell lifecycle from agent orchestration](./795-shell-agent-boundary.md) — shell sessions traverse agent launch and conversation policy through no-op adapters; keep shared process lifecycle while making the shell/agent boundary explicit ([#795](https://github.com/yicheng47/runner/issues/795), P1, 0.16 with remote machines; part of the [#645](https://github.com/yicheng47/runner/issues/645) session host design since 2026-10-04).
 - [748 — Mission updates reach the chat that started the mission](./748-mission-watch-delivery.md) — Runner types a one-line notice into the starting chat for messages to the person, broadcasts, questions, failures and the end, through the slot delivery gate, so Codex chats watch missions with no host facility ([#748](https://github.com/yicheng47/runner/issues/748), P1, 0.15; spec under review).
 - [562 — Missions as containers](./562-mission-spawn.md) — the mission owns its roster, a mission starts from a crew or a role, and the lead or an outside seat spawns, lists, waits on and stops slots ([#562](https://github.com/yicheng47/runner/issues/562), P1, 0.15 headline; plan under review).
 - [704 — Send a prompt from one session to another](./704-session-send.md) — `runner session send` and `session wait`, the terminal layer beside 562's missions: types into a running chat or terminal when it is idle, with a reply line, and stays off the bus ([#704](https://github.com/yicheng47/runner/issues/704), P1, 0.15; spec under review).
-- [813 — Live-regression input harness](./813-windows-input-harness.md) — development-only `session key`, `session type` and busy send on top of 704, plus a scripted R1–R13/I1–I6 run, so a Codex QA can send input on Windows where computer use may only observe terminals ([#813](https://github.com/yicheng47/runner/issues/813), P2, 0.15; draft).
 - [764 — Support MCP management for Pi](./764-pi-mcp-management.md) — proposed catalog, editing, multi-client sync and conflict detection for pi's user MCP servers; verify native config support and reconcile Runner registration with the shipped CLI-only coordination contract ([#764](https://github.com/yicheng47/runner/issues/764), P2, 0.15; spec under review).
 - [559 — Command palette on ⌘⇧P](./559-command-palette.md) — the ⌘K overlay in command mode over the keymap ([#559](https://github.com/yicheng47/runner/issues/559), P2, 0.14).
 - [565 — i18n, 简体中文 first](./565-i18n.md) — a language setting, a compile-time catalog, a live switch ([#565](https://github.com/yicheng47/runner/issues/565), P2, 0.16).
@@ -22,7 +21,7 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Recently shipped
 
-Reconciled on 2026-10-07 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
+Reconciled on 2026-10-08 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
 
 | Spec | Shipped in |
 | --- | --- |
@@ -42,6 +41,7 @@ Reconciled on 2026-10-07 against closed issues and published releases. These spe
 | [777 — Runtime adapter trait](./archive/777-runtime-adapter.md) | 0.12.8, 2026-10-04 ([PR #779](https://github.com/yicheng47/runner/pull/779), [#780](https://github.com/yicheng47/runner/pull/780), [#792](https://github.com/yicheng47/runner/pull/792)); no user-visible change |
 | [791 — Session state: one model for agent status, drafts and conversation identity](./archive/791-session-state.md) | 0.12.8, 2026-10-04 ([PR #796](https://github.com/yicheng47/runner/pull/796), [#798](https://github.com/yicheng47/runner/pull/798), [#800](https://github.com/yicheng47/runner/pull/800)); fixes #784, #785, #786 and #781 |
 | [645 — runnerd](./archive/645-session-host.md) | 0.13.0, 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)); the CLI moved to its client protocol on 2026-10-07 ([#822](https://github.com/yicheng47/runner/pull/822), #821), and remote machines over ssh continue as [#808](https://github.com/yicheng47/runner/issues/808) |
+| [797 — Hook status over local IPC](./archive/797-hook-status-ipc.md) | 0.13.1, 2026-10-08 |
 
 ## Dropped
 
@@ -57,3 +57,4 @@ Considered and deliberately not built; the spec stays in `archive/` as the recor
 - [557 — Translucent window backdrop](./archive/557-window-backdrop.md) ([#557](https://github.com/yicheng47/runner/issues/557), 2026-09-11): not important enough to carry.
 - [403 — Opt-in worktree isolation per mission](./archive/403-mission-worktree-isolation.md) ([#403](https://github.com/yicheng47/runner/issues/403), 2026-09-22): Runner is not an agent development environment; a crew that needs its own checkout makes one from its brief.
 - [468 — Landing page](./archive/468-landing-page.md) ([#468](https://github.com/yicheng47/runner/issues/468), 2026-09-22): visitors land on the README, which already explains the model; a short mission demo covers the rest.
+- [813 — Live-regression input harness](./archive/813-windows-input-harness.md) ([#813](https://github.com/yicheng47/runner/issues/813), 2026-10-07): computer use on Windows can type into Runner terminals after all, as the [#797 Windows QA](../tests/archive/797-hook-status-ipc.md) showed, so the development-only input path is not needed.

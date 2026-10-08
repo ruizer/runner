@@ -14,7 +14,7 @@ Auto mode does not remove the stall. claude-code's `--permission-mode auto` runs
 
 Today permission mode is a per-runner property. `ops::runner::create` / `update` write the chosen mode onto the row's `args` at create time through `router::runtime::permission_mode_args` (`crates/runner-backend/src/router/runtime.rs:258`), default Auto (`ops::runner::default_permission_mode`). Missions inherit whatever each runner carries; a slot runtime override starts from the default mode (`session::manager::resolve_runtime_override`, `crates/runner-backend/src/session/manager/mod.rs:1328`). There is no mission-level knob.
 
-The controls that actually protect a crew are elsewhere: worktree isolation ([403](../403-mission-worktree-isolation.md)), the coder/reviewer loop, and the no-commit / no-push rules in the crew prompts. A permission prompt adds nothing to those; it only removes the mission's ability to finish.
+The controls that actually protect a crew are elsewhere: worktree isolation ([403](./403-mission-worktree-isolation.md)), the coder/reviewer loop, and the no-commit / no-push rules in the crew prompts. A permission prompt adds nothing to those; it only removes the mission's ability to finish.
 
 ## Behavior
 

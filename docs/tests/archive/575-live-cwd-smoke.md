@@ -1,6 +1,6 @@
 # 575 smoke test: splits follow the shell's live cwd
 
-Checks for [#575](../features/archive/575-live-cwd.md) on a build of this branch. Automated coverage runs zsh 5.9 and `/bin/bash` 3.2 in a temporary `HOME` and never your own startup files. These checks are the ones only a real session shows. About ten minutes.
+Checks for [#575](../../features/archive/575-live-cwd.md) on a build of this branch. Automated coverage runs zsh 5.9 and `/bin/bash` 3.2 in a temporary `HOME` and never your own startup files. These checks are the ones only a real session shows. About ten minutes.
 
 ## Automated evidence
 
