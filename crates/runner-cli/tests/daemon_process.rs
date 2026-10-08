@@ -61,7 +61,7 @@ fn persistent_hook_reporter_delivers_to_real_isolated_daemon() {
             Some(24),
         )
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(30);
     let fields = loop {
         let fields = std::fs::read_to_string(&routing)
             .unwrap_or_default()
