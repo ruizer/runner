@@ -1,6 +1,6 @@
 use gpui::{
-    canvas, deferred, svg, BoxShadow, Div, FontWeight, TextAlign, WindowAppearance,
-    WindowControlArea,
+    canvas, deferred, linear_color_stop, linear_gradient, svg, BoxShadow, Div, FontWeight,
+    TextAlign, WindowAppearance, WindowControlArea,
 };
 use runner_app::ui::button::spinner;
 use runner_app::ui::menu::popup_layer;
@@ -23,8 +23,6 @@ const SIDEBAR_TRANSITION_MS: u64 = 200;
 // A pass-through of the left edge on the way to another screen is far shorter
 // than this; a deliberate rest on it is longer.
 const SIDEBAR_PREVIEW_DWELL_MS: u64 = 200;
-// Deliberately differs from main's inherited 19.5px line box to align both footer dividers.
-const SETTINGS_FOOTER_LINE_HEIGHT: f32 = 18.;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub(crate) enum AppRoute {
@@ -68,9 +66,7 @@ impl Render for SidebarResizeDrag {
     }
 }
 
-fn settings_update_hint_version(
-    available: Option<&runner_app::updater::UpdateInfo>,
-) -> Option<&str> {
+fn app_update_hint_version(available: Option<&runner_app::updater::UpdateInfo>) -> Option<&str> {
     available.map(|update| update.version())
 }
 
@@ -215,7 +211,7 @@ fn weekly_usage_percent(runtime: Runtime, usage: Option<&AgentUsage>) -> Option<
         .map(|window| window.used_percent)
 }
 
-/// The runtimes the usage pill and popover show: usage-capable, installed and
+/// The runtimes the usage footer and popover show: usage-capable, installed and
 /// enabled in Settings, whether or not they have run a session (#752), in
 /// `Runtime::ALL` order.
 fn visible_usage_runtimes(installed: &[Runtime], enabled: &[Runtime]) -> Vec<Runtime> {
@@ -235,11 +231,10 @@ fn usage_popover_runtimes(installed: &[Runtime], enabled: &[Runtime]) -> Vec<Run
     runtimes
 }
 
-fn usage_pill_element(
+fn sidebar_usage_element(
     snapshot: &UsageSnapshot,
     visible: &[Runtime],
     zoom: f32,
-    sidebar_width: f32,
 ) -> gpui::Stateful<Div> {
     let entries: Vec<_> = visible
         .iter()
@@ -251,8 +246,9 @@ fn usage_pill_element(
             div()
                 .when(cfg!(test), |entry| {
                     let runtime = *runtime;
-                    entry.debug_selector(move || format!("USAGE_PILL_ENTRY_{}", runtime.key()))
+                    entry.debug_selector(move || format!("SIDEBAR_USAGE_ENTRY_{}", runtime.key()))
                 })
+                .flex_none()
                 .flex()
                 .items_center()
                 .gap(px(2. * zoom))
@@ -265,7 +261,7 @@ fn usage_pill_element(
                         .when(cfg!(test), |value| {
                             let runtime = *runtime;
                             value.debug_selector(move || {
-                                format!("USAGE_PILL_VALUE_{}", runtime.key())
+                                format!("SIDEBAR_USAGE_VALUE_{}", runtime.key())
                             })
                         })
                         .text_size(px(11. * zoom))
@@ -274,41 +270,18 @@ fn usage_pill_element(
                 )
         })
         .collect();
-    let show_label = sidebar_width >= 228.;
     div()
         .id("sidebar-usage")
-        .when(cfg!(test), |pill| {
-            pill.debug_selector(|| "USAGE_PILL".into())
+        .when(cfg!(test), |usage| {
+            usage.debug_selector(|| "SIDEBAR_USAGE".into())
         })
         .w_full()
-        .h(px(30. * zoom))
+        .h(px(32. * zoom))
         .flex()
         .items_center()
         .justify_between()
-        .gap(px(2. * zoom))
-        .px(px(6. * zoom))
+        .px(px(10. * zoom))
         .rounded(px(6. * zoom))
-        .border_1()
-        .border_color(theme::sidebar_selected_border())
-        .bg(theme::sidebar_selected())
-        .children(show_label.then(|| {
-            div()
-                .when(cfg!(test), |label| {
-                    label.debug_selector(|| "USAGE_PILL_LABEL".into())
-                })
-                .flex_none()
-                .text_size(px(9. * zoom))
-                .font_weight(FontWeight::SEMIBOLD)
-                .text_color(theme::muted())
-                .child("WEEKLY USAGE")
-        }))
-        .children(show_label.then(|| {
-            div()
-                .flex_none()
-                .w(px(1.))
-                .h(px(14. * zoom))
-                .bg(theme::sidebar_selected_border())
-        }))
         .children(entries)
 }
 
@@ -951,14 +924,55 @@ impl NativeRoot {
         (Some(sidebar.into_any_element()), divider)
     }
 
-    fn render_sidebar_content(
-        &mut self,
-        full_width: f32,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) -> AnyElement {
-        self.sync_sidebar_shortcut_rows(cx);
-        let titlebar = self.render_sidebar_titlebar(window, cx);
+    fn render_sidebar_brand(&self, update_version: Option<String>, cx: &Context<Self>) -> Div {
+        let zoom = self.settings(cx).app_zoom;
+        let updater = global_updater(cx);
+        let update_hint = update_version.map(|version| {
+            let click_updater = updater.clone();
+            #[cfg(not(windows))]
+            let tooltip = crate::platform_ui::update_hint_tooltip(&version);
+            #[cfg(windows)]
+            let tooltip =
+                crate::platform_ui::update_hint_tooltip(&version, updater.read(cx).state());
+            Tooltip::new(
+                "sidebar-update-tooltip",
+                tooltip,
+                div()
+                    .id("sidebar-update")
+                    .when(cfg!(test), |button| {
+                        button.debug_selector(|| "SIDEBAR_UPDATE".into())
+                    })
+                    .flex_none()
+                    .size(rems(24. / 16.))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .rounded_sm()
+                    .border_1()
+                    .border_color(gpui::transparent_black())
+                    .cursor_pointer()
+                    .hover(|button| {
+                        button
+                            .border_color(alpha(theme::accent(), 0.4))
+                            .bg(alpha(theme::accent(), 0.1))
+                    })
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .on_click(move |_, _window, cx| {
+                        cx.stop_propagation();
+                        #[cfg(not(windows))]
+                        crate::platform_ui::activate_update_hint(&click_updater, cx);
+                        #[cfg(windows)]
+                        crate::platform_ui::activate_update_hint(&click_updater, _window, cx);
+                    })
+                    .child(
+                        svg()
+                            .path("circle-arrow-down.svg")
+                            .flex_none()
+                            .size(px(14. * zoom))
+                            .text_color(theme::accent()),
+                    ),
+            )
+        });
         let search_button = div()
             .id("sidebar-search")
             .group("sidebar-search")
@@ -1001,7 +1015,10 @@ impl NativeRoot {
                     .text_color(theme::muted())
                     .group_hover("sidebar-search", |icon| icon.text_color(theme::text())),
             );
-        let brand = div()
+        div()
+            .when(cfg!(test), |brand| {
+                brand.debug_selector(|| "SIDEBAR_HEADER".into())
+            })
             .flex_none()
             .px_5()
             .pb_5()
@@ -1019,11 +1036,23 @@ impl NativeRoot {
             )
             .child(
                 div()
+                    .min_w(px(0.))
                     .flex_1()
-                    .text_size(theme::text_heading())
-                    .font_weight(FontWeight::SEMIBOLD)
-                    .text_color(theme::text())
-                    .child("Runner"),
+                    .flex()
+                    .items_center()
+                    .gap_2()
+                    .child(
+                        div()
+                            .when(cfg!(test), |name| {
+                                name.debug_selector(|| "SIDEBAR_NAME".into())
+                            })
+                            .flex_none()
+                            .text_size(theme::text_heading())
+                            .font_weight(FontWeight::SEMIBOLD)
+                            .text_color(theme::text())
+                            .child("Runner"),
+                    )
+                    .children(update_hint),
             )
             .child(Tooltip::new(
                 "sidebar-search-tooltip",
@@ -1033,83 +1062,48 @@ impl NativeRoot {
                         |combo| format!("Search ({})", keymap::format_combo(&combo)),
                     ),
                 search_button,
-            ));
-        let updater = global_updater(cx);
+            ))
+    }
+
+    fn render_sidebar_content(
+        &mut self,
+        full_width: f32,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        self.sync_sidebar_shortcut_rows(cx);
+        let titlebar = self.render_sidebar_titlebar(window, cx);
         let zoom = self.settings(cx).app_zoom;
+        let updater = global_updater(cx);
         let update_version =
-            settings_update_hint_version(updater.read(cx).available()).map(str::to_owned);
-        let update_hint = update_version.map(|version| {
-            let click_updater = updater.clone();
-            #[cfg(not(windows))]
-            let tooltip = crate::platform_ui::update_hint_tooltip(&version);
-            #[cfg(windows)]
-            let tooltip =
-                crate::platform_ui::update_hint_tooltip(&version, updater.read(cx).state());
-            Tooltip::new(
-                "sidebar-update-tooltip",
-                tooltip,
-                div()
-                    .id("sidebar-update")
-                    .flex_none()
-                    .size(rems(32. / 16.))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .rounded_sm()
-                    .border_1()
-                    .border_color(gpui::transparent_black())
-                    .cursor_pointer()
-                    .hover(|button| {
-                        button
-                            .border_color(alpha(theme::accent(), 0.4))
-                            .bg(alpha(theme::accent(), 0.1))
-                    })
-                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-                    .on_click(move |_, _window, cx| {
-                        cx.stop_propagation();
-                        #[cfg(not(windows))]
-                        crate::platform_ui::activate_update_hint(&click_updater, cx);
-                        #[cfg(windows)]
-                        crate::platform_ui::activate_update_hint(&click_updater, _window, cx);
-                    })
-                    .child(
-                        svg()
-                            .path("circle-arrow-down.svg")
-                            .flex_none()
-                            .size(px(14. * zoom))
-                            .text_color(theme::accent()),
-                    ),
-            )
-        });
+            app_update_hint_version(updater.read(cx).available()).map(str::to_owned);
+        let brand = self.render_sidebar_brand(update_version, cx);
         let enabled = self.settings(cx).model_runtimes();
         let visible_usage_runtimes = visible_usage_runtimes(&self.usage_installed, &enabled);
         let show_usage = !visible_usage_runtimes.is_empty() && !self.sidebar_collapsed;
         let anchor_owner = cx.entity();
-        let usage_pill = show_usage.then(|| {
+        let usage = show_usage.then(|| {
             let snapshot = self.app_store.read(cx).usage.clone();
-            let trigger = usage_pill_element(
-                &snapshot,
-                &visible_usage_runtimes,
-                zoom,
-                self.settings(cx).sidebar_width,
-            )
-            .cursor_pointer()
-            .hover(|button| button.bg(alpha(theme::sidebar_selected(), 0.75)))
-            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .on_click(cx.listener(|this, _, _, cx| {
-                this.usage_open = !this.usage_open;
-                if this.usage_open {
-                    let core = this.core(cx).clone();
-                    let _ = core.usage_refresh(RefreshReason::Open);
-                    let _ = this.core(cx).runtime_check_updates(false);
-                }
-                cx.notify();
-            }));
+            let trigger = sidebar_usage_element(&snapshot, &visible_usage_runtimes, zoom)
+                .occlude()
+                .cursor_pointer()
+                .hover(|button| button.bg(alpha(theme::sidebar_selected(), 0.4)))
+                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.usage_open = !this.usage_open;
+                    if this.usage_open {
+                        let core = this.core(cx).clone();
+                        let _ = core.usage_refresh(RefreshReason::Open);
+                        let _ = this.core(cx).runtime_check_updates(false);
+                    }
+                    cx.notify();
+                }));
             div()
                 .relative()
+                .w(px((visible_usage_runtimes.len() as f32 * 52. + 20.)
+                    .min(self.settings(cx).sidebar_width - 56.)
+                    * zoom))
                 .flex_none()
-                .px_3()
-                .pb_2()
                 .child(trigger)
                 .child(
                     canvas(
@@ -1122,57 +1116,81 @@ impl NativeRoot {
                     .inset_0(),
                 )
         });
-        let settings_button = crate::platform_ui::sidebar_section()
+        let footer = crate::platform_ui::sidebar_section()
+            .when(cfg!(test), |footer| {
+                footer.debug_selector(|| "SIDEBAR_FOOTER".into())
+            })
             .px_3()
-            .pt_2()
-            .border_t_1()
-            .border_color(theme::sidebar_selected_border())
             .child(
                 div()
                     .w_full()
+                    .h(px(1.))
+                    .flex()
+                    .children([90., 270.].map(|angle| {
+                        div().flex_1().h_full().bg(linear_gradient(
+                            angle,
+                            linear_color_stop(alpha(theme::sidebar_selected_border(), 0.), 0.),
+                            linear_color_stop(theme::sidebar_selected_border(), 1.),
+                        ))
+                    })),
+            )
+            .child(
+                div()
+                    .when(cfg!(test), |row| {
+                        row.debug_selector(|| "SIDEBAR_FOOTER_ROW".into())
+                    })
+                    .w_full()
+                    .pt_2()
                     .flex()
                     .items_center()
-                    .gap_1()
+                    .children(usage)
+                    .child(div().flex_1())
                     .child(
-                        div()
-                            .id("open-settings")
-                            .group("sidebar-settings")
-                            .min_w(px(0.))
-                            .flex_1()
-                            .px(rems(10. / 16.))
-                            .py_2()
-                            .flex()
-                            .items_center()
-                            .gap(rems(10. / 16.))
-                            .rounded_sm()
-                            .border_1()
-                            .border_color(gpui::transparent_black())
-                            .cursor_pointer()
-                            .text_color(theme::muted())
-                            .line_height(px(SETTINGS_FOOTER_LINE_HEIGHT * zoom))
-                            .hover(|button| {
-                                button
-                                    .border_color(theme::sidebar_selected_border())
-                                    .bg(alpha(theme::sidebar_selected(), 0.4))
-                                    .text_color(theme::text())
-                            })
-                            .child(
-                                svg()
-                                    .path("settings.svg")
-                                    .w(px(14. * zoom))
-                                    .h(px(14. * zoom))
-                                    .flex_none()
-                                    .text_color(theme::muted())
-                                    .group_hover("sidebar-settings", |icon| {
-                                        icon.text_color(theme::text())
-                                    }),
-                            )
-                            .child(div().text_size(px(13. * zoom)).child("Settings"))
-                            .on_click(cx.listener(|this, _, window, cx| {
-                                this.enter_settings_route(None, window, cx);
-                            })),
-                    )
-                    .children(update_hint),
+                        div().occlude().cursor_pointer().child(Tooltip::new(
+                            "sidebar-settings-tooltip",
+                            "Settings",
+                            div()
+                                .id("open-settings")
+                                .group("sidebar-settings")
+                                .when(cfg!(test), |button| {
+                                    button.debug_selector(|| "SIDEBAR_SETTINGS".into())
+                                })
+                                .tab_index(0)
+                                .flex_none()
+                                .size(px(32. * zoom))
+                                .flex()
+                                .items_center()
+                                .justify_center()
+                                .rounded(px(4. * zoom))
+                                .cursor_pointer()
+                                .hover(|button| button.bg(alpha(theme::sidebar_selected(), 0.4)))
+                                .focus_visible(|button| {
+                                    button.bg(alpha(theme::sidebar_selected(), 0.4))
+                                })
+                                .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                                .on_click(cx.listener(|this, _, window, cx| {
+                                    this.enter_settings_route(None, window, cx);
+                                }))
+                                .on_key_down(cx.listener(
+                                    |this, event: &KeyDownEvent, window, cx| {
+                                        if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                                        {
+                                            cx.stop_propagation();
+                                            this.enter_settings_route(None, window, cx);
+                                        }
+                                    },
+                                ))
+                                .child(
+                                    svg()
+                                        .path("settings.svg")
+                                        .size(px(16. * zoom))
+                                        .text_color(theme::faint())
+                                        .group_hover("sidebar-settings", |icon| {
+                                            icon.text_color(theme::text())
+                                        }),
+                                ),
+                        )),
+                    ),
             );
         // The content keeps its full width while the wrapper animates, so the
         // transition clips instead of squashing every row; a squashed row
@@ -1187,8 +1205,7 @@ impl NativeRoot {
             .children(titlebar)
             .child(brand)
             .child(self.sidebar.clone())
-            .children(usage_pill)
-            .child(settings_button)
+            .child(footer)
             .children(
                 (self.usage_open && show_usage)
                     .then(|| {
@@ -2388,96 +2405,253 @@ mod tests {
             .unwrap();
     }
 
-    struct UsagePillProbe {
-        zoom: f32,
-        width: f32,
-    }
-
-    impl Render for UsagePillProbe {
-        fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
-            window.set_rem_size(px(16. * self.zoom));
-            let now = chrono::Utc::now();
-            let usage = |name: &str| AgentUsage {
-                windows: vec![UsageWindow {
-                    name: name.to_owned(),
-                    used_percent: 100.,
-                    resets_at: None,
-                }],
-                updated_at: now,
-            };
-            let snapshot = UsageSnapshot {
-                runtimes: [
-                    (
-                        Runtime::ClaudeCode,
-                        runner_core::protocol::usage::RuntimeUsage {
-                            value: Some(usage("Week")),
-                            ..Default::default()
-                        },
-                    ),
-                    (
-                        Runtime::Codex,
-                        runner_core::protocol::usage::RuntimeUsage {
-                            value: Some(usage("Week")),
-                            ..Default::default()
-                        },
-                    ),
-                    (
-                        Runtime::Antigravity,
-                        runner_core::protocol::usage::RuntimeUsage {
-                            value: Some(usage("Gemini Models · Week used")),
-                            ..Default::default()
-                        },
-                    ),
-                ]
+    fn full_weekly_usage_snapshot() -> UsageSnapshot {
+        UsageSnapshot {
+            runtimes: [Runtime::Codex, Runtime::ClaudeCode, Runtime::Antigravity]
                 .into_iter()
+                .map(|runtime| {
+                    (
+                        runtime,
+                        runner_core::protocol::usage::RuntimeUsage {
+                            value: Some(AgentUsage {
+                                windows: vec![UsageWindow {
+                                    name: crate::runtime_ui::runtime_ui(runtime).usage_week.into(),
+                                    used_percent: 100.,
+                                    resets_at: None,
+                                }],
+                                updated_at: chrono::Utc::now(),
+                            }),
+                            ..Default::default()
+                        },
+                    )
+                })
                 .collect(),
-                ..UsageSnapshot::default()
-            };
-            div()
-                .w(px(self.width * self.zoom))
-                .px_3()
-                .child(usage_pill_element(
-                    &snapshot,
-                    &[Runtime::Codex, Runtime::ClaudeCode, Runtime::Antigravity],
-                    self.zoom,
-                    self.width,
-                ))
+            ..Default::default()
         }
     }
 
     #[test]
-    fn usage_pill_fits_three_full_weekly_values_at_minimum_sidebar_width() {
+    fn sidebar_footer_fits_three_weekly_values_and_settings_in_one_row() {
         use crate::theme_snapshot::ThemeGuard;
         use gpui::{size, TestAppContext, VisualTestContext};
 
         let _theme = ThemeGuard::new();
-        theme::set_active_variant(theme::ThemeVariant::Carbon);
-        for width in [200., 240.] {
-            for zoom in [1., 1.5] {
-                let mut cx = TestAppContext::single();
-                let host = cx.add_window(move |_, _| UsagePillProbe { zoom, width });
-                let mut visual = VisualTestContext::from_window(host.into(), &cx);
-                visual.simulate_resize(size(px(800.), px(300.)));
-                visual.run_until_parked();
+        for variant in [
+            theme::ThemeVariant::Carbon,
+            theme::ThemeVariant::RunnerLight,
+        ] {
+            for width in [
+                app_settings::SIDEBAR_MIN,
+                app_settings::SIDEBAR_DEFAULT,
+                app_settings::SIDEBAR_MAX,
+            ] {
+                for zoom in [0.6, 1., 1.5, 2.] {
+                    let temp = tempfile::tempdir().unwrap();
+                    let mut cx = TestAppContext::single();
+                    let store = crate::app_store::test_lifecycle_store(&mut cx, temp.path());
+                    store.update(&mut cx, |store, _| {
+                        store.settings.app_theme = if variant.is_light() {
+                            theme::ThemeIntent::Light
+                        } else {
+                            theme::ThemeIntent::Dark
+                        };
+                        store.settings.light_app_theme = theme::LightTheme::RunnerLight;
+                        store.settings.dark_app_theme = theme::DarkTheme::Runner;
+                        store.settings.sidebar_width = width;
+                        store.settings.app_zoom = zoom;
+                        store.usage = full_weekly_usage_snapshot();
+                    });
+                    let host = cx.add_window(|window, cx| {
+                        let mut root = NativeRoot::new(
+                            "sidebar-footer".into(),
+                            temp.path().join("logs"),
+                            None,
+                            None,
+                            store.clone(),
+                            window,
+                            cx,
+                        );
+                        root.usage_installed =
+                            vec![Runtime::Codex, Runtime::ClaudeCode, Runtime::Antigravity];
+                        root
+                    });
+                    let mut visual = VisualTestContext::from_window(host.into(), &cx);
+                    visual.simulate_resize(size(px(1200.), px(900.)));
+                    visual.run_until_parked();
+                    assert_eq!(theme::active_variant(), variant);
 
-                let pill = visual.debug_bounds("USAGE_PILL").unwrap();
-                let last = visual.debug_bounds("USAGE_PILL_VALUE_antigravity").unwrap();
-                assert!(
-                    last.right() <= pill.right(),
-                    "{width} {zoom}: {pill:?} {last:?}"
-                );
-                assert_eq!(
-                    visual.debug_bounds("USAGE_PILL_LABEL").is_some(),
-                    width == 240.,
-                    "{width} {zoom}"
-                );
-                if width == 240. {
-                    let label = visual.debug_bounds("USAGE_PILL_LABEL").unwrap();
-                    let first = visual.debug_bounds("USAGE_PILL_ENTRY_codex").unwrap();
+                    let footer = visual.debug_bounds("SIDEBAR_FOOTER").unwrap();
+                    let usage = visual.debug_bounds("SIDEBAR_USAGE").unwrap();
+                    let gear = visual.debug_bounds("SIDEBAR_SETTINGS").unwrap();
+                    let row = visual.debug_bounds("SIDEBAR_FOOTER_ROW").unwrap();
+                    assert!((usage.size.height - px(32. * zoom)).abs() <= px(1.));
+                    assert!((gear.size.width - px(32. * zoom)).abs() <= px(1.));
+                    assert_eq!(usage.size.height, gear.size.height);
+                    assert_eq!(usage.top(), gear.top());
+                    assert!(usage.top() >= row.top() && usage.bottom() <= row.bottom());
+                    assert!(gear.top() >= row.top() && gear.bottom() <= row.bottom());
+                    assert!(usage.left() >= footer.left());
+                    assert!(usage.right() <= gear.left());
+                    assert!(gear.right() <= footer.right());
+                    assert!(usage.size.width <= px(176. * zoom + 1.));
+                    if width >= app_settings::SIDEBAR_DEFAULT {
+                        assert!(gear.left() - usage.right() >= px(8. * zoom - 1.));
+                    }
+                    let entries = [
+                        "SIDEBAR_USAGE_ENTRY_codex",
+                        "SIDEBAR_USAGE_ENTRY_claude-code",
+                        "SIDEBAR_USAGE_ENTRY_antigravity",
+                    ]
+                    .map(|id| visual.debug_bounds(id).unwrap());
+                    assert_eq!(entries[0].left() - usage.left(), px(10. * zoom));
+                    for pair in entries.windows(2) {
+                        assert!(
+                            pair[0].right() <= pair[1].left(),
+                            "{width} {zoom}: {pair:?}"
+                        );
+                    }
+                    let last = visual
+                        .debug_bounds("SIDEBAR_USAGE_VALUE_antigravity")
+                        .unwrap();
                     assert!(
-                        label.right() <= first.left(),
-                        "{width} {zoom}: {label:?} {first:?}"
+                        last.right() <= usage.right() - px(10. * zoom),
+                        "{width} {zoom}: {usage:?} {last:?}"
                     );
+                    visual.simulate_mouse_move(usage.center(), None, gpui::Modifiers::default());
+                    visual.run_until_parked();
+                    assert_eq!(visual.debug_bounds("SIDEBAR_USAGE"), Some(usage));
+                    assert_eq!(visual.debug_bounds("SIDEBAR_SETTINGS"), Some(gear));
+                    visual.simulate_mouse_move(gear.center(), None, gpui::Modifiers::default());
+                    visual.run_until_parked();
+                    assert_eq!(visual.debug_bounds("SIDEBAR_USAGE"), Some(usage));
+                    assert_eq!(visual.debug_bounds("SIDEBAR_SETTINGS"), Some(gear));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sidebar_footer_opens_usage_and_settings_and_hides_usage_in_collapsed_preview() {
+        use crate::theme_snapshot::ThemeGuard;
+        use gpui::{size, Modifiers, TestAppContext, VisualTestContext};
+
+        let _theme = ThemeGuard::new();
+        let temp = tempfile::tempdir().unwrap();
+        let mut cx = TestAppContext::single();
+        let store = crate::app_store::test_lifecycle_store(&mut cx, temp.path());
+        let host = cx.add_window(|window, cx| {
+            let mut root = NativeRoot::new(
+                "sidebar-footer-actions".into(),
+                temp.path().join("logs"),
+                None,
+                None,
+                store.clone(),
+                window,
+                cx,
+            );
+            root.usage_installed = vec![Runtime::Codex];
+            root
+        });
+        let mut visual = VisualTestContext::from_window(host.into(), &cx);
+        visual.simulate_resize(size(px(1200.), px(900.)));
+        visual.run_until_parked();
+        let usage = visual.debug_bounds("SIDEBAR_USAGE").unwrap();
+        visual.simulate_click(usage.center(), Modifiers::default());
+        visual.run_until_parked();
+        assert!(host.read_with(&visual, |root, _| root.usage_open).unwrap());
+        assert!(visual.debug_bounds("USAGE_POPOVER_PANEL").is_some());
+        visual.simulate_click(usage.center(), Modifiers::default());
+        visual.run_until_parked();
+        assert!(visual.debug_bounds("USAGE_POPOVER_PANEL").is_none());
+        let gear = visual.debug_bounds("SIDEBAR_SETTINGS").unwrap();
+        visual.simulate_click(gear.center(), Modifiers::default());
+        visual.run_until_parked();
+        assert_eq!(
+            host.read_with(&visual, |root, _| root.route.clone())
+                .unwrap(),
+            AppRoute::Settings
+        );
+        host.update(&mut visual, |root, _, cx| {
+            root.sidebar_collapsed = true;
+            root.sidebar_preview_open = true;
+            cx.notify();
+        })
+        .unwrap();
+        visual.run_until_parked();
+        assert!(visual.debug_bounds("SIDEBAR_USAGE").is_none());
+        assert!(visual.debug_bounds("SIDEBAR_SETTINGS").is_some());
+        host.update(&mut visual, |root, _, cx| {
+            root.sidebar_collapsed = false;
+            root.sidebar_preview_open = false;
+            root.usage_installed.clear();
+            cx.notify();
+        })
+        .unwrap();
+        visual.run_until_parked();
+        assert!(visual.debug_bounds("SIDEBAR_USAGE").is_none());
+        assert!(visual.debug_bounds("SIDEBAR_SETTINGS").is_some());
+    }
+
+    struct SidebarHeaderProbe {
+        root: Entity<NativeRoot>,
+        width: f32,
+        zoom: f32,
+        available: bool,
+    }
+
+    impl Render for SidebarHeaderProbe {
+        fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+            window.set_rem_size(px(16. * self.zoom));
+            div()
+                .w(px(self.width * self.zoom))
+                .child(self.root.update(cx, |root, cx| {
+                    root.render_sidebar_brand(self.available.then(|| "0.99.0".into()), cx)
+                }))
+        }
+    }
+
+    #[test]
+    fn available_app_update_sits_right_after_runner_in_the_sidebar_header() {
+        use crate::theme_snapshot::ThemeGuard;
+        use gpui::{size, TestAppContext, VisualTestContext};
+
+        let _theme = ThemeGuard::new();
+        for width in [app_settings::SIDEBAR_MIN, app_settings::SIDEBAR_DEFAULT] {
+            for zoom in [1., 1.5] {
+                for available in [false, true] {
+                    let temp = tempfile::tempdir().unwrap();
+                    let mut cx = TestAppContext::single();
+                    let store = crate::app_store::test_lifecycle_store(&mut cx, temp.path());
+                    store.update(&mut cx, |store, _| store.settings.app_zoom = zoom);
+                    let host = cx.add_window(|window, cx| SidebarHeaderProbe {
+                        root: cx.new(|cx| {
+                            NativeRoot::new(
+                                "sidebar-update".into(),
+                                temp.path().join("logs"),
+                                None,
+                                None,
+                                store.clone(),
+                                window,
+                                cx,
+                            )
+                        }),
+                        width,
+                        zoom,
+                        available,
+                    });
+                    let mut visual = VisualTestContext::from_window(host.into(), &cx);
+                    visual.simulate_resize(size(px(800.), px(300.)));
+                    visual.run_until_parked();
+                    let update = visual.debug_bounds("SIDEBAR_UPDATE");
+                    assert_eq!(update.is_some(), available);
+                    if let Some(update) = update {
+                        let header = visual.debug_bounds("SIDEBAR_HEADER").unwrap();
+                        let name = visual.debug_bounds("SIDEBAR_NAME").unwrap();
+                        assert_eq!(update.left() - name.right(), px(8. * zoom));
+                        assert!(update.top() >= header.top());
+                        assert!(update.bottom() <= header.bottom());
+                        assert!(update.right() <= header.right());
+                    }
                 }
             }
         }
@@ -2629,7 +2803,7 @@ mod tests {
     }
 
     #[test]
-    fn usage_pill_uses_weekly_windows_and_gemini_group() {
+    fn sidebar_usage_uses_weekly_windows_and_gemini_group() {
         let snapshot = UsageSnapshot {
             runtimes: [
                 (
@@ -2874,14 +3048,11 @@ mod tests {
     }
 
     #[test]
-    fn settings_update_hint_shows_available_version() {
+    fn app_update_hint_shows_available_version() {
         let available = runner_app::updater::UpdateInfo::new("0.6.1");
 
-        assert_eq!(settings_update_hint_version(None), None);
-        assert_eq!(
-            settings_update_hint_version(Some(&available)),
-            Some("0.6.1")
-        );
+        assert_eq!(app_update_hint_version(None), None);
+        assert_eq!(app_update_hint_version(Some(&available)), Some("0.6.1"));
     }
 }
 
