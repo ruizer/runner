@@ -52,4 +52,6 @@ The hook integration test passed on its own, including all 100 reports (exit 0; 
 | `cargo fmt --all --check` | 0 | `/tmp/runner-835-fmt-check.log` |
 | `git diff --check` | 0 | `/tmp/runner-835-diff-check.log` |
 
-Windows validation awaits PR CI after working-tree review. No live smoke tests, development app, installed Runner files, or global agent configuration were touched. All reproduction, diagnostic, and validation processes finished; the fork fixture was verified absent with `ps`.
+[PR #837](https://github.com/yicheng47/runner/pull/837) passed CI on macOS and Windows and merged on 2026-10-08. No live smoke tests, development app, installed Runner files, or global agent configuration were touched. All reproduction, diagnostic, and validation processes finished; the fork fixture was verified absent with `ps`.
+
+No live regression case is promoted to [`docs/tests/regression/`](../regression/README.md): the race is covered by the deterministic fork-fixture test in `cli_install.rs`, which runs in CI on every change.
