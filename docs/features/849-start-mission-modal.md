@@ -1,0 +1,45 @@
+# 849 — Start mission dialog redesign
+
+> Tracking issue: [#849](https://github.com/yicheng47/runner/issues/849)
+> Priority: P2, milestone 0.14. Platforms: macOS and Windows.
+> Status: draft, design first.
+> Design: `design/specs/849-start-mission-modal.pen`, drawn and signed off before any code.
+> Related: [562](./562-mission-spawn.md) adds a crew-or-role choice to this dialog in 0.15. This redesign leaves room for it and does not build it.
+
+## Motivation
+
+The role and crew pages ([393](./archive/393-role-page.md), [699](./archive/699-crew-page.md)) and Start a chat ([735](./archive/735-start-chat-modal.md)) lead with identity and setup: pixel avatars, the crew picture, provider marks, and each slot's runtime, model and effort. Start mission is the last create dialog still in the old form style (`crates/runner-app/src/surfaces/start_mission.rs`):
+
+- **The crew is a text dropdown.** The selected crew shows its name over `lead: @coder · 1 worker: @reviewer` (`summarize_crew`), and the other crews in the menu show only `N roles`. Nothing shows who will spawn or what each slot runs, so a wrong model or runtime on a slot only shows up once the mission is running.
+- **The footer only counts.** "2 sessions will spawn" is the only roster information near the Start button.
+- **Advanced is dead UI.** The collapsible "Advanced: env overrides · per-role args · attach files" opens onto "Reserved for v0.x — custom env, dry-run mode. Inert in v0 MVP." and has never done anything.
+
+## Scope
+
+Design the dialog in `design/specs/849-start-mission-modal.pen` using the visual language of the shipped crew page (`runner.pen`'s ROLES & CREWS band, crew page `lRLKB`) and Start a chat (`design/specs/735-start-chat-modal.pen`), then implement the approved frames.
+
+- **Crew card.** Like Start chat's role card, the crew is one card. Its top row is the crew picker: the crew picture (`crew_picture`), the crew name, a summary in mono in the crew list's form (`2 slots · lead @coder`) and an up-down chevron. The picker's menu lists crews the same way: picture, name and summary. The menu needs no new loading because `CrewListItem.members` already carries every crew's slot handles, lead and runtime.
+- **The roster under the picker.** One read-only row per slot, in slot order. Each row has the slot's `RoleAvatar`, handle, LEAD, role, and the effective runtime, model and effort with overrides marked, the same as the crew page's slot rows (`SlotSetup`, `slot_setup_line`, `lead_badge`). These rows replace the footer's session count. A crew of eight slots scrolls with the dialog body, not inside the card.
+- **Fields.** Mission title, Goal and Working directory keep their behavior and move to the new field style. The Goal hint still names the lead ("Delivered to @coder (lead) on mission start."). The Working directory keeps Browse and the project's directory as its starting value. Its hint says where a blank field starts, in Start chat's form.
+- **Dropped.** The Advanced section and its placeholder. The footer becomes Cancel and Start mission, as in Start chat, with the same `esc` and ⌘↩ hints.
+- **Room for 562.** Start chat has a Direct | Role switch above its card. The layout keeps that position free for 562's Crew | Role choice, so 0.15 adds a mode instead of redrawing the dialog.
+- **States.** The frames cover a crew that is picked, the picker menu open, a crew with five or more slots and some overrides, and a crew with no slots. States that are not drawn keep today's copy in the new layout: loading, no crews yet, the error banner, and Starting….
+- **Unchanged behavior.** Crew preselection from the crew page and the crew list's Start mission. The project scope and its working directory. ⌘↩ from every control, including an open picker and the goal textarea. Focus order, minus the Advanced toggle. The dialog fits Runner's 640 × 480 minimum window, scrolls vertically and does not clip horizontally. Long crew names, handles and paths truncate.
+
+## Non-goals
+
+- **Overrides for one mission.** The roster is read-only. Changes to a slot's runtime, model or effort stay on the crew page. Overrides that apply to one mission only would need `MissionStart` and the daemon to take per-slot input. They fit after 562 gives each mission its own slots.
+- **562's role option.** Starting a mission from a single role, and the switch for it, are designed and built in 562.
+- **Backend changes.** `MissionStart`, `ops::mission` and the CLI's `mission start` stay as they are.
+- **Changes to the crew page, the crew list or Start a chat.**
+
+## Implementation phases
+
+1. **Design.** Draw the frames in `design/specs/849-start-mission-modal.pen` and stop for sign-off.
+2. **Dialog.** Update `crates/runner-app/src/surfaces/start_mission.rs`. Move the crew page pieces the roster reuses (`crew_picture`, `SlotSetup` and its resolution, `slot_setup_line`, `lead_badge`) from `pub(super)` to `pub(crate)` instead of copying them. Remove the `advanced_open` state and its focus handle.
+
+## Verification
+
+- The `runner-app` tests pass. The keyboard tests in `start_mission.rs` are updated for the new focus order. New tests cover the picker's crew summaries and the roster rows for a crew with overrides. Workspace Clippy is clean.
+- Manual pass on macOS and Windows. Start a mission from the crew page, the crew list and ⇧⌘M. Switch crews and check that the roster follows. Use a crew of five or more slots with per-slot overrides, a crew with no slots, and a start that fails, and check the error banner.
+- At 640 × 480 the dialog can be used by keyboard and mouse with no horizontal scrolling.
