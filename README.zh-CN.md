@@ -77,7 +77,7 @@ Runner 运行的是你已经在用的 agent 命令行工具，它不负责安装
 
 快速展示可复用角色、crew 配置、终端分屏，以及 mission 中 coder、reviewer 和 QA 的协作。
 
-https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
+https://github.com/user-attachments/assets/c2209015-1497-403a-98bd-cdc5502bee47
 
 ## 功能
 

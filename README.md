@@ -77,7 +77,7 @@ Both platforms update in place, macOS through Sparkle and Windows through the up
 
 A quick tour of reusable roles, crew setup, split terminals, and coder/reviewer/QA coordination in a live mission.
 
-https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
+https://github.com/user-attachments/assets/c2209015-1497-403a-98bd-cdc5502bee47
 
 ## Features
 
