@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" alt="Runner — mission 的事件 feed 里三个 agent 围绕同一个目标协作，另一个窗口用分栏并排跑着四个实时 agent 终端" width="100%" />
+  <img src="assets/hero.png" alt="Runner — mission 的事件 feed：coder、reviewer 和 QA 三个 agent 围绕同一个目标协作，lead 的问题在等你回答" width="100%" />
 </p>
 
 <p align="center">
@@ -65,28 +65,13 @@ Runner 是一个原生桌面应用，用来让命令行编码 agent **一起**�
 
 ## 前置条件
 
-Runner 运行的是你已经在用的 agent 命令行工具，它不负责安装。开始之前，至少安装其中一个并完成登录：
-
-- [Claude Code](https://code.claude.com/docs)
-- [Codex](https://github.com/openai/codex)
-- [Antigravity CLI](https://antigravity.google/docs/cli)
-- [GitHub Copilot CLI](https://github.com/features/copilot/cli/)
-- [pi](https://pi.dev)
-
-Runner 会在 `PATH` 上找到它们，安装好之后可以在 **Settings → Agents** 里更新。在 Windows 上，Claude Code 和 pi 的 bash 工具需要 Git for Windows，通过 npm 安装的 CLI 需要 Node.js。
+Runner 运行的是你已经在用的 agent 命令行工具，它不负责安装。开始之前，至少安装 Claude Code、Codex、Antigravity CLI、GitHub Copilot CLI 或 pi 中的一个并完成登录，Runner 会在 `PATH` 上找到它。在 Windows 上，Claude Code 和 pi 的 bash 工具需要 Git for Windows，通过 npm 安装的 CLI 需要 Node.js。
 
 ## 下载
 
 在[下载页](https://runnersh.dev/downloads/)获取最新版本：macOS（Apple Silicon）是已签名并完成公证的 `.dmg`，Windows 10 1809 或更高版本是已签名的 `Runner-Setup-…-x64.exe` 安装包。Intel Mac、Windows ARM64 和 Linux 暂不支持。
 
 两个平台都支持原地更新，macOS 走 Sparkle，Windows 走 Settings 旁边的更新图标，设置、对话和 mission 都会保留。更新会重启正在运行的 agent，每个 agent 都会接着自己原来的对话。在 Windows 上，证书积累信誉之前，新版本可能仍会触发 SmartScreen 警告，点 **更多信息 → 仍要运行** 即可继续。
-
-## 社区
-
-- Bug 和功能建议：[GitHub Issues](https://github.com/yicheng47/runner/issues)。
-- 扫码加入 Runner 微信用户群。群二维码 7 天过期，如果扫码提示失效，请[提一个 issue](https://github.com/yicheng47/runner/issues/new) 提醒我更新。
-
-<img src="assets/wechat_group_qr.png" alt="Runner 微信用户群二维码" width="200" />
 
 ## 演示
 
@@ -99,9 +84,15 @@ https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 每项功能的界面演示见 [runnersh.dev](https://runnersh.dev/)。
 
 - **Crew 与 mission** — crew 把角色放进有名字的槽位，指定一个 lead，并带上共同的团队约定；mission 为每个槽位开一个实时终端，再加一条 feed，crew 在这里协作，问你的问题也在这里等你。单个槽位可以单独停止、恢复或重启，不影响其他槽位。[架构 →](./docs/arch/arch.md)
+
+  <img src="assets/mission_terminal.png" alt="mission 里一个槽位自己的终端：coder 的 Codex 会话，旁边是 crew 的会话卡片" width="100%" />
+
 - **真实终端** — 每个 agent 都在真实 PTY 里保留自己的 TUI，跑在 GPU 绘制的 `alacritty_terminal` 网格上：鼠标上报、输入法（包括拼音）、文件路径粘贴和点击打开，每个 chat 和 mission 下面还有一个终端抽屉。
 - **Runner 关闭后 agent 照样工作** — 会话跑在 Runner 的后台服务 `runnerd` 里。退出应用或者应用崩溃，重新打开后会接回同一批正在运行的终端；停止的 agent 会在下次启动时各自接着原来的对话。
 - **分栏与多窗口** — 标签页可以一直分栏到窗口放不下为止，拖动各栏重新排列，把标签页归进文件夹，用 `⇧⌘N` 或 `Ctrl+Shift+N` 打开更多窗口。
+
+  <img src="assets/chat_split.png" alt="一个标签页分成四栏：Codex、Claude Code、Antigravity CLI 和 pi 并排运行" width="100%" />
+
 - **在一个地方管理 MCP 服务与技能** — **Settings → MCP** 和 **Settings → Skills** 按 agent 列出它自己的配置，可以按 agent 单独关掉某一项，只改动你碰过的那一条。
 - **项目** — 绑定一次工作目录；在项目里发起的 chat 和 mission 会继承它的 cwd，并在侧边栏里归在一起。
 - **浅色与深色** — Carbon 和 Runner Light，外加 Catppuccin，每种模式各有一套应用配色和终端配色。Claude Code 会实时跟着切换。
@@ -180,6 +171,13 @@ Runner 会在 `PATH` 上检测各个 CLI，也可以在 **Settings → Agents** 
 - [`tomb-raid/`](./examples/tomb-raid/) — 一支四人盗宝小队，由 DM 主持
 
 每一个都是一套可以直接复制的 handle 加系统提示词，新建一个 Crew 粘进去，点 Start 就能跑。
+
+## 社区
+
+- Bug 和功能建议：[GitHub Issues](https://github.com/yicheng47/runner/issues)。
+- 扫码加入 Runner 微信用户群。群二维码 7 天过期，如果扫码提示失效，请[提一个 issue](https://github.com/yicheng47/runner/issues/new) 提醒我更新。
+
+<img src="assets/wechat_group_qr.png" alt="Runner 微信用户群二维码" width="200" />
 
 ## 致谢
 

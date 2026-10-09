@@ -30,7 +30,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/hero.png" alt="Runner — a mission feed with three agents on one goal, and a second window splitting four live agent terminals" width="100%" />
+  <img src="assets/hero.png" alt="Runner — a mission feed: a coder, reviewer and QA agent on one goal, with the lead's question waiting for your answer" width="100%" />
 </p>
 
 <p align="center">
@@ -65,28 +65,13 @@ Written in Rust on [Zed](https://zed.dev)'s GPUI through [gpui-pre](https://gith
 
 ## Prerequisites
 
-Runner runs the agent CLIs you already use; it does not install them. Install at least one and sign in to it before you start:
-
-- [Claude Code](https://code.claude.com/docs)
-- [Codex](https://github.com/openai/codex)
-- [Antigravity CLI](https://antigravity.google/docs/cli)
-- [GitHub Copilot CLI](https://github.com/features/copilot/cli/)
-- [pi](https://pi.dev)
-
-Runner finds them on your `PATH`, and you can update them from **Settings → Agents** once they are installed. On Windows, Claude Code and pi's bash tool need Git for Windows, and npm-installed CLIs need Node.js.
+Runner runs the agent CLIs you already use; it does not install them. Install and sign in to at least one of Claude Code, Codex, Antigravity CLI, GitHub Copilot CLI or pi before you start, and Runner finds it on your `PATH`. On Windows, Claude Code and pi's bash tool need Git for Windows, and npm-installed CLIs need Node.js.
 
 ## Download
 
 Grab the latest build from the [downloads page](https://runnersh.dev/downloads/): a signed and notarized `.dmg` for macOS on Apple Silicon, and a signed `Runner-Setup-…-x64.exe` installer for Windows 10 version 1809 or later. Intel Macs, Windows ARM64, and Linux are not supported.
 
 Both platforms update in place, macOS through Sparkle and Windows through the update icon beside Settings, and keep your settings, chats, and missions. An update restarts running agents, and each resumes its own conversation. On Windows, SmartScreen may still warn on a fresh release while the certificate builds reputation; **More info → Run anyway** continues.
-
-## Community
-
-- Bugs and feature requests: [GitHub Issues](https://github.com/yicheng47/runner/issues).
-- 中文用户可以扫码加入 Runner 微信用户群。群二维码 7 天过期，如果扫码提示失效，请[提一个 issue](https://github.com/yicheng47/runner/issues/new) 提醒我更新。
-
-<img src="assets/wechat_group_qr.png" alt="Runner 微信用户群二维码" width="200" />
 
 ## Demo
 
@@ -99,9 +84,15 @@ https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 [runnersh.dev](https://runnersh.dev/) shows each of these in the app.
 
 - **Crews and missions** — a crew is roles in named slots with one lead and shared conventions; a mission gives each slot a live terminal and a feed where the crew coordinates and its questions wait for you. Stop, resume or restart one slot without touching the rest. [Architecture →](./docs/arch/arch.md)
+
+  <img src="assets/mission_terminal.png" alt="A mission slot's own terminal: the coder's Codex session, beside the crew's session cards" width="100%" />
+
 - **Real terminals** — each agent keeps its own TUI in a real PTY on a GPU-drawn `alacritty_terminal` grid, with mouse reporting, IME input (Pinyin included), file-path paste and click-to-open, and a shell drawer beneath every chat and mission.
 - **Agents keep working when Runner is closed** — sessions live in `runnerd`, Runner's background service. Quit the app, or let it crash, and reopen it to the same live terminals; stopped agents resume their own conversations on the next launch.
 - **Split tabs and windows** — split a tab as far as the window allows, drag panes to reorder, group tabs into folders, and open more windows with `⇧⌘N` or `Ctrl+Shift+N`.
+
+  <img src="assets/chat_split.png" alt="One tab split four ways: Codex, Claude Code, Antigravity CLI and pi side by side" width="100%" />
+
 - **MCP servers and skills in one place** — **Settings → MCP** and **Settings → Skills** list each agent's own config and switch entries off per agent, changing only the entry you touched.
 - **Projects** — bind a working directory once; chats and missions started in it inherit the cwd and group in the sidebar.
 - **Light and dark** — Carbon and Runner Light, plus Catppuccin, with an app palette and a terminal palette per mode. Claude Code follows the switch live.
@@ -180,6 +171,13 @@ For weirder, more fun crew shapes, peek at [`examples/`](./examples/):
 - [`tomb-raid/`](./examples/tomb-raid/) — a 4-person heist crew run by a DM
 
 Each is a copy-pasteable handle + system-prompt set you can spawn into a new Crew and hit Start.
+
+## Community
+
+- Bugs and feature requests: [GitHub Issues](https://github.com/yicheng47/runner/issues).
+- 中文用户可以扫码加入 Runner 微信用户群。群二维码 7 天过期，如果扫码提示失效，请[提一个 issue](https://github.com/yicheng47/runner/issues/new) 提醒我更新。
+
+<img src="assets/wechat_group_qr.png" alt="Runner 微信用户群二维码" width="200" />
 
 ## Acknowledgements
 
