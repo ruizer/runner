@@ -38,11 +38,7 @@
   ·
   <a href="#features">Features</a>
   ·
-  <a href="#agents-keep-working-when-runner-is-closed">Background agents</a>
-  ·
   <a href="#supported-agents">Agents</a>
-  ·
-  <a href="#mcp-servers-and-skills-managed-in-one-place">MCP</a>
   ·
   <a href="#drive-runner-from-your-agents">CLI</a>
   ·
@@ -67,6 +63,18 @@ Runner is a native desktop app for running CLI coding agents **together**. Runni
 
 Written in Rust on [Zed](https://zed.dev)'s GPUI through [gpui-pre](https://github.com/longbridge/gpui-kit), with `alacritty_terminal` for the grid and SQLite for state. No webview. A background service, `runnerd`, owns the sessions, so your agents keep working while the app is closed; the app and the `runner` command are its clients. Everything runs and persists on your machine.
 
+## Prerequisites
+
+Runner runs the agent CLIs you already use; it does not install them. Install at least one and sign in to it before you start:
+
+- [Claude Code](https://code.claude.com/docs)
+- [Codex](https://github.com/openai/codex)
+- [Antigravity CLI](https://antigravity.google/docs/cli)
+- [GitHub Copilot CLI](https://github.com/features/copilot/cli/)
+- [pi](https://pi.dev)
+
+Runner finds them on your `PATH`, and you can update them from **Settings → Agents** once they are installed. On Windows, Claude Code and pi's bash tool need Git for Windows, and npm-installed CLIs need Node.js.
+
 ## Download
 
 Grab the latest build from the [downloads page](https://runnersh.dev/downloads/): a signed and notarized `.dmg` for macOS on Apple Silicon, and a signed `Runner-Setup-…-x64.exe` installer for Windows 10 version 1809 or later. Intel Macs, Windows ARM64, and Linux are not supported.
@@ -88,159 +96,41 @@ https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 
 ## Features
 
-<table>
-<tr>
-<td width="60%">
-  <img src="assets/roles.png" alt="Role page — a role's pixel avatar, runtime, model, effort, permissions and command, beside its system prompt rendered as markdown" width="100%" />
-  <img src="assets/crews.png" alt="Crew page — claude pair, a Claude Code lead and a Codex reviewer drawn from roles, beside its team conventions" width="100%" />
-</td>
-<td width="40%" valign="middle">
+[runnersh.dev](https://runnersh.dev/) shows each of these in the app.
 
-### Crews — roles, prompts, one lead
-
-A **role** is a reusable agent configuration: runtime, system prompt, working directory. A **crew** composes roles into named slots with exactly one lead, plus team conventions and a definition of done that every mission inherits.
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/mission_feed.png" alt="Mission workspace — the feed, where three agents and the human coordinate one goal" width="100%" />
-  <img src="assets/mission_terminal.png" alt="Mission workspace — the coder's slot, a live Codex terminal mid-task" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Missions — a crew working one goal
-
-Starting a mission spawns one live PTY per slot into a tabbed workspace. The **feed** is where the crew coordinates: an append-only event log, every signal persisted and replayable, and `ask_human` questions surface there for you. The crew keeps working while Runner is closed, and its questions wait in the feed until you are back. Each **slot** is a real terminal one tab over, the agent's own TUI, where you can watch, type, or stop, resume, and restart that session on its own.
-
-[Architecture →](./docs/arch/arch.md)
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/chat_split.png" alt="Chat tab with four split panes and organized sidebar" width="100%" />
-  <img src="assets/chat_drag.png" alt="Dragging a pane by its grip — the highlighted half of the target shows where it lands" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Chats — tabs, split panes, folders
-
-Every chat is a real 1:1 PTY with a role, no mission required. Split a tab as far as the window allows — right or down from any pane, `⌘D` and `⇧⌘D` — and drag a pane by its grip to reorder; terminal tabs split the same way, straight into another shell in the directory you last `cd`'d to. The sidebar groups tabs into collapsible folders; every tab shows a spinner while a pane is still working and a dot when one finished while you were elsewhere, so a wall of parallel agents stays scannable.
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/multi_window.png" alt="Two Runner windows, a Claude Code chat in front and a Codex chat behind" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Multi-window
-
-`⇧⌘N` on macOS or `Ctrl+Shift+N` on Windows opens additional OS windows — a mission on one screen, a wall of chats on the other. Windows coordinate who drives a shared session: one window drives its terminal, and any other window showing the same session gets a read-only view with a hand-off overlay instead of a corrupted terminal.
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/skills.png" alt="Settings → Skills — every skill an agent can load, with a toggle per skill" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### MCP servers and skills, managed in one place
-
-Each agent keeps its MCP servers and its skills in its own config files. **Settings → MCP** and **Settings → Skills** read those files and show them as one list per agent: pick Claude Code or Codex, see everything it has, flip a toggle to switch a server or a skill off for that agent's new sessions, click a skill to read it or edit it. Runner changes only the one entry you touched and leaves the rest of the file exactly as you wrote it.
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/light.png" alt="Runner in Runner Light — a Claude Code chat on the light theme" width="100%" />
-  <img src="assets/appearance.png" alt="Settings → Appearance — light and dark previews with an app and a terminal palette per mode" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Light and dark, designed for Runner
-
-Carbon and Runner Light are Runner's own themes; Catppuccin Mocha and Latte ride along. Auto follows the OS, Light and Dark pin it, and a Claude Code chat follows the flip the moment it happens, no restart, no `/theme`.
-
-### A palette per mode, previewed
-
-**Settings → Appearance** picks an app palette and a terminal palette for light and for dark above a live preview of both modes, so a light app gets a light terminal without a second setting. Rosé Pine Dawn is the default light terminal.
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/quit_dialog.png" alt="Quit Runner dialog — 10 sessions running, Keep them running selected over Stop them, with Don't ask again" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Agents keep working when Runner is closed
-
-Every chat and mission runs in `runnerd`, Runner's background service, not in the app window. Quit Runner, or let it crash, and the agents carry on: crew members keep messaging each other, and questions for you wait in the feed. Reopening Runner reattaches to the same live terminals with their output intact. **Settings → General → When Runner quits** asks each time, keeps the agents running, or stops them; stopped agents come back on the next launch, each resuming its own conversation (**Resume running agents on launch**). On macOS, ⌥⌘Q quits and stops sessions in one step. The `runner` command starts the service when the app is closed, and `runner daemon status` and `runner daemon stop` inspect and stop it.
-
-</td>
-</tr>
-</table>
-
-### Also in the box
-
-- **Projects** — bind a working directory once; chats and missions started inside a project inherit its cwd and stay grouped in their own sidebar section. Agents can create, rename, file into, and delete projects through the CLI too.
-- **Mission controls** — stop, resume, or restart a single slot without restarting the mission; a restarted session comes back fresh with its original brief. Missions use Bypass permissions so unattended slots do not wait at a tool prompt.
-- **Real terminals** — every pane is a real PTY on an `alacritty_terminal` grid drawn on the GPU: the agents' own colours, mouse reporting, IME input (Pinyin included), copy, file-path paste, 10,000 lines of scrollback. Click a file path to open it in your editor; ⌘+ and ⌘− zoom the app from 60% to 200%.
-- **Terminal drawer** — every chat and every mission has a shell beneath it, one shortcut away, opened in the same directory as the agent above: run the tests the agent just wrote, check `git status`, tail a log, without leaving the pane or opening another terminal app. Drawers hold as many shells as you need and come back where you left them.
+- **Crews and missions** — a crew is roles in named slots with one lead and shared conventions; a mission gives each slot a live terminal and a feed where the crew coordinates and its questions wait for you. Stop, resume or restart one slot without touching the rest. [Architecture →](./docs/arch/arch.md)
+- **Real terminals** — each agent keeps its own TUI in a real PTY on a GPU-drawn `alacritty_terminal` grid, with mouse reporting, IME input (Pinyin included), file-path paste and click-to-open, and a shell drawer beneath every chat and mission.
+- **Agents keep working when Runner is closed** — sessions live in `runnerd`, Runner's background service. Quit the app, or let it crash, and reopen it to the same live terminals; stopped agents resume their own conversations on the next launch.
+- **Split tabs and windows** — split a tab as far as the window allows, drag panes to reorder, group tabs into folders, and open more windows with `⇧⌘N` or `Ctrl+Shift+N`.
+- **MCP servers and skills in one place** — **Settings → MCP** and **Settings → Skills** list each agent's own config and switch entries off per agent, changing only the entry you touched.
+- **Projects** — bind a working directory once; chats and missions started in it inherit the cwd and group in the sidebar.
+- **Light and dark** — Carbon and Runner Light, plus Catppuccin, with an app palette and a terminal palette per mode. Claude Code follows the switch live.
 
 ## Drive Runner from your agents
 
-The bundled `runner` command is the one way agents, scripts, and people at a terminal drive the app. Its whole surface fits on a screen:
-
-```sh
-$ runner help
-runner — operate Runner from a shell or a mission session
-
-USAGE
-  runner status
-  runner daemon status|stop
-  runner project list|show|create|rename|delete
-  runner role list|show|create|update|delete
-  runner crew list|show|create|update|delete|add|set|remove|lead|order
-  runner mission list|show|start|stop|resume|archive|unarchive|rename|pin|unpin|move|feed|answer
-  runner chat start
-  runner session list|show|stop|archive|resume|restart
-  runner msg post|read
-  runner signal <type>
-  runner ask <question> | runner ask --human <prompt> --choices <a,b,...>
-  runner call <tool> [<json>]
-
-OUTPUT
-  --json   print the JSON result
-  -q       print only result ids
-
-CONTEXT
-  Inside a mission, msg post/read, signal, and ask use the event log directly.
-  Outside, mission-scoped writes require --mission; --as names a roster handle.
-```
-
-On macOS, the first launch installs it to `~/.local/bin`, or a writable `/usr/local/bin`, when that directory is already on the login `PATH`; otherwise it is one click in **Settings → General → Command line**. On Windows, Runner adds its sidecar directory to the user `PATH`.
-
-Agents need no setup. Runner installs a `runner` skill for every detected agent into `~/.claude/skills/` for Claude Code, `~/.agents/skills/` for Codex, GitHub Copilot CLI, and pi, `~/.trae/skills/` for TRAE CLI, and `~/.gemini/antigravity-cli/skills/` for Antigravity CLI. The skill points the agent at the version-matched `runner help agents` guide. The same **Command line** section has the `runner` command row and the **Runner skill for agents** switch.
+Everything in Runner is also a `runner` command, so your agents, your scripts and you at a terminal can drive it. Your daily agent can plan a fix, hand it to a coder-and-reviewer crew, and keep working, while every session it started is still a real terminal you can open and watch.
 
 A whole mission, driven from outside the app:
 
 ```sh
-runner crew list --json
 mission=$(runner mission start --crew <crew> --goal-file - -q < brief.md)
-runner mission feed "$mission" --follow --json
-runner mission show "$mission" --json
-runner msg post --mission "$mission" --to <lead_handle> "message"
-runner mission answer "$mission" <question_id> <choice>
+runner mission feed "$mission" --follow                   # the crew's messages as they arrive
+runner msg post --mission "$mission" --to <lead> "message"
+runner mission answer "$mission" <question_id> <choice>   # answer a question the crew asked you
 runner mission stop "$mission"
-runner mission archive "$mission"
 ```
 
-Commands start Runner's background service when it is not running, so they work with the app closed. Agents use `--json`; without it, list and show commands render tables and readable summaries for people. Exit status 0 is success, 1 means Runner refused the operation, 2 is a usage or reference error, 3 means Runner's background service is not running and could not be started (the CLI never starts it from an ssh session), and 5 means a sandbox blocked the local connection. Inside a mission, the same binary takes its mission and handle from the environment and is how crew members message and signal each other. The part that compounds: your daily agent can plan a fix, dispatch a coder and reviewer crew to build it, and keep working, while every session it spawned is still a real terminal you can open and watch.
+| Commands | What they do |
+| --- | --- |
+| `runner mission` | Start, follow, answer, stop, resume and archive missions |
+| `runner crew`, `runner role`, `runner project` | Create and edit crews, roles and projects |
+| `runner chat start`, `runner session` | Start a chat; stop, resume, restart or archive any session |
+| `runner msg`, `runner signal`, `runner ask` | How crew members talk to each other inside a mission |
+| `runner status`, `runner daemon` | Check and stop Runner's background service |
+
+`runner help` lists every command. Add `--json` for machine-readable output, which is what agents use. Commands start the background service when it is not running, so they work with the app closed.
+
+**Setup.** On macOS, the first launch installs `runner` to `~/.local/bin`, or a writable `/usr/local/bin`, when that directory is already on the login `PATH`; otherwise it is one click in **Settings → General → Command line**. On Windows, Runner adds it to the user `PATH`. Agents need nothing: Runner installs a `runner` skill for every detected agent that points it at the version-matched `runner help agents` guide, and the **Runner skill for agents** switch in the same settings section turns that off.
 
 ## Supported agents
 
@@ -263,33 +153,9 @@ Commands start Runner's background service when it is not running, so they work 
 ¹ Antigravity CLI has not been smoke-tested on Windows yet.
 ² pi runs natively on Windows but has not been smoke-tested there yet; its bash tool requires Git for Windows.
 
-### Antigravity CLI checklist
-
-Antigravity CLI shipped in 0.12.3. The [smoke checklist](./docs/tests/archive/644-antigravity-smoke.md) tracks live validation.
-
-- [x] Direct chats and crew mission slots.
-- [x] Role persona delivered with the first turn.
-- [x] Conversation key capture, relaunch resume, and fresh start when a conversation is missing.
-- [x] Discovered model choices with supported effort levels and a cached/static fallback.
-- [x] Mission slots use Bypass; direct chats use the CLI's own permission settings, and workspace trust is seeded before launch.
-- [x] Hook-driven Working, Idle, and Response failed status on macOS.
-- [x] CLI detection and version display in Settings → Agents.
-- [x] Skills catalog roots and stdio MCP server registration in Settings.
-- [x] Full-color provider mark in the sidebar.
-
-Still pending:
-
-- [ ] Live macOS smoke for resume, permissions, hooks, and MCP behavior.
-- [x] A recorded Antigravity first-turn terminal fixture and a PTY wheel input probe; native Runner wheel smoke remains pending.
-- [x] Antigravity quotas from read-only `agy -p /usage --output-format json` in Runner's usage popover.
-- [x] Track the active conversation after agy's `/clear` (`/new`), `/resume`, or `/fork` changes it inside a running chat.
-- [ ] Windows smoke for Antigravity CLI.
-
 Claude Code, Codex and Antigravity CLI are the primary agents. Claude Code and Codex have tuned launch and nudge timing. GitHub Copilot CLI needs a Copilot subscription. pi brings your own configured model provider. Antigravity CLI signs in with a Google account and updates itself when it starts, so it has no **Update** button. [Issues](https://github.com/yicheng47/runner/issues) are welcome.
 
-Install the agent CLIs separately. Runner detects them on `PATH`, with per-agent executable overrides in **Settings → Agents**, which also shows each CLI's version and, when a newer one is published, an **Update** button that runs the CLI's own updater in a terminal. On Windows, Claude Code and pi's bash tool require Git for Windows; npm-based CLI installations require Node.js. PowerShell 7 is optional. Agents run natively on Windows, without WSL.
-
-<img src="assets/agents.png" alt="Settings → Agents — each detected agent CLI with its executable, model, effort, and an enable toggle" width="100%" />
+Runner detects each CLI on `PATH`, with a per-agent executable override in **Settings → Agents**, which also shows each CLI's version and, when a newer one is published, an **Update** button that runs the CLI's own updater in a terminal. PowerShell 7 is optional on Windows. Agents run natively on Windows, without WSL.
 
 ## Example crew
 

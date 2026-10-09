@@ -38,11 +38,7 @@
   ·
   <a href="#功能">功能</a>
   ·
-  <a href="#runner-关闭后-agent-照样工作">后台运行</a>
-  ·
   <a href="#支持的-agent">Agent</a>
-  ·
-  <a href="#在一个地方管理-mcp-服务与技能">MCP</a>
   ·
   <a href="#让你的-agent-来驱动-runner">CLI</a>
   ·
@@ -67,6 +63,18 @@ Runner 是一个原生桌面应用，用来让命令行编码 agent **一起**�
 
 用 Rust 写成，通过 [gpui-pre](https://github.com/longbridge/gpui-kit) 使用 [Zed](https://zed.dev) 的 GPUI，终端网格用 `alacritty_terminal`，状态存在 SQLite。没有 webview。会话由后台服务 `runnerd` 持有，所以应用关闭后 agent 照样继续工作；应用和 `runner` 命令都是它的客户端。一切都在你自己的机器上运行和保存。
 
+## 前置条件
+
+Runner 运行的是你已经在用的 agent 命令行工具，它不负责安装。开始之前，至少安装其中一个并完成登录：
+
+- [Claude Code](https://code.claude.com/docs)
+- [Codex](https://github.com/openai/codex)
+- [Antigravity CLI](https://antigravity.google/docs/cli)
+- [GitHub Copilot CLI](https://github.com/features/copilot/cli/)
+- [pi](https://pi.dev)
+
+Runner 会在 `PATH` 上找到它们，安装好之后可以在 **Settings → Agents** 里更新。在 Windows 上，Claude Code 和 pi 的 bash 工具需要 Git for Windows，通过 npm 安装的 CLI 需要 Node.js。
+
 ## 下载
 
 在[下载页](https://runnersh.dev/downloads/)获取最新版本：macOS（Apple Silicon）是已签名并完成公证的 `.dmg`，Windows 10 1809 或更高版本是已签名的 `Runner-Setup-…-x64.exe` 安装包。Intel Mac、Windows ARM64 和 Linux 暂不支持。
@@ -88,159 +96,41 @@ https://github.com/user-attachments/assets/23048787-b832-438e-b55d-73619e1bdf23
 
 ## 功能
 
-<table>
-<tr>
-<td width="60%">
-  <img src="assets/roles.png" alt="角色页面 — 角色的像素头像、运行时、模型、effort、权限和命令，旁边是渲染成 markdown 的系统提示词" width="100%" />
-  <img src="assets/crews.png" alt="Crew 页面 — claude pair，一个 Claude Code 的 lead 和一个 Codex 的 reviewer，都取自角色，旁边是团队约定" width="100%" />
-</td>
-<td width="40%" valign="middle">
+每项功能的界面演示见 [runnersh.dev](https://runnersh.dev/)。
 
-### Crew — 角色、提示词、一个 lead
-
-**角色（role）** 是一份可复用的 agent 配置：运行时、系统提示词、工作目录。**crew** 把角色组合成有名字的槽位，指定唯一一个 lead，再加上团队约定和完成定义，每个 mission 都会继承。
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/mission_feed.png" alt="Mission 工作区 — feed 里三个 agent 和人围绕同一个目标协作" width="100%" />
-  <img src="assets/mission_terminal.png" alt="Mission 工作区 — coder 的槽位，一个正在工作的 Codex 终端" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Mission — 一个 crew 围绕一个目标
-
-启动 mission 会为每个槽位拉起一个实时 PTY，放进一个带标签页的工作区。**feed** 是 crew 协作的地方：一条只追加的事件日志，每条信号都持久化、可回放，`ask_human` 的问题也会在这里等你回答。Runner 关闭期间 crew 照样干活，它们的问题会留在 feed 里等你回来。每个**槽位**都是隔壁标签页里的一个真实终端，跑着 agent 自己的 TUI，你可以看、可以输入，也可以单独停止、恢复或重启这个会话。
-
-[架构 →](./docs/arch/arch.md)
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/chat_split.png" alt="四个分栏的对话标签页和整理好的侧边栏" width="100%" />
-  <img src="assets/chat_drag.png" alt="拖动窗格的把手——目标窗格高亮的那一半就是它落下的位置" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Chat — 标签页、分栏、文件夹
-
-每个 chat 都是和一个角色一对一的真实 PTY，不需要 mission。标签页可以一直分栏到窗口放不下为止——从任意一栏向右或向下分（`⌘D`、`⇧⌘D`），拖动把手就能重新排列各栏；终端标签页同样可以分栏，直接在你最后 `cd` 进去的目录里开出另一个 shell。侧边栏把标签页归进可折叠的文件夹；某一栏还在工作时标签页显示转圈，你不在时有一栏完成了则显示一个圆点，一整墙并行的 agent 也能一眼扫清。
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/multi_window.png" alt="两个 Runner 窗口，前面是 Claude Code 对话，后面是 Codex 对话" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### 多窗口
-
-macOS 上按 `⇧⌘N`、Windows 上按 `Ctrl+Shift+N` 可以打开更多系统窗口，比如一块屏幕放 mission，另一块放一整墙的 chat。窗口之间会协调由谁操作共享会话：同一时间只有一个窗口操作它的终端，其他显示同一会话的窗口会看到只读视图和一个接管浮层，而不是一个错乱的终端。
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/skills.png" alt="Settings → Skills — agent 能加载的所有技能，每个都有开关" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### 在一个地方管理 MCP 服务与技能
-
-每个 agent 都把自己的 MCP 服务和技能放在各自的配置文件里。**Settings → MCP** 和 **Settings → Skills** 读取这些文件，按 agent 各显示为一个列表：选 Claude Code 或 Codex，看到它拥有的一切，拨一下开关就能在该 agent 的新会话里关掉某个服务或技能，点一下技能就能阅读或编辑。Runner 只改动你碰过的那一条，文件的其余部分原样保留。
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/light.png" alt="Runner Light 主题下的 Runner — 浅色主题里的 Claude Code 对话" width="100%" />
-  <img src="assets/appearance.png" alt="Settings → Appearance — 浅色与深色预览，每种模式各有应用配色和终端配色" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### 专为 Runner 设计的浅色与深色
-
-Carbon 和 Runner Light 是 Runner 自己的主题，Catppuccin Mocha 和 Latte 随行。Auto 跟随系统，Light 和 Dark 固定模式，Claude Code 对话会在切换的一瞬间跟上，不用重启，也不用敲 `/theme`。
-
-### 每种模式一套配色，实时预览
-
-**Settings → Appearance** 为浅色和深色各选一套应用配色和一套终端配色，上方实时预览两种模式，所以浅色应用自然配浅色终端，不需要再设一次。浅色终端默认是 Rosé Pine Dawn。
-
-</td>
-</tr>
-<tr>
-<td width="60%">
-  <img src="assets/quit_dialog.png" alt="Quit Runner 对话框 — 10 个会话在运行，选中 Keep them running 而不是 Stop them，带 Don't ask again" width="100%" />
-</td>
-<td width="40%" valign="middle">
-
-### Runner 关闭后 agent 照样工作
-
-每个 chat 和 mission 都跑在 Runner 的后台服务 `runnerd` 里，而不是应用窗口里。退出 Runner，或者应用崩溃，agent 都会继续干活：crew 成员照样互发消息，给你的问题留在 feed 里等你。重新打开 Runner 会接回同一批正在运行的终端，输出原样都在。**Settings → General → When Runner quits** 可以设为每次询问、让 agent 继续运行，或者停止它们；停止的 agent 会在下次启动时回来，各自接着原来的对话（**Resume running agents on launch**）。在 macOS 上，⌥⌘Q 一步退出并停止会话。应用关闭时 `runner` 命令会自己拉起后台服务，`runner daemon status` 和 `runner daemon stop` 用来查看和停止它。
-
-</td>
-</tr>
-</table>
-
-### 还有这些
-
-- **项目** — 绑定一次工作目录；在项目里发起的 chat 和 mission 都会继承它的 cwd，并归在侧边栏里自己的分组下。agent 也可以通过 CLI 创建、重命名、归档和删除项目。
-- **Mission 控制** — 停止、恢复或重启单个槽位，不用重启整个 mission；重启的会话会带着最初的任务简报重新开始。mission 固定使用 Bypass 权限，避免无人值守的槽位卡在工具授权提示上。
-- **真实终端** — 每一栏都是跑在 GPU 绘制的 `alacritty_terminal` 网格上的真实 PTY：agent 自己的配色、鼠标上报、输入法（包括拼音）、复制、文件路径粘贴、10,000 行回滚。点击文件路径可在编辑器里打开；⌘+ 和 ⌘− 把整个应用从 60% 缩放到 200%。
-- **终端抽屉** — 每个 chat 和每个 mission 下面都有一个 shell，一个快捷键就能打开，工作目录和上面的 agent 相同：跑一下 agent 刚写的测试、看看 `git status`、tail 一个日志，不用离开当前面板，也不用另开一个终端应用。抽屉里想开几个 shell 都行，下次回来还在原处。
+- **Crew 与 mission** — crew 把角色放进有名字的槽位，指定一个 lead，并带上共同的团队约定；mission 为每个槽位开一个实时终端，再加一条 feed，crew 在这里协作，问你的问题也在这里等你。单个槽位可以单独停止、恢复或重启，不影响其他槽位。[架构 →](./docs/arch/arch.md)
+- **真实终端** — 每个 agent 都在真实 PTY 里保留自己的 TUI，跑在 GPU 绘制的 `alacritty_terminal` 网格上：鼠标上报、输入法（包括拼音）、文件路径粘贴和点击打开，每个 chat 和 mission 下面还有一个终端抽屉。
+- **Runner 关闭后 agent 照样工作** — 会话跑在 Runner 的后台服务 `runnerd` 里。退出应用或者应用崩溃，重新打开后会接回同一批正在运行的终端；停止的 agent 会在下次启动时各自接着原来的对话。
+- **分栏与多窗口** — 标签页可以一直分栏到窗口放不下为止，拖动各栏重新排列，把标签页归进文件夹，用 `⇧⌘N` 或 `Ctrl+Shift+N` 打开更多窗口。
+- **在一个地方管理 MCP 服务与技能** — **Settings → MCP** 和 **Settings → Skills** 按 agent 列出它自己的配置，可以按 agent 单独关掉某一项，只改动你碰过的那一条。
+- **项目** — 绑定一次工作目录；在项目里发起的 chat 和 mission 会继承它的 cwd，并在侧边栏里归在一起。
+- **浅色与深色** — Carbon 和 Runner Light，外加 Catppuccin，每种模式各有一套应用配色和终端配色。Claude Code 会实时跟着切换。
 
 ## 让你的 agent 来驱动 Runner
 
-内置的 `runner` 命令是 agent、脚本和终端前的人驱动应用的唯一入口，整个命令面一屏就能看完：
-
-```sh
-$ runner help
-runner — operate Runner from a shell or a mission session
-
-USAGE
-  runner status
-  runner daemon status|stop
-  runner project list|show|create|rename|delete
-  runner role list|show|create|update|delete
-  runner crew list|show|create|update|delete|add|set|remove|lead|order
-  runner mission list|show|start|stop|resume|archive|unarchive|rename|pin|unpin|move|feed|answer
-  runner chat start
-  runner session list|show|stop|archive|resume|restart
-  runner msg post|read
-  runner signal <type>
-  runner ask <question> | runner ask --human <prompt> --choices <a,b,...>
-  runner call <tool> [<json>]
-
-OUTPUT
-  --json   print the JSON result
-  -q       print only result ids
-
-CONTEXT
-  Inside a mission, msg post/read, signal, and ask use the event log directly.
-  Outside, mission-scoped writes require --mission; --as names a roster handle.
-```
-
-在 macOS 上，如果登录 `PATH` 已包含 `~/.local/bin`，Runner 会在首次启动时把命令安装到那里；如果 `PATH` 中的 `/usr/local/bin` 可写，则安装到后者；否则去 **Settings → General → Command line** 点一下即可。在 Windows 上，Runner 会把 sidecar 目录加入用户 `PATH`。
-
-agent 不需要额外设置。Runner 会为每个检测到的 agent 安装 `runner` skill，分别安装到 Claude Code 的 `~/.claude/skills/`、Codex/GitHub Copilot CLI/pi 的 `~/.agents/skills/`、TRAE CLI 的 `~/.trae/skills/`，以及 Antigravity CLI 的 `~/.gemini/antigravity-cli/skills/`。skill 会让 agent 读取与当前版本一致的 `runner help agents` 指南。同一个 **Command line** 区域里还有 `runner` 命令这一行，以及 **Runner skill for agents** 开关。
+Runner 里的一切也都是一条 `runner` 命令，你的 agent、你的脚本和终端前的你都能用它驱动 Runner。你日常用的 agent 可以规划好一个修复，交给一个 coder 加 reviewer 的 crew 去实现，然后继续干自己的事，而它拉起的每个会话仍然是一个你随时可以打开查看的真实终端。
 
 在应用之外驱动一整个 mission：
 
 ```sh
-runner crew list --json
 mission=$(runner mission start --crew <crew> --goal-file - -q < brief.md)
-runner mission feed "$mission" --follow --json
-runner mission show "$mission" --json
-runner msg post --mission "$mission" --to <lead_handle> "message"
-runner mission answer "$mission" <question_id> <choice>
+runner mission feed "$mission" --follow                   # 实时查看 crew 的消息
+runner msg post --mission "$mission" --to <lead> "message"
+runner mission answer "$mission" <question_id> <choice>   # 回答 crew 问你的问题
 runner mission stop "$mission"
-runner mission archive "$mission"
 ```
 
-后台服务没有运行时，命令会自己拉起它，所以应用关闭时命令照样可用。agent 使用 `--json`；不加时，列表和详情命令会为人显示表格和可读摘要。退出状态 0 表示成功，1 表示 Runner 拒绝了操作，2 表示用法或引用解析错误，3 表示 Runner 的后台服务没有运行且无法拉起（在 ssh 会话里 CLI 从不拉起它），5 表示沙箱拦住了本地连接。在 mission 内，同一个二进制从环境中取得 mission 和 handle，crew 成员也用它互发消息和信号。真正能复利的地方在于：你日常用的 agent 可以规划好一个修复，派出一个 coder 加 reviewer 的 crew 去实现，然后继续干自己的事，而它拉起的每个会话仍然是一个你随时可以打开查看的真实终端。
+| 命令 | 用途 |
+| --- | --- |
+| `runner mission` | 启动、跟踪、回答、停止、恢复和归档 mission |
+| `runner crew`、`runner role`、`runner project` | 创建和编辑 crew、角色和项目 |
+| `runner chat start`、`runner session` | 发起 chat；停止、恢复、重启或归档任意会话 |
+| `runner msg`、`runner signal`、`runner ask` | mission 内 crew 成员之间的沟通 |
+| `runner status`、`runner daemon` | 查看和停止 Runner 的后台服务 |
+
+`runner help` 列出全部命令。加上 `--json` 输出机器可读的结果，agent 用的就是这种。后台服务没有运行时，命令会自己拉起它，所以应用关闭时命令照样可用。
+
+**安装。** 在 macOS 上，如果登录 `PATH` 已包含 `~/.local/bin`，Runner 会在首次启动时把 `runner` 安装到那里；如果 `PATH` 中的 `/usr/local/bin` 可写，则安装到后者；否则去 **Settings → General → Command line** 点一下即可。在 Windows 上，Runner 会把它加入用户 `PATH`。agent 不需要额外设置：Runner 会为每个检测到的 agent 安装 `runner` skill，让它读取与当前版本一致的 `runner help agents` 指南；同一个设置区域里的 **Runner skill for agents** 开关可以关掉它。
 
 ## 支持的 Agent
 
@@ -263,33 +153,9 @@ runner mission archive "$mission"
 ¹ Antigravity CLI 尚未在 Windows 上做过冒烟测试。
 ² pi 在 Windows 上原生运行，但尚未在 Windows 上做过冒烟测试；它的 bash 工具需要 Git for Windows。
 
-### Antigravity CLI 支持清单
-
-Antigravity CLI 从 0.12.3 起提供；实际运行验证见[冒烟测试清单](./docs/tests/archive/644-antigravity-smoke.md)。
-
-- [x] 直接聊天和 crew mission 槽位。
-- [x] 在首轮消息中传入角色人设。
-- [x] 捕获会话 ID、重启后恢复，以及原会话丢失时重新开始。
-- [x] 动态发现模型及其支持的 effort 级别，并保留缓存和静态回退。
-- [x] mission 槽位固定使用 Bypass；直接聊天沿用 CLI 自身的权限设置，并在启动前预置信任工作目录。
-- [x] macOS 上由 hook 驱动的 Working、Idle 和 Response failed 状态。
-- [x] 在 Settings → Agents 中检测 CLI 并显示版本。
-- [x] Settings 中的 Skills 目录和 stdio MCP 服务器注册。
-- [x] 侧边栏中的全彩厂商图标。
-
-仍待完成：
-
-- [ ] 对恢复会话、权限、hook 和 MCP 行为进行 macOS 实机冒烟测试。
-- [x] 录制 Antigravity 首轮终端夹具，并完成 PTY 滚轮输入探测；Runner 原生界面的滚轮冒烟测试仍待完成。
-- [x] 通过只读 `agy -p /usage --output-format json` 在 Runner 的用量弹窗中显示 Antigravity 配额。
-- [x] agy 在运行中的聊天里通过 `/clear`（`/new`）、`/resume` 或 `/fork` 切换对话后，跟踪当前对话 ID。
-- [ ] 在 Windows 上对 Antigravity CLI 做冒烟测试。
-
 Claude Code、Codex 和 Antigravity CLI 是主要支持的 agent。Claude Code 和 Codex 的启动和催促时序做过调优。GitHub Copilot CLI 需要 Copilot 订阅。pi 使用你已经配置好的模型提供商。Antigravity CLI 使用 Google 账号登录，并在启动时自行更新，所以没有 **Update** 按钮。欢迎提 [issue](https://github.com/yicheng47/runner/issues)。
 
-agent 的命令行工具需要单独安装。Runner 会在 `PATH` 上检测它们，也可以在 **Settings → Agents** 里为每个 agent 单独指定可执行文件；这里还会显示每个 CLI 的版本，有新版本发布时出现 **Update** 按钮，在终端里运行该 CLI 自带的更新命令。在 Windows 上，Claude Code 和 pi 的 bash 工具需要 Git for Windows；通过 npm 安装的 CLI 需要 Node.js。PowerShell 7 可选。agent 在 Windows 上原生运行，不需要 WSL。
-
-<img src="assets/agents.png" alt="Settings → Agents — 检测到的每个 agent CLI，带可执行文件、模型、effort 和启用开关" width="100%" />
+Runner 会在 `PATH` 上检测各个 CLI，也可以在 **Settings → Agents** 里为每个 agent 单独指定可执行文件；这里还会显示每个 CLI 的版本，有新版本发布时出现 **Update** 按钮，在终端里运行该 CLI 自带的更新命令。Windows 上 PowerShell 7 可选。agent 在 Windows 上原生运行，不需要 WSL。
 
 ## 示例 Crew
 
