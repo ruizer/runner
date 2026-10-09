@@ -1,7 +1,7 @@
 # 634 — File preview and code review
 
-> Tracking issue: [#634](https://github.com/yicheng47/runner/issues/634). Priority: P1, 0.15. Platforms: macOS and Windows.
-> Status: draft spec. Filed 2026-09-17, closed as not planned on 2026-09-22 under the "not an agent development environment" non-goal, and reopened by Jason on 2026-10-08 for 0.15: reading an agent's changes is still the most common reason to leave Runner, so the read-only viewer is back in and code review moved from Later into scope as phase 4. Design first, in `design/specs/634-file-preview-and-review.pen`, for sign-off before any code.
+> Tracking issue: [#634](https://github.com/yicheng47/runner/issues/634). Priority: P1, the headline of 0.14 (moved from 0.15 on 2026-10-09). Platforms: macOS and Windows.
+> Status: draft spec. Filed 2026-09-17, closed as not planned on 2026-09-22 under the "not an agent development environment" non-goal, and reopened by Jason on 2026-10-08 for 0.15: reading an agent's changes is still the most common reason to leave Runner, so the read-only viewer is back in and code review moved from Later into scope as phase 4. On 2026-10-09 Jason moved it to 0.14 as the release's key feature. Design first, in `design/specs/793-634-glass-and-files.pen`, which it shares with liquid glass ([793](./793-liquid-glass.md)) so the panel is designed in the new chrome, for sign-off before any code.
 > Related: [#458](https://github.com/yicheng47/runner/issues/458) (⌘-click file links, `file_links.rs`), [704](./704-session-send.md) (session send, the delivery for a review sent to a direct chat), [826](./826-targeted-messaging.md) (directed messages that wake only their recipient), [403](./archive/403-mission-worktree-isolation.md) (worktree isolation, still dropped).
 
 ## Motivation
@@ -32,7 +32,7 @@ Runner takes the read-only half: Termio's restraint on writes, Orca's git status
 
 - Clicking a changed file opens its diff; clicking an unchanged file opens its content. Both are read-only.
 - Diff: unified, line numbers for both sides, added and removed line backgrounds. An untracked file shows as all added, a deleted file as all removed. Binary and oversized files show a placeholder with the size.
-- The viewer opens over the terminal area of the active pane and closes back to it (Termio's overlay). Final placement is decided in the Pencil frame.
+- Files and diffs open as closable tabs in the side panel, beside its Info and Files tabs, so the terminal stays visible while you read; the panel drags wider for a diff. The tab strip is in frame `U2p3jT` of the shared design file. Decided by Jason on 2026-10-09, replacing an overlay over the terminal pane.
 - ⌘-click on any line opens the file at that line through the #458 opener (`file_links.rs`, the Settings → General editor choice).
 - Virtualized rendering, so a multi-thousand-line file or diff does not stall the frame.
 
@@ -70,4 +70,4 @@ Editing files; stage, unstage or discard; commit, push or PR creation; create, r
 - A review with comments on two files arrives at the chosen slot, or at the direct chat, as one message carrying paths, line ranges, quoted lines and comments.
 - macOS and Windows.
 
-Design: frames in `design/specs/634-file-preview-and-review.pen` for sign-off before any code.
+Design: `design/specs/793-634-glass-and-files.pen`, shared with [793](./793-liquid-glass.md), for sign-off before any code. Frames: `U2p3jT` (side panel tabs, Info), `F0DYX` (Files tab, changes and the tree) and `veCIr` (a file tab, the diff with the tree beside it).
