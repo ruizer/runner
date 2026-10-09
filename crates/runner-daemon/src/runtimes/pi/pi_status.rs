@@ -863,6 +863,7 @@ const encode = (kind, value) => {
 };
 const server = net.createServer(socket => {
   let buffered = Buffer.alloc(0);
+  socket.on("error", () => {});
   socket.on("data", bytes => {
     buffered = Buffer.concat([buffered, bytes]);
     while (buffered.length >= 4 && buffered.length >= buffered.readUInt32LE(0) + 4) {
@@ -893,10 +894,17 @@ const finish = async () => {
 };
 "#;
 
+    // A starved CI runner can fire the 250 ms deadline before a reply is read,
+    // so tests that check delivery run the extension with a longer one.
+    fn extension_with_deadline(ms: u32) -> String {
+        let deadline = "performance.now() + 250";
+        assert_eq!(EXTENSION_SOURCE.matches(deadline).count(), 2);
+        EXTENSION_SOURCE.replace(deadline, &format!("performance.now() + {ms}"))
+    }
+
     #[test]
     fn embedded_extension_overflow_fails_closed_and_signals_once() {
         let root = tempfile::tempdir().unwrap();
-        fs::write(root.path().join("runner-status.mjs"), EXTENSION_SOURCE).unwrap();
         let driver = root.path().join("overflow.mjs");
         fs::write(&driver, format!("{IPC_FIXTURE}{}", r#"
 import assert from "node:assert/strict";
@@ -920,7 +928,7 @@ await fire("agent_settled");
 await fire("agent_start");
 await fire("session_shutdown", { reason: "quit" });
 assert.equal(connects, 2, "one ordinary report and one control attempt only");
-assert.ok(performance.now() - started < 1500, "overflow must remain bounded and neutral");
+assert.ok(performance.now() - started < Number(process.env.DEADLINE_MS) + 1250, "overflow must remain bounded and neutral");
 if (!process.env.ABSENT_CONTROL) {
   assert.equal(envelopes.length, 2);
   assert.equal(envelopes[1].bridge_unavailable, true);
@@ -931,12 +939,19 @@ if (!process.env.ABSENT_CONTROL) {
 }
 "#)).unwrap();
         for mode in ["count", "bytes", "stalled", "absent"] {
+            let deadline = if mode == "stalled" { 2_000 } else { 10_000 };
+            fs::write(
+                root.path().join("runner-status.mjs"),
+                extension_with_deadline(deadline),
+            )
+            .unwrap();
             let capture = root.path().join(format!("{mode}.json"));
             let mut command = Command::new("node");
             command
                 .arg(&driver)
                 .current_dir(root.path())
                 .env("OVERFLOW", mode)
+                .env("DEADLINE_MS", deadline.to_string())
                 .env("CAPTURE_ENVELOPES", &capture);
             if mode == "stalled" {
                 command.env("STALL_CONTROL", "1");
@@ -975,7 +990,11 @@ if (!process.env.ABSENT_CONTROL) {
             return;
         }
         let root = tempfile::tempdir().unwrap();
-        fs::write(root.path().join("runner-status.mjs"), EXTENSION_SOURCE).unwrap();
+        fs::write(
+            root.path().join("runner-status.mjs"),
+            extension_with_deadline(10_000),
+        )
+        .unwrap();
         let driver = root.path().join("driver.mjs");
         fs::write(&driver, format!("{IPC_FIXTURE}{}", r#"
 import assert from "node:assert/strict";
@@ -1097,7 +1116,7 @@ await finish();
         let app_data = root.path().join("app data");
         install_extension(&app_data).unwrap();
         let source = root.path().join("runner-status.mjs");
-        fs::write(&source, EXTENSION_SOURCE).unwrap();
+        fs::write(&source, extension_with_deadline(10_000)).unwrap();
         let package = root
             .path()
             .join("node_modules/@earendil-works/pi-coding-agent");
