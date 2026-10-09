@@ -1028,10 +1028,12 @@ impl NativeRoot {
             .gap_2()
             .child(
                 svg()
+                    .when(cfg!(test), |mark| {
+                        mark.debug_selector(|| "SIDEBAR_BRAND_MARK".into())
+                    })
                     .flex_none()
                     .path("brand-mark.svg")
-                    .w(px(32. * self.settings(cx).app_zoom))
-                    .h(px(32. * self.settings(cx).app_zoom))
+                    .size(px(20. * self.settings(cx).app_zoom))
                     .text_color(theme::accent()),
             )
             .child(
@@ -2642,6 +2644,8 @@ mod tests {
                     let mut visual = VisualTestContext::from_window(host.into(), &cx);
                     visual.simulate_resize(size(px(800.), px(300.)));
                     visual.run_until_parked();
+                    let mark = visual.debug_bounds("SIDEBAR_BRAND_MARK").unwrap();
+                    assert_eq!(mark.size, size(px(20. * zoom), px(20. * zoom)));
                     let update = visual.debug_bounds("SIDEBAR_UPDATE");
                     assert_eq!(update.is_some(), available);
                     if let Some(update) = update {
