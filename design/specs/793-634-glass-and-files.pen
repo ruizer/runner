@@ -24,14 +24,14 @@
           "id": "I7HtpB",
           "name": "sbDrag",
           "width": "fill_container",
-          "height": 44,
+          "height": 52,
           "layout": "none",
           "children": [
             {
               "type": "icon",
               "id": "EMD6U",
               "x": 80,
-              "y": 15,
+              "y": 23,
               "name": "sbPanelIcon",
               "width": 14,
               "height": 14,
@@ -45,13 +45,13 @@
               "ref": "Yiy9o",
               "name": "TrafficLights",
               "x": 14,
-              "y": 16
+              "y": 24
             },
             {
               "type": "icon",
               "id": "xk8Af",
               "x": 112,
-              "y": 15,
+              "y": 23,
               "name": "sbBackIcon",
               "width": 14,
               "height": 14,
@@ -63,7 +63,7 @@
               "type": "icon",
               "id": "rTuYR",
               "x": 144,
-              "y": 15,
+              "y": 23,
               "name": "sbNextIcon",
               "opacity": 0.5,
               "width": 14,
@@ -2777,23 +2777,23 @@
               "width": 240,
               "descendants": {
                 "I7HtpB": {
-                  "height": 44,
+                  "height": 52,
                   "stroke": "$glass-separator",
                   "strokeWidth": 0,
                   "strokeAlignment": "inner"
                 },
                 "EMD6U": {
-                  "y": 15
+                  "y": 23
                 },
                 "GQUWo": {
                   "x": 14,
-                  "y": 16
+                  "y": 24
                 },
                 "xk8Af": {
-                  "y": 15
+                  "y": 23
                 },
                 "rTuYR": {
-                  "y": 15
+                  "y": 23
                 },
                 "Y5Kp9Z": {
                   "textGrowth": "auto",
@@ -2879,7 +2879,7 @@
                           "name": "TabBar · continuous glass chrome",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -3809,7 +3809,7 @@
             },
             "blur": 4
           },
-          "content": "Chrome 72–76% · the sidebar and an 8 px frame are glass · one solid work card with the headers inside it",
+          "content": "Chrome 88–90% · the sidebar and an 8 px frame are glass · one solid work card with the headers inside it",
           "fontFamily": "Inter",
           "fontSize": 13,
           "fontWeight": "500"
@@ -3932,23 +3932,23 @@
               "width": 240,
               "descendants": {
                 "I7HtpB": {
-                  "height": 44,
+                  "height": 52,
                   "stroke": "$glass-separator",
                   "strokeWidth": 0,
                   "strokeAlignment": "inner"
                 },
                 "EMD6U": {
-                  "y": 15
+                  "y": 23
                 },
                 "GQUWo": {
                   "x": 14,
-                  "y": 16
+                  "y": 24
                 },
                 "xk8Af": {
-                  "y": 15
+                  "y": 23
                 },
                 "rTuYR": {
-                  "y": 15
+                  "y": 23
                 },
                 "Y5Kp9Z": {
                   "textGrowth": "auto",
@@ -4034,7 +4034,7 @@
                           "name": "TabBar · continuous glass chrome",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -4964,7 +4964,7 @@
             },
             "blur": 4
           },
-          "content": "Chrome 72–76% · the sidebar and an 8 px frame are glass · one solid work card with the headers inside it",
+          "content": "Chrome 88–90% · the sidebar and an 8 px frame are glass · one solid work card with the headers inside it",
           "fontFamily": "Inter",
           "fontSize": 13,
           "fontWeight": "500"
@@ -5815,7 +5815,20 @@
                 "I7HtpB": {
                   "stroke": "$sidebar-sel-border",
                   "strokeWidth": 0,
-                  "strokeAlignment": "inner"
+                  "strokeAlignment": "inner",
+                  "height": 52
+                },
+                "EMD6U": {
+                  "y": 23
+                },
+                "GQUWo": {
+                  "y": 24
+                },
+                "xk8Af": {
+                  "y": 23
+                },
+                "rTuYR": {
+                  "y": 23
                 },
                 "l7vMYn": {
                   "flipX": false,
@@ -5823,7 +5836,7 @@
                   "width": "fill_container",
                   "height": "fit_content",
                   "x": 0,
-                  "y": 44
+                  "y": 52
                 },
                 "Y5Kp9Z": {
                   "textGrowth": "auto",
@@ -5886,7 +5899,7 @@
                           "name": "TabBar",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -8407,23 +8420,23 @@
               "width": 240,
               "descendants": {
                 "I7HtpB": {
-                  "height": 44,
+                  "height": 52,
                   "stroke": "$glass-separator",
                   "strokeWidth": 0,
                   "strokeAlignment": "inner"
                 },
                 "EMD6U": {
-                  "y": 15
+                  "y": 23
                 },
                 "GQUWo": {
                   "x": 14,
-                  "y": 16
+                  "y": 24
                 },
                 "xk8Af": {
-                  "y": 15
+                  "y": 23
                 },
                 "rTuYR": {
-                  "y": 15
+                  "y": 23
                 },
                 "Y5Kp9Z": {
                   "textGrowth": "auto",
@@ -8509,7 +8522,7 @@
                           "name": "TabBar · continuous glass chrome",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -9410,7 +9423,7 @@
                           "name": "Panel header · tab strip",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -10061,23 +10074,23 @@
               "width": 240,
               "descendants": {
                 "I7HtpB": {
-                  "height": 44,
+                  "height": 52,
                   "stroke": "$glass-separator",
                   "strokeWidth": 0,
                   "strokeAlignment": "inner"
                 },
                 "EMD6U": {
-                  "y": 15
+                  "y": 23
                 },
                 "GQUWo": {
                   "x": 14,
-                  "y": 16
+                  "y": 24
                 },
                 "xk8Af": {
-                  "y": 15
+                  "y": 23
                 },
                 "rTuYR": {
-                  "y": 15
+                  "y": 23
                 },
                 "Y5Kp9Z": {
                   "textGrowth": "auto",
@@ -10163,7 +10176,7 @@
                           "name": "TabBar · continuous glass chrome",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -11074,7 +11087,7 @@
                           "name": "Panel header · tab strip",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -12915,23 +12928,23 @@
               "width": 240,
               "descendants": {
                 "I7HtpB": {
-                  "height": 44,
+                  "height": 52,
                   "stroke": "$glass-separator",
                   "strokeWidth": 0,
                   "strokeAlignment": "inner"
                 },
                 "EMD6U": {
-                  "y": 15
+                  "y": 23
                 },
                 "GQUWo": {
                   "x": 14,
-                  "y": 16
+                  "y": 24
                 },
                 "xk8Af": {
-                  "y": 15
+                  "y": 23
                 },
                 "rTuYR": {
-                  "y": 15
+                  "y": 23
                 },
                 "Y5Kp9Z": {
                   "textGrowth": "auto",
@@ -13017,7 +13030,7 @@
                           "name": "TabBar · continuous glass chrome",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -13928,7 +13941,7 @@
                           "name": "Panel header · tab strip",
                           "width": "fill_container",
                           "height": 44,
-                          "fill": "$sidebar",
+                          "fill": "#00000000",
                           "stroke": "$line",
                           "strokeWidth": {
                             "bottom": 1
@@ -18774,7 +18787,7 @@
           "id": "VTMvU",
           "name": "Board subtitle",
           "fill": "#AEB4C2",
-          "content": "Chosen 2026-10-09: E. The tab and side panel headers take the sidebar's colour; pane headers sit on the card with a line under them.",
+          "content": "Chosen 2026-10-09: B. Headers sit on the card's colour with a line under them; E's sidebar-coloured header merged into the frame around the card.",
           "fontFamily": "Inter",
           "fontSize": 15,
           "fontWeight": "normal"
@@ -18782,7 +18795,7 @@
         {
           "type": "frame",
           "id": "ZXeUZ",
-          "name": "Option · E · Tab header in the sidebar's colour, pane headers on the card",
+          "name": "Option · B · Flat · headers on the card colour, lines only",
           "layout": "vertical",
           "gap": 12,
           "children": [
@@ -18791,7 +18804,7 @@
               "id": "e0iOrL",
               "name": "Option label",
               "fill": "#FFFFFF",
-              "content": "E · Tab header in the sidebar's colour, pane headers on the card",
+              "content": "B · Flat · headers on the card colour, lines only",
               "fontFamily": "Inter",
               "fontSize": 17,
               "fontWeight": "600"
@@ -18976,7 +18989,7 @@
                                       "name": "TabBar · continuous glass chrome",
                                       "width": "fill_container",
                                       "height": 44,
-                                      "fill": "$sidebar",
+                                      "fill": "#00000000",
                                       "stroke": "$line",
                                       "strokeWidth": {
                                         "bottom": 1
@@ -20067,7 +20080,7 @@
                                       "name": "TabBar · continuous glass chrome",
                                       "width": "fill_container",
                                       "height": 44,
-                                      "fill": "$sidebar",
+                                      "fill": "#00000000",
                                       "stroke": "$line",
                                       "strokeWidth": {
                                         "bottom": 1
@@ -21055,7 +21068,7 @@
                               "width": "fill_container",
                               "height": "fit_content",
                               "x": 0,
-                              "y": 44
+                              "y": 52
                             },
                             "Y5Kp9Z": {
                               "textGrowth": "auto",
@@ -21118,7 +21131,7 @@
                                       "name": "TabBar",
                                       "width": "fill_container",
                                       "height": 44,
-                                      "fill": "$sidebar",
+                                      "fill": "#00000000",
                                       "stroke": "$line",
                                       "strokeWidth": {
                                         "bottom": 1
@@ -22434,13 +22447,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#272930B8",
+          "value": "#272930E0",
           "theme": {
             "mode": "dark"
           }
         },
         {
-          "value": "#EEEFF3C2",
+          "value": "#EEEFF3E6",
           "theme": {
             "mode": "light"
           }
@@ -22451,13 +22464,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#272930B8",
+          "value": "#272930E0",
           "theme": {
             "mode": "dark"
           }
         },
         {
-          "value": "#EEEFF3C2",
+          "value": "#EEEFF3E6",
           "theme": {
             "mode": "light"
           }
@@ -22468,13 +22481,13 @@
       "type": "color",
       "value": [
         {
-          "value": "#20232CB3",
+          "value": "#20232CE0",
           "theme": {
             "mode": "dark"
           }
         },
         {
-          "value": "#FFFFFFB8",
+          "value": "#FFFFFFE6",
           "theme": {
             "mode": "light"
           }
