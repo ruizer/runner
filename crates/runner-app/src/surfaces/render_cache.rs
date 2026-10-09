@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use gpui::{
-    prelude::*, AnyElement, Context, Entity, StyleRefinement, Subscription, WeakEntity, Window,
+    div, prelude::*, AnyElement, Context, Entity, StyleRefinement, Subscription, WeakEntity, Window,
 };
 
 use crate::NativeRoot;
@@ -39,9 +39,13 @@ pub(crate) struct CachedRegion<T: 'static> {
 
 impl<T: 'static> Render for CachedRegion<T> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        self.root
+        let content = self
+            .root
             .update(cx, |root, cx| (self.renderer)(root, window, cx))
-            .expect("window root is alive")
+            .expect("window root is alive");
+        // A cached view lays its element out as a layout root, where a flex
+        // root shrinks to its content; a block root stretches to the region.
+        div().size_full().child(content)
     }
 }
 
