@@ -1,6 +1,6 @@
 # Liquid glass appearance
 
-Tracking issue: [#793](https://github.com/yicheng47/runner/issues/793). Priority: P2, 0.14 (moved from 0.13 on 2026-10-07). It headed 0.14 until file preview and code review ([#634](./634-file-preview-and-review.md)) took that place on 2026-10-09, and it still goes first so #634 is designed in it. Status: design signed off by Jason on 2026-10-09; implementation next.
+Tracking issue: [#793](https://github.com/yicheng47/runner/issues/793). Priority: P1, 0.14 (moved from 0.13 on 2026-10-07), and the release blocker of 0.14.0 since 2026-10-09, because it is a new design primitive. It headed 0.14 until file preview and code review ([#634](./634-file-preview-and-review.md)) took that place on 2026-10-09, and it still goes first so #634 is designed in it. Status: design signed off by Jason on 2026-10-09; implementation next.
 
 Design: [Liquid glass and files](../../design/specs/793-634-glass-and-files.pen), shared with file preview and code review ([#634](./634-file-preview-and-review.md)) so its panel is designed in the new chrome. Selected direction: A · Frosted chrome. Primary frames: `DJM0c` (dark) and `P1ZnQS` (light); shared sidebar: `N4yXC`.
 
