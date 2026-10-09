@@ -452,6 +452,94 @@ fn slot_rail_actions_match_status() {
         );
     }
 }
+#[test]
+fn cached_mission_header_tabs_and_feed_span_the_content_column() {
+    use gpui::{TestAppContext, VisualTestContext};
+    use runner_daemon::{db, session, shell_path};
+    use std::sync::RwLock;
+
+    let temp = tempfile::tempdir().unwrap();
+    let pool = Arc::new(db::open_pool(&temp.path().join("runner.db")).unwrap());
+    pool.get()
+        .unwrap()
+        .execute_batch(
+            "INSERT INTO crews (id, name, created_at, updated_at)
+             VALUES ('crew', 'Crew', '2026-10-09T00:00:00Z', '2026-10-09T00:00:00Z');
+             INSERT INTO missions (id, crew_id, title, status, started_at)
+             VALUES ('mission', 'crew', '#839 sidebar footer', 'running', '2026-10-09T00:00:00Z');",
+        )
+        .unwrap();
+    let runtime_shell_env = Arc::new(RwLock::new(shell_path::LoginShellEnv::default()));
+    let runtime_discovery = Arc::new(RwLock::new(shell_path::DiscoveryState::startup(None, None)));
+    let core = crate::test_support::core(
+        pool,
+        temp.path().to_owned(),
+        session::SessionManager::new(
+            runtime_shell_env.clone(),
+            runtime_discovery.clone(),
+            Arc::new(session::pty_runtime::PtyRuntime::new()),
+        ),
+        runtime_shell_env,
+        runtime_discovery,
+    );
+    let mut cx = TestAppContext::single();
+    let store = cx.new(|cx| {
+        AppStore::new(
+            core.clone(),
+            None,
+            None,
+            temp.path().join("settings.json"),
+            AppSettings::default(),
+            None,
+            cx,
+        )
+    });
+    cx.update(|cx| {
+        cx.set_global(crate::GlobalAppStore(store.clone()));
+        cx.set_global(crate::WindowLayoutCheckpoint::default());
+        #[cfg(not(windows))]
+        let updater = cx.new(|cx| crate::Updater::new(false, cx));
+        #[cfg(windows)]
+        let updater = cx.new(|cx| crate::Updater::new(false, temp.path().join("updates"), cx));
+        cx.set_global(crate::GlobalUpdater(updater));
+    });
+    let host = cx.add_window(|window, cx| {
+        let mut root = NativeRoot::new(
+            "mission-header-layout".into(),
+            temp.path().join("logs"),
+            None,
+            None,
+            store.clone(),
+            window,
+            cx,
+        );
+        root.route = AppRoute::Mission("mission".into());
+        root.mission_workspace.update(cx, |workspace, _| {
+            workspace.active = true;
+            workspace.mission_id = Some("mission".into());
+            workspace.mission =
+                Some(runner_daemon::ops::mission::mission_get(&core, "mission").unwrap());
+            workspace.crew = Some(runner_daemon::ops::crew::crew_get(&core, "crew").unwrap());
+        });
+        root
+    });
+    let mut visual = VisualTestContext::from_window(host.into(), &cx);
+    for width in [1200., 1600.] {
+        visual.simulate_resize(size(px(width), px(900.)));
+        cx.run_until_parked();
+        let column = visual.debug_bounds("MISSION_CONTENT_COLUMN").unwrap();
+        for selector in ["MISSION_HEADER_ROW", "MISSION_TABS", "MISSION_FEED"] {
+            let bounds = visual
+                .debug_bounds(selector)
+                .unwrap_or_else(|| panic!("missing {selector}"));
+            assert_eq!(
+                (bounds.left(), bounds.size.width),
+                (column.left(), column.size.width),
+                "{selector} at a {width}px window"
+            );
+        }
+    }
+}
 
 struct MissionRailLayoutTest {
     workspace: Entity<MissionWorkspace>,

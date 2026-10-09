@@ -462,7 +462,8 @@ impl MissionWorkspace {
         .sidebar_toggle(self.render_open_sidebar_button(cx))
         .title_actions(controls.into_iter().map(IntoElement::into_any_element))
         .trailing_actions(drawer_action.into_iter().chain(rail_action))
-        .into_div();
+        .into_div()
+        .debug_selector(|| "MISSION_HEADER_ROW".into());
         self.render_titlebar_drag_area("mission-titlebar-drag", row, cx)
             .into_any_element()
     }
@@ -962,6 +963,7 @@ impl MissionWorkspace {
             && !self.archiving
             && !self.secondary;
         div()
+            .debug_selector(|| "MISSION_FEED".into())
             .absolute()
             .inset_0()
             .flex()

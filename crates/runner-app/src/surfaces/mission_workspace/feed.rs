@@ -54,6 +54,7 @@ impl MissionWorkspace {
         let root = cx.entity();
         let feed_root = root.clone();
         let mut strip = div()
+            .debug_selector(|| "MISSION_TABS".into())
             .h(rems(WORKSPACE_TABS_HEIGHT / 16.))
             .flex_none()
             .px_6()
