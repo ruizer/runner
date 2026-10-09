@@ -22,7 +22,7 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 
 ## Recently shipped
 
-Reconciled on 2026-10-08 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
+Reconciled on 2026-10-09 against closed issues and published releases. These specs are archived; their bodies preserve the original scope and dated design decisions.
 
 | Spec | Shipped in |
 | --- | --- |
@@ -43,7 +43,7 @@ Reconciled on 2026-10-08 against closed issues and published releases. These spe
 | [791 — Session state: one model for agent status, drafts and conversation identity](./archive/791-session-state.md) | 0.12.8, 2026-10-04 ([PR #796](https://github.com/yicheng47/runner/pull/796), [#798](https://github.com/yicheng47/runner/pull/798), [#800](https://github.com/yicheng47/runner/pull/800)); fixes #784, #785, #786 and #781 |
 | [645 — runnerd](./archive/645-session-host.md) | 0.13.0, 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)); the CLI moved to its client protocol on 2026-10-07 ([#822](https://github.com/yicheng47/runner/pull/822), #821), and remote machines over ssh continue as [#808](https://github.com/yicheng47/runner/issues/808) |
 | [797 — Hook status over local IPC](./archive/797-hook-status-ipc.md) | 0.13.1, 2026-10-08 |
-| [793 — Liquid glass appearance](./archive/793-liquid-glass.md) | Merged 2026-10-09 ([#852](https://github.com/yicheng47/runner/pull/852)), unreleased; ships with 0.14.0. Menus and the usage popover stayed solid; Windows is Solid only |
+| [793 — Liquid glass appearance](./archive/793-liquid-glass.md) | 0.14.0, 2026-10-09 ([#852](https://github.com/yicheng47/runner/pull/852), follow-up [#854](https://github.com/yicheng47/runner/pull/854)). Menus and the usage popover stayed solid; Windows is Solid only |
 
 ## Dropped
 
