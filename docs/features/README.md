@@ -18,7 +18,6 @@ Since 2026-09-01 a spec's number **is** its tracking issue number: file the issu
 - [565 — i18n, 简体中文 first](./565-i18n.md) — a language setting, a compile-time catalog, a live switch ([#565](https://github.com/yicheng47/runner/issues/565), P2, 0.16).
 - [586 — Shell status: process detection first](./586-shell-status-detection.md) — foreground-process detection for shell panes before semantic shell integration ([#586](https://github.com/yicheng47/runner/issues/586), P2, 0.16).
 - [701 — Desktop notifications](./701-desktop-notifications.md) — a popup Runner draws itself, following Zed's agent notification, when a session off screen waits on you, finishes or fails ([#701](https://github.com/yicheng47/runner/issues/701), P2, 0.14).
-- [793 — Liquid glass appearance](./793-liquid-glass.md) — Diri-inspired layered glass chrome and floating controls, with readable terminal surfaces, a solid appearance option and Pencil design before implementation ([#793](https://github.com/yicheng47/runner/issues/793), P1, 0.14 release blocker; design signed off 2026-10-09).
 - [809 — User documentation](./809-user-docs.md) — a user guide in `docs/guide/`, in four sections (getting started, concepts, guides, reference), that runnersh.dev renders from the latest release tag; plain Markdown that reads on GitHub, a CLI reference generated from `runner help`, and a rule that behavior changes update the guide in the same PR ([#809](https://github.com/yicheng47/runner/issues/809), P2, 0.15, written once liquid glass has shipped; draft structure).
 
 ## Recently shipped
@@ -44,6 +43,7 @@ Reconciled on 2026-10-08 against closed issues and published releases. These spe
 | [791 — Session state: one model for agent status, drafts and conversation identity](./archive/791-session-state.md) | 0.12.8, 2026-10-04 ([PR #796](https://github.com/yicheng47/runner/pull/796), [#798](https://github.com/yicheng47/runner/pull/798), [#800](https://github.com/yicheng47/runner/pull/800)); fixes #784, #785, #786 and #781 |
 | [645 — runnerd](./archive/645-session-host.md) | 0.13.0, 2026-10-06 ([#811](https://github.com/yicheng47/runner/pull/811)); the CLI moved to its client protocol on 2026-10-07 ([#822](https://github.com/yicheng47/runner/pull/822), #821), and remote machines over ssh continue as [#808](https://github.com/yicheng47/runner/issues/808) |
 | [797 — Hook status over local IPC](./archive/797-hook-status-ipc.md) | 0.13.1, 2026-10-08 |
+| [793 — Liquid glass appearance](./archive/793-liquid-glass.md) | Merged 2026-10-09 ([#852](https://github.com/yicheng47/runner/pull/852)), unreleased; ships with 0.14.0. Menus and the usage popover stayed solid; Windows is Solid only |
 
 ## Dropped
 

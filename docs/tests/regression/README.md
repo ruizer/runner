@@ -10,12 +10,12 @@ Use [Full smoke test procedure](../full-smoke-test.md) for authorization, candid
 | --- | --- | ---: | ---: | ---: |
 | Runtime lifecycle, conversation identity, status and hooks | [runtimes.md](runtimes.md) | 36 | 10 | 26 |
 | Native terminal rendering, input, resize and history | [terminal.md](terminal.md) | 22 | 5 | 17 |
-| Windows, tabs, panes, sidebar, cwd and drawers | [workspace.md](workspace.md) | 27 | 5 | 22 |
+| Windows, tabs, panes, sidebar, cwd and drawers | [workspace.md](workspace.md) | 30 | 6 | 24 |
 | Crews, missions, delivery, asks, feed and watches | [missions.md](missions.md) | 20 | 4 | 16 |
 | Quit, daemon lifetime, reconnect and recovery | [daemon.md](daemon.md) | 22 | 4 | 18 |
-| Agents, settings, skills, MCP, installation and updates | [settings.md](settings.md) | 21 | 4 | 17 |
+| Agents, settings, skills, MCP, installation and updates | [settings.md](settings.md) | 23 | 4 | 19 |
 | Candidate CLI commands, output, feeds and connection | [cli.md](cli.md) | 13 | 4 | 9 |
-| **Total** | | **161** | **36** | **125** |
+| **Total** | | **166** | **37** | **129** |
 
 `regression/` holds this README and one table file per area, with feature sections. Historical feature records remain in `../archive/` and are never edited to turn their old result into a current result. New run results live separately at `docs/tests/runs/YYYY-MM-DD-<platform>.md`, where platform is `mac`, `win` or `both`. Repeated runs on the same day append a separately identified candidate/attempt block to that file. No run record is needed merely to edit this suite.
 
@@ -35,9 +35,9 @@ Every case has an ID `AREA-FEATURE-NN`, using the existing prefixes `RT`, `TERM`
 
 For ordinary features and fixes, follow [Test Scope](../../../AGENTS.md#test-scope): select only cases covering changed behavior or a concrete regression risk caused by the diff, plus feature-specific checks. State the connection for each selected case before execution. The `smoke`/`full` tiers select broad release/refactor runs, not the default checklist for every feature. A shared surface does not make all its existing behavior in scope. Keep the feature result matrix to the selected cases and briefly state meaningful exclusions; do not enumerate the whole unselected suite as Blocked or make it a feature gate.
 
-Before every release, select active `smoke` rows on every required platform. The 36 case templates cover the runtime lifecycle core plus small native/CLI paths in each area. Major refactors select all active rows, adding any feature-specific live checks not yet promoted. Smoke is the Tier selection in the same tables, never a copied checklist with independent numbering.
+Before every release, select active `smoke` rows on every required platform. The 37 case templates cover the runtime lifecycle core plus small native/CLI paths in each area. Major refactors select all active rows, adding any feature-specific live checks not yet promoted. Smoke is the Tier selection in the same tables, never a copied checklist with independent numbering.
 
-Runtime rows are written once but executed separately for each required runtime/platform. Record instances as `RT-LIFE-01 / codex / mac`, for example. The ten runtime smoke templates expand to 50 checks with all five runtimes on one platform, plus 26 other smoke rows before their own applicability variants. This is not 36 individual executions or 36 new launches: reuse one owned lifecycle chat and one bounded startup mission per runtime, plus shared shell/UI fixtures, in one QA session. List required runtimes, hosts and case instances before beginning and report account/native-control gaps explicitly. TRAE adds instances only where required and accessible, with unsupported controls labeled. Do not silently reduce release coverage to fit an unavailable account or host.
+Runtime rows are written once but executed separately for each required runtime/platform. Record instances as `RT-LIFE-01 / codex / mac`, for example. The ten runtime smoke templates expand to 50 checks with all five runtimes on one platform, plus 27 other smoke rows before their own applicability variants. This is not 37 individual executions or 37 new launches: reuse one owned lifecycle chat and one bounded startup mission per runtime, plus shared shell/UI fixtures, in one QA session. List required runtimes, hosts and case instances before beginning and report account/native-control gaps explicitly. TRAE adds instances only where required and accessible, with unsupported controls labeled. Do not silently reduce release coverage to fit an unavailable account or host.
 
 Each row may name closely related variants, such as approve/reject/cancel. Record every applicable variant in its evidence, and the row passes only when all required variants pass. Reuse existing evidence within the same candidate for overlapping rows, naming each case it proves. A new candidate or changed behavior requires affected rechecks, not an automatic rewrite of earlier results. Package/update, secondary-account, privacy, subagent and watch-host cases require their stated authorized fixtures and do not follow automatically from a general chat smoke request.
 
