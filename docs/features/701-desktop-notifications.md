@@ -1,7 +1,7 @@
 # 701 — Desktop notifications when an agent needs you
 
 > Tracking issue: [#701](https://github.com/yicheng47/runner/issues/701)
-> Priority: P2, milestone 0.14 (moved from 0.13 on 2026-10-07), designed in the liquid glass style of [793](./archive/793-liquid-glass.md). Platforms: macOS and Windows.
+> Priority: P2, milestone 0.16 (moved from 0.13 to 0.14 on 2026-10-07, renumbered 0.16 on 2026-10-10), designed in the liquid glass style of [793](./archive/793-liquid-glass.md). Platforms: macOS and Windows.
 > Decision, 2026-09-22: follow Zed's agent notification, a popup window Runner draws itself, not the OS notification center.
 
 ## Motivation

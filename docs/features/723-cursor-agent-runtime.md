@@ -1,7 +1,7 @@
 # 723 — Cursor Agent CLI runtime
 
 > Tracking issue: [#723](https://github.com/yicheng47/runner/issues/723). Cursor only; Grok remains separately scheduled.
-> Status: draft PR, default-off. macOS backend smoke tested; native Windows unverified.
+> Status: shipped in 0.15.0 on 2026-10-10 ([#827](https://github.com/yicheng47/runner/pull/827)), default-off. macOS live tested; native Windows unverified. The spec stays active while Grok Build remains open under #723 (0.18).
 > Contract: [Runtime integration](../arch/runtime-integration.md).
 
 ## Motivation
@@ -36,7 +36,7 @@ A small shared watcher callback supplies the spawned PID. Key persistence accept
 
 ## Verification
 
-Focused tests cover launch/model/prompt arguments, permissions, distinct fresh IDs, exact resume, cwd/config storage, rekey/debounced clear/ambiguity, output-forwarder survival after clearing, model cache behavior, executable discovery and skill ownership. See [the validation record](../tests/723-cursor-agent-runtime.md).
+Focused tests cover launch/model/prompt arguments, permissions, distinct fresh IDs, exact resume, cwd/config storage, rekey/debounced clear/ambiguity, output-forwarder survival after clearing, model cache behavior, executable discovery and skill ownership. See [the validation record](../tests/archive/723-cursor-agent-runtime.md).
 
 | Platform | Evidence | Remaining gaps |
 | --- | --- | --- |
