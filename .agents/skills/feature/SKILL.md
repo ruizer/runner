@@ -1,11 +1,11 @@
 ---
 name: feature
-description: Create, list, or manage feature specs and GitHub issues
+description: File, list, or manage feature issues, and write a feature's spec when its development starts
 ---
 
 # Feature Management
 
-Manage Runners' feature pipeline: specs live in `docs/features/`, tracking lives in GitHub Issues with the `feature` label.
+A feature is a GitHub issue with the `feature` label until someone starts building it. Filing, prioritizing and scheduling a feature touch only GitHub: nothing is written to the repo and nothing is committed. Its spec in `docs/features/` is written when development starts, on the feature's branch, and reaches `main` in the same pull request as the code, together with any impl plan or mission brief.
 
 ## Usage
 
@@ -14,39 +14,40 @@ Manage Runners' feature pipeline: specs live in `docs/features/`, tracking lives
 ### Actions
 
 #### `new <name>`
-Create a new feature from scratch.
+File a new feature as an issue.
 
-1. Ask the user to describe the feature (motivation, scope, key decisions).
-2. Assign the next available number by checking existing files in `docs/features/`.
-3. Create `docs/features/{number}-{slug}.md` with sections: Motivation, Scope, Implementation Phases, Verification.
-4. **Pick a priority** (see Priority below). If the user didn't state one, propose one and confirm before filing. Don't file unlabeled.
-5. Create a GitHub Issue with labels `feature` and the chosen `P0`/`P1`/`P2`/`P3`:
+1. Ask the user to describe the feature (motivation, scope, key decisions) unless they already have.
+2. **Pick a priority** (see Priority below). If the user didn't state one, propose one and confirm before filing. Don't file unlabeled.
+3. Set a milestone only when the user names one.
+4. Create the issue with labels `feature` and the chosen `P0`/`P1`/`P2`/`P3`:
    - Title: `feat: <short description>`
-   - Body: Motivation, Scope summary, Implementation Phases, and a reference back to the spec file.
-   - Command shape: `gh issue create --label feature --label P1 --title "…" --body "…"`
-6. Update `docs/features/README.md` to include the new spec.
-7. Report the spec path, issue URL, and assigned priority.
+   - Body: Motivation, Scope, and Open questions when there are any. The issue holds the design discussion until development starts.
+   - Command shape: `gh issue create --label feature --label P1 --title "…" --body "…" [--milestone 0.16]`
+5. Report the issue URL, priority and milestone. Do not create a spec or edit any doc.
 
 #### `list`
 Show all features, sorted by priority.
 
 1. Fetch open features with priority + metadata as JSON so they can be sorted:
-   `gh issue list --label feature --state open --limit 50 --json number,title,labels,createdAt,assignees`
-2. List all spec files in `docs/features/` (excluding README).
-3. Sort the rows by priority (`P0` first, then `P1`, `P2`, `P3`, then unlabeled-by-priority last). Within a priority bucket, sort by spec number ascending.
-4. Present a combined view: **Priority**, feature name, **#** (issue), spec file (if exists), **Created**. Issues without a P-label show `—` in priority and a callout asking the user to triage them.
+   `gh issue list --label feature --state open --limit 50 --json number,title,labels,milestone,createdAt,assignees`
+2. List the spec files in `docs/features/` (excluding README); most features have none until development starts.
+3. Sort the rows by priority (`P0` first, then `P1`, `P2`, `P3`, then unlabeled-by-priority last). Within a priority bucket, sort by issue number ascending.
+4. Present a combined view: **Priority**, feature name, **#** (issue), **Milestone**, spec file (if one exists), **Created**. Issues without a P-label show `—` in priority and a callout asking the user to triage them.
 5. If the user asks for closed/shipped features too, repeat with `--state all` and add a **State** column.
 
-#### `close <issue-number>`
-Mark a feature as shipped.
+#### `spec <issue-number>`
+Write the spec when development of a feature starts.
 
-1. Close the GitHub Issue: `gh issue close <number>`
-2. If a matching spec file exists in `docs/features/`, move it to
-   `docs/features/archive/` with `git mv`. Shipped code is the source
-   of truth, but the spec stays around as the "what we were going for"
-   record (mirrors `docs/impls/archive/`).
-3. Update `docs/features/README.md` to drop the archived entry from
-   the index.
+1. Work in the feature's branch worktree (`AGENTS.md`, Worktrees), never in the root checkout on `main`. If the branch does not exist yet, create it as `AGENTS.md` describes once the user has asked to start the work.
+2. Create `docs/features/{issue}-{slug}.md`, pre-populated from the issue body and its discussion: a header linking the tracking issue, then Motivation, Scope, Implementation Phases, Verification. Leave priority and milestone out; they live on the issue.
+3. Add the spec's line under Active in `docs/features/README.md`.
+4. The spec is committed on the branch and lands with the code. A crew mission folds it into its commits like the brief.
+
+#### `close <issue-number>`
+Close a feature that shipped or was dropped.
+
+1. Close the GitHub issue: `gh issue close <number>`, adding `--reason "not planned"` when it was dropped.
+2. Leave its spec where it is. The release's docs sweep archives specs (`release` skill, `sweep`).
 
 #### `prioritize <issue-number> <P0|P1|P2|P3>`
 Set or change the priority of an existing feature.
@@ -55,12 +56,6 @@ Set or change the priority of an existing feature.
    `gh issue edit <number> --remove-label P0 --remove-label P1 --remove-label P2 --remove-label P3 --add-label <priority>`
    (Removing all four is safe — `gh` ignores remove-label for labels not present.)
 2. Confirm the new priority.
-
-#### `spec <issue-number-or-name>`
-Open or create a spec for an existing feature issue.
-
-1. If a spec file already exists, show its path.
-2. If not, create one following the same format as `new`, pre-populated from the issue body.
 
 ## Labels
 
@@ -81,15 +76,11 @@ When in doubt between two levels, pick the lower-urgency one and say why; over-l
 
 ## Conventions
 
-- Spec files are numbered sequentially: `01-product-spec.md`, `02-ai-quick-explain.md`, etc.
-- Slugs are lowercase kebab-case derived from the feature name.
-- Specs for shipped features move to `docs/features/archive/` — the
-  implementation is the source of truth, but the spec stays as the
-  "what we were going for" record (mirrors `docs/impls/archive/`).
-- The `docs/features/README.md` index only lists in-progress/planned specs.
+- A spec is named after its tracking issue, `{issue}-{slug}.md`, with a lowercase kebab-case slug.
+- Specs, impl plans (`docs/impls/`) and mission briefs (`docs/impls/briefs/`) are written on the feature's branch and land with its code. Design files are the exception: `.pen` files are settled on `main` first (`AGENTS.md`, Engineering Conventions).
+- Shipped specs move to `docs/features/archive/` in the release's docs sweep. The implementation is the source of truth; the archived spec stays as the "what we were going for" record.
 
 ## Notes
 
 - Do not commit or push unless the user explicitly asks.
-- When creating issues, always include a reference to the spec file path in the issue body.
-- When creating specs, always include a reference to the GitHub issue URL.
+- A spec always links its GitHub issue URL.

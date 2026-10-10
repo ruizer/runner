@@ -2,7 +2,7 @@
 
 An impl plan is tactical: the spec says *what*, the plan says how a change lands, what it touches and how it is verified. Architecture truth lives in [`../arch/`](../arch/); fold a decision that outlives the work into it before archiving the plan.
 
-A plan stays here while its work is in flight and moves to [`archive/`](./archive/) when it ships, keeping its filename so links stay stable. Since 2026-09-01 plans are named `{number}-{slug}.md` after their feature spec; the archived `0001`–`0045` sequence is closed. Mission briefs live in [`briefs/`](./briefs/), named `{number}-{slug}.md`, or `{number}-m{n}-{slug}.md` when a feature takes several missions. Shipped briefs are pruned except the references listed in [`briefs/README.md`](./briefs/README.md); the rest are in git history.
+A plan is written on its feature's branch and lands in the pull request with the code. It stays here while the feature's remaining work is in flight and moves to [`archive/`](./archive/) when it ships, keeping its filename so links stay stable. Since 2026-09-01 plans are named `{number}-{slug}.md` after their feature spec; the archived `0001`–`0045` sequence is closed. Mission briefs live in [`briefs/`](./briefs/), named `{number}-{slug}.md`, or `{number}-m{n}-{slug}.md` when a feature takes several missions. Shipped briefs are pruned except the references listed in [`briefs/README.md`](./briefs/README.md); the rest are in git history.
 
 ## Active
 

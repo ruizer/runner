@@ -44,7 +44,7 @@ Surface hierarchy (strict — do not blur these in code, docs, or UI copy):
 - `design/`: Pencil source files.
 - `docs/arch/`: architecture references (how it works).
 - `docs/product/`: product vision and direction (why we're building this, what surfaces matter).
-- `docs/features/`: in-progress feature specs, named `{tracking-issue}-{slug}.md` since 2026-09-01 (file the issue first); shipped specs live in `docs/features/archive/`.
+- `docs/features/`: specs of features in development, named `{tracking-issue}-{slug}.md`. A feature is only an issue until its development starts; its spec is then written on the feature's branch and lands with the code. Shipped specs live in `docs/features/archive/`.
 - `docs/impls/`: implementation plans; shipped plans live in `docs/impls/archive/`, mission briefs in `docs/impls/briefs/`.
 - `docs/tests/`: validation and smoke-test plans; records of shipped features live in `docs/tests/archive/`.
 - `docs/roadmap.md`: where the project is, mirrored from the GitHub milestones and dated.
@@ -105,7 +105,7 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 - Common scopes: `db`, `commands`, `ui`, `event-log`, `session`, `event-bus`,
   `router`, `cli`, `mission`, `docs`, `validation`.
 - Example: `fix(session): preserve terminal geometry on tab switch`.
-- A doc-only change (`docs/`, the READMEs, this file) is committed straight to `main` from the root checkout, with no branch, worktree or pull request; a mission brief still goes on its mission's branch. Open a PR for docs only when the edit is large and spans several files, such as a restructure or a rename across the docs tree.
+- A doc-only change (`docs/`, the READMEs, this file) is committed straight to `main` from the root checkout, with no branch, worktree or pull request; a feature's spec, impl plan and mission brief go on its branch and land with its code. Open a PR for docs only when the edit is large and spans several files, such as a restructure or a rename across the docs tree.
 - For validation branches, keep PR descriptions current when scope changes.
 - Bring a branch up to date by rebasing it onto `origin/main` and pushing with `git push --force-with-lease`; never merge `main` into a branch. A PR's history stays its own commits on top of `main`. A branch need not be current to merge: catch up only when GitHub shows a conflict, or when commits touching the same code have landed on `main` since the PR's CI ran, because a re-run tests the same stale trial merge and only a push tests against the new `main`. An umbrella branch is the exception: it follows `main` by merging `main` in, because rebasing it would rewrite every commit on it and every mission branch cut from it.
 - Pull requests land on `main` as merge commits (`gh pr merge --merge`), never squashed or rebased. The PR's commits reach `main` as written, and the merge commit makes the PR one unit that `git revert -m 1` undoes. Read `main` one PR per line with `git log --first-parent`, and bisect it with `git bisect start --first-parent`.

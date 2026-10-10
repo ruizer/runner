@@ -1,6 +1,6 @@
 # Runner roadmap
 
-Snapshot as of 2026-10-10. The live sources are [GitHub milestones](https://github.com/yicheng47/runner/milestones), [open issues](https://github.com/yicheng47/runner/issues), and [published releases](https://github.com/yicheng47/runner/releases); this file mirrors them so the state of the project is readable from the repo without a browser. Issue state, milestone assignments and release-blocker labels take precedence over milestone descriptions, which can lag. Update it when an issue changes milestone and in each release's docs sweep, and move the date.
+Snapshot as of 2026-10-10. The live sources are [GitHub milestones](https://github.com/yicheng47/runner/milestones), [open issues](https://github.com/yicheng47/runner/issues), and [published releases](https://github.com/yicheng47/runner/releases); this file mirrors them so the state of the project is readable from the repo without a browser. Issue state, milestone assignments and release-blocker labels take precedence over milestone descriptions, which can lag. Update it in each release's docs sweep and move the date; between sweeps, GitHub is the current record.
 
 ## Where the project is
 

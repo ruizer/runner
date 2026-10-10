@@ -1,6 +1,6 @@
 # Feature specs
 
-Active feature specs, one per open tracking issue. A spec moves to [`archive/`](./archive/) once its issue closes, shipped or dropped: the implementation is the source of truth and the archived spec is the "what we were going for" record. Priorities and milestones live on the issues; [`../roadmap.md`](../roadmap.md) mirrors them.
+Specs of features in development. A feature is filed as an issue only; its spec is written when development starts, on the feature's branch, and lands in the same pull request as the code. A spec moves to [`archive/`](./archive/) in the release's docs sweep once its issue closes, shipped or dropped: the implementation is the source of truth and the archived spec is the "what we were going for" record. Priorities and milestones live on the issues; [`../roadmap.md`](../roadmap.md) mirrors them.
 
 Since 2026-09-01 a spec's number **is** its tracking issue number: file the issue first, then name the spec after it, so gaps in the sequence belong to bugs and PRs. Specs 01–64 predate the alignment and keep their numbers in `archive/`; the then-active ones were renumbered to their issues (05→73, 58→393, 61→403), and 60 (fork a chat) kept its number and shipped 2026-09-01.
 
