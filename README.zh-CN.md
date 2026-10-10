@@ -46,7 +46,7 @@
   ·
   <a href="#下载">下载</a>
   ·
-  <a href="./AGENTS.md">参与贡献</a>
+  <a href="./CONTRIBUTING.md">参与贡献</a>
 </p>
 
 > 状态：alpha，持续迭代中。原生支持 macOS（Apple Silicon）和 Windows（x64），Windows 从 0.8.0 起加入。

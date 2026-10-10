@@ -4,6 +4,8 @@ This file is the repo-wide guide for any coding assistant working on Runner.
 Keep shared conventions here instead of putting them only in a tool-specific
 file such as `CLAUDE.md`.
 
+Contributing from outside the project? Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it says which parts of this guide apply to your pull request and what it must prove before review.
+
 ## Product Context
 
 Runner is a local desktop app for coordinating multiple CLI coding agents from one UI. Users create reusable roles, compose them into crews, start missions, and interact with each session through a real PTY.
@@ -99,7 +101,7 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 
 ## Commit And PR Conventions
 
-- Use focused commits with an imperative subject. A crew mission's pull request is one commit; see Crew Missions.
+- Use focused commits with an imperative subject; Crew Missions covers how a mission's pull request is shaped.
 - Common scopes: `db`, `commands`, `ui`, `event-log`, `session`, `event-bus`,
   `router`, `cli`, `mission`, `docs`, `validation`.
 - Example: `fix(session): preserve terminal geometry on tab switch`.
@@ -118,15 +120,20 @@ A mission runs in its worktree. Before starting it, create the worktree as descr
 
 A program that runs on an umbrella branch, such as #645's `feat/645-runnerd`, creates each mission's worktree from the umbrella instead of `origin/main` and opens the mission's PR against the umbrella. The umbrella follows `main` by rebase between missions and reaches `main` as one PR when the program's gate passes; see the program's plan in `docs/impls/`.
 
-A mission lands as a single commit. Before pushing, the crew squashes everything on its branch, the brief commit included, into one commit on top of `main` (or of the umbrella, for an umbrella program), with a subject that names the change rather than the brief. Fixes after the push, from review or CI, are folded into that commit with `git commit --amend` and pushed with `git push --force-with-lease`, so the pull request always shows one commit. Split into more than one commit only when the mission covers changes that are unrelated to each other, such as a fix and an independent cleanup that could each be reverted alone, and say why in the pull request body. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
+A mission's pull request is a clean history on top of `main` (or of the umbrella, for an umbrella program), shaped as the crew judges best. A single change is usually one commit; split it when the work falls into steps that each stand on their own, such as a refactor and the feature built on it, or a fix and an unrelated cleanup, and make every commit build and pass its tests. The brief is folded into a commit rather than landing as one of its own, and each subject names the change, not the brief. Fixes after the push, from review or CI, are folded into the commit they correct (`git commit --fixup` with an autosquash rebase, or `git commit --amend` for the last commit) rather than added as "address review" commits, and pushed with `git push --force-with-lease`. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
 
 ### Post-mission cleanup
 
-When Jason asks for the post-mission cleanup, usually together with the merge, it covers three steps, in this order, once the PR has merged:
+When Jason asks for the post-mission cleanup, usually together with the merge, it covers two local steps, in this order, once the PR has merged. Neither adds a commit to `main`:
 
 1. **Archive the mission.** Stop it if a session is still live (`runner mission stop <id>`), then `runner mission archive <id>`.
 2. **Remove the worktree and branches.** `git worktree remove .worktrees/<flattened-branch>`, then delete the local branch. Squash and rebase merges leave the branch unmerged by ancestry, so confirm the PR merged with `gh pr view` rather than `git branch --merged`. GitHub deletes the remote branch on merge; delete it by hand only if it is still there.
-3. **Archive the docs**, in one doc-only commit on `main`. Move the test record to `docs/tests/archive/` and promote its lasting live checks into [`docs/tests/regression/`](docs/tests/regression/README.md), reconciled with current code, or have the record state why none apply. Run results stay separate from maintained cases. Prune the mission briefs (git history keeps them) unless [`docs/impls/briefs/README.md`](docs/impls/briefs/README.md) keeps one as a reference. When the tracking issue closes, which for a multi-PR feature means after its last PR, move the spec to `docs/features/archive/` and its [`docs/features/README.md`](docs/features/README.md) entry to Shipped. Repoint every link to the moved files and update [`docs/roadmap.md`](docs/roadmap.md).
+
+The mission's brief, test record and spec stay where they are until the next release's docs sweep.
+
+## Docs Sweep At Release
+
+Shipped work's docs are archived once per production release, not after each merge. Once a release is published, one doc-only commit on `main` sweeps everything shipped since the previous sweep: test records move to `docs/tests/archive/` with their lasting live checks promoted into [`docs/tests/regression/`](docs/tests/regression/README.md), merged missions' briefs are pruned unless [`docs/impls/briefs/README.md`](docs/impls/briefs/README.md) keeps one as a reference, specs whose issues have closed move to `docs/features/archive/`, and [`docs/roadmap.md`](docs/roadmap.md) records the release. The procedure is the `sweep` action of the [release skill](.agents/skills/release/SKILL.md).
 
 ## Notes For Agent Runtimes
 

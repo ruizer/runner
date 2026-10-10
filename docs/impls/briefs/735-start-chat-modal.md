@@ -54,10 +54,10 @@ Iterate through Runner until the reviewer posts `NO REMAINING MUST-FIX ISSUES`. 
 
 After the clean review, and only then, Jason authorizes:
 
-- **One commit.** Squash everything on the branch, this brief included, into a single commit on top of `main`: imperative subject naming the change (for example `feat(ui): redesign the start a chat modal`), no co-author trailers.
+- **Commits.** Rebase the branch into clean history on top of `main`, the brief folded into a commit: usually one commit, more when the work falls into steps that each build and pass on their own. Imperative subjects naming the change (for example `feat(ui): redesign the start a chat modal`), no co-author trailers.
 - **Push** with `git push -u origin feat/735-start-chat-modal`.
 - **Open the PR** with `gh pr create --base main`. The body carries `Closes #735`, a summary, test evidence, a manual check for Jason (a role chat started untouched, with a model-only override, with a Codex override; Use role settings and folding; a Direct chat on Claude Code and on Codex with Speed; no roles; no agents; tab through the whole form; the modal at 640 × 480), what is unverified, and no agent session links.
-- **Watch CI** with `gh pr checks <n> --watch` until nothing is pending, on both macOS and Windows. Fold any fix into the commit with `git commit --amend`, have the reviewer check it, and push with `git push --force-with-lease`.
+- **Watch CI** with `gh pr checks <n> --watch` until nothing is pending, on both macOS and Windows. Fold any fix into the commit it corrects (`git commit --fixup` with an autosquash rebase, or `--amend`), have the reviewer check it, and push with `git push --force-with-lease`.
 
 **Do not merge**, delete the branch or worktree, or cut a nightly or release.
 

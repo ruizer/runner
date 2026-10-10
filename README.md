@@ -46,7 +46,7 @@
   ·
   <a href="#download">Download</a>
   ·
-  <a href="./AGENTS.md">Contributing</a>
+  <a href="./CONTRIBUTING.md">Contributing</a>
 </p>
 
 > Status: alpha, actively shipping. Native macOS (Apple Silicon) and Windows (x64), with Windows support starting in 0.8.0.
