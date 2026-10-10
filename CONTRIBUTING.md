@@ -25,6 +25,6 @@ A pull request is ready for review when it proves the change works:
 ## Pull request shape
 
 - Branch from current `main`. To update, rebase onto `main` and push with `--force-with-lease`; never merge `main` into the branch.
-- Focused commits with imperative subjects and the scopes listed in AGENTS.md, such as `fix(session): preserve terminal geometry on tab switch`. Fold review fixes into the commits they correct rather than adding "address review" commits.
+- Focused commits with imperative subjects and the scopes listed in AGENTS.md, such as `fix(session): preserve terminal geometry on tab switch`. Fold review fixes into the commits they correct rather than adding "address review" commits. Pull requests land as merge commits, so your commits reach `main` as you wrote them.
 - `README.md` and `README.zh-CN.md` change together.
 - No agent session links or transcripts in the body.

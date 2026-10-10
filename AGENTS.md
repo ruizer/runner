@@ -107,7 +107,8 @@ Work stays inside its own worktree. When several are live at once, treat the oth
 - Example: `fix(session): preserve terminal geometry on tab switch`.
 - A doc-only change (`docs/`, the READMEs, this file) is committed straight to `main` from the root checkout, with no branch, worktree or pull request; a mission brief still goes on its mission's branch. Open a PR for docs only when the edit is large and spans several files, such as a restructure or a rename across the docs tree.
 - For validation branches, keep PR descriptions current when scope changes.
-- Bring a branch up to date by rebasing it onto `origin/main` and pushing with `git push --force-with-lease`; never merge `main` into a branch. A PR's history stays its own commits on top of `main`.
+- Bring a branch up to date by rebasing it onto `origin/main` and pushing with `git push --force-with-lease`; never merge `main` into a branch. A PR's history stays its own commits on top of `main`. A branch need not be current to merge: catch up only when GitHub shows a conflict, or when commits touching the same code have landed on `main` since the PR's CI ran, because a re-run tests the same stale trial merge and only a push tests against the new `main`. An umbrella branch is the exception: it follows `main` by merging `main` in, because rebasing it would rewrite every commit on it and every mission branch cut from it.
+- Pull requests land on `main` as merge commits (`gh pr merge --merge`), never squashed or rebased. The PR's commits reach `main` as written, and the merge commit makes the PR one unit that `git revert -m 1` undoes. Read `main` one PR per line with `git log --first-parent`, and bisect it with `git bisect start --first-parent`.
 - Do not add tool-specific co-author trailers unless the user explicitly asks.
 
 ## Crew Missions
@@ -118,7 +119,7 @@ An explicit merge request includes GitHub's configured automatic deletion of the
 
 A mission runs in its worktree. Before starting it, create the worktree as described under Worktrees and commit the brief on its branch; then start the mission with the worktree as its directory, `runner mission start --crew <crew> --cwd <repo>/.worktrees/<flattened-branch> …`, not `--project runner`. Every slot's agent and shell then start in the worktree instead of the root checkout, the mission still lands under the runner project because the project is inferred from the directory, and the brief names the same path.
 
-A program that runs on an umbrella branch, such as #645's `feat/645-runnerd`, creates each mission's worktree from the umbrella instead of `origin/main` and opens the mission's PR against the umbrella. The umbrella follows `main` by rebase between missions and reaches `main` as one PR when the program's gate passes; see the program's plan in `docs/impls/`.
+A program that runs on an umbrella branch, such as #645's `feat/645-runnerd`, creates each mission's worktree from the umbrella instead of `origin/main` and opens the mission's PR against the umbrella. The umbrella follows `main` by merging `main` in between missions and reaches `main` as one PR when the program's gate passes; see the program's plan in `docs/impls/`.
 
 A mission's pull request is a clean history on top of `main` (or of the umbrella, for an umbrella program), shaped as the crew judges best. A single change is usually one commit; split it when the work falls into steps that each stand on their own, such as a refactor and the feature built on it, or a fix and an unrelated cleanup, and make every commit build and pass its tests. The brief is folded into a commit rather than landing as one of its own, and each subject names the change, not the brief. Fixes after the push, from review or CI, are folded into the commit they correct (`git commit --fixup` with an autosquash rebase, or `git commit --amend` for the last commit) rather than added as "address review" commits, and pushed with `git push --force-with-lease`. Every mission brief states this in its authorization section, and a crew whose brief is silent on it follows this rule anyway.
 
@@ -127,7 +128,7 @@ A mission's pull request is a clean history on top of `main` (or of the umbrella
 When Jason asks for the post-mission cleanup, usually together with the merge, it covers two local steps, in this order, once the PR has merged. Neither adds a commit to `main`:
 
 1. **Archive the mission.** Stop it if a session is still live (`runner mission stop <id>`), then `runner mission archive <id>`.
-2. **Remove the worktree and branches.** `git worktree remove .worktrees/<flattened-branch>`, then delete the local branch. Squash and rebase merges leave the branch unmerged by ancestry, so confirm the PR merged with `gh pr view` rather than `git branch --merged`. GitHub deletes the remote branch on merge; delete it by hand only if it is still there.
+2. **Remove the worktree and branches.** `git worktree remove .worktrees/<flattened-branch>`, then delete the local branch once `gh pr view` shows the PR merged. GitHub deletes the remote branch on merge; delete it by hand only if it is still there.
 
 The mission's brief, test record and spec stay where they are until the next release's docs sweep.
 
