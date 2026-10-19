@@ -148,6 +148,7 @@ pub(crate) enum SettingsPane {
     Agents,
     Skills,
     Mcp,
+    #[cfg(not(target_os = "linux"))]
     Updates,
     Diagnostics,
     About,
@@ -165,6 +166,7 @@ impl SettingsPane {
             Some("agents") => Self::Agents,
             Some("mcp") => Self::Mcp,
             Some("skills") => Self::Skills,
+            #[cfg(not(target_os = "linux"))]
             Some("updates") => Self::Updates,
             Some("diagnostics") => Self::Diagnostics,
             Some("about") => Self::About,
@@ -184,6 +186,7 @@ impl SettingsPane {
             Self::Agents => "agents",
             Self::Skills => "skills",
             Self::Mcp => "mcp",
+            #[cfg(not(target_os = "linux"))]
             Self::Updates => "updates",
             Self::Diagnostics => "diagnostics",
             Self::About => "about",
@@ -202,6 +205,7 @@ impl SettingsPane {
             Self::Agents => crate::i18n::text("ui.agents"),
             Self::Skills => crate::i18n::text("ui.skills"),
             Self::Mcp => "MCP",
+            #[cfg(not(target_os = "linux"))]
             Self::Updates => crate::i18n::text("ui.updates"),
             Self::Diagnostics => crate::i18n::text("ui.diagnostics"),
             Self::About => crate::i18n::text("ui.about"),
@@ -220,6 +224,7 @@ impl SettingsPane {
             Self::Agents => "bot.svg",
             Self::Skills => "file-text.svg",
             Self::Mcp => "plug.svg",
+            #[cfg(not(target_os = "linux"))]
             Self::Updates => "refresh-cw.svg",
             Self::Diagnostics => "file-text.svg",
             Self::About => "info.svg",
@@ -243,6 +248,7 @@ const INTEGRATION_PANES: &[SettingsPane] = &[
     SettingsPane::Mcp,
 ];
 const SYSTEM_PANES: &[SettingsPane] = &[
+    #[cfg(not(target_os = "linux"))]
     SettingsPane::Updates,
     SettingsPane::Diagnostics,
     SettingsPane::About,
@@ -316,6 +322,7 @@ pub(crate) struct SettingsState {
     agents: Option<Entity<settings::agents::AgentsPane>>,
     skills: Option<Entity<settings::skills::SkillsPane>>,
     mcp: Option<Entity<settings::mcp::McpPane>>,
+    #[cfg(not(target_os = "linux"))]
     updates: Option<Entity<settings::updates::UpdatesPane>>,
     diagnostics: Option<Entity<settings::diagnostics::DiagnosticsPane>>,
     about: Option<Entity<settings::about::AboutPane>>,
@@ -541,6 +548,7 @@ impl SettingsState {
             agents: None,
             skills: None,
             mcp: None,
+            #[cfg(not(target_os = "linux"))]
             updates: None,
             diagnostics: None,
             about: None,
@@ -888,6 +896,7 @@ impl NativeRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
+        #[cfg(not(target_os = "linux"))]
         if self.settings_page.pane == SettingsPane::Updates && pane != SettingsPane::Updates {
             self.pause_updates_pane(cx);
         }
@@ -969,6 +978,7 @@ impl NativeRoot {
                     mcp.update(cx, |pane, cx| pane.refresh(cx));
                 }
             }
+            #[cfg(not(target_os = "linux"))]
             SettingsPane::Updates => {
                 if self.settings_page.updates.is_none() {
                     let app_store = self.app_store.clone();
@@ -1553,6 +1563,7 @@ impl NativeRoot {
                 .mcp
                 .clone()
                 .map(IntoElement::into_any_element),
+            #[cfg(not(target_os = "linux"))]
             SettingsPane::Updates => self
                 .settings_page
                 .updates
@@ -1602,9 +1613,12 @@ impl NativeRoot {
     }
 
     pub(crate) fn pause_updates_pane(&self, cx: &mut Context<Self>) {
+        #[cfg(not(target_os = "linux"))]
         if let Some(updates) = self.settings_page.updates.clone() {
             updates.update(cx, |pane, _| pane.pause());
         }
+        #[cfg(target_os = "linux")]
+        let _ = cx;
     }
 
     pub(crate) fn settings_confirm_overlay(&self, cx: &App) -> Option<AnyElement> {
@@ -2190,7 +2204,7 @@ impl NativeRoot {
         let mut control = None;
         match status.map(|status| &status.state) {
             Some(RunnerCommandState::Installed | RunnerCommandState::Shadowed) => {
-                if cfg!(windows) {
+                if cfg!(any(windows, target_os = "linux")) {
                     lines.push(command_status_text(
                         crate::i18n::text("ui.on_your_path_new_terminals_pick_it_up"),
                         theme::accent(),
@@ -2230,6 +2244,32 @@ impl NativeRoot {
                         })
                         .into_any_element(),
                 );
+            }
+            Some(RunnerCommandState::Managed) => {
+                lines.push(command_status_text(
+                    crate::i18n::text("ui.linux_package_command_removal"),
+                    theme::accent(),
+                    Some("check.svg"),
+                ));
+                if let Some(path) = status.and_then(|status| status.shadowed_by.as_ref()) {
+                    lines.push(command_status_text(
+                        crate::i18n::tf(
+                            "format.comes_first_on_your_path_so_typing_starts_that_one",
+                            &[
+                                ("path", path.display().to_string()),
+                                (
+                                    "command",
+                                    runner_core::command_install::runner_command_name(cfg!(
+                                        debug_assertions
+                                    ))
+                                    .to_string(),
+                                ),
+                            ],
+                        ),
+                        theme::warning(),
+                        Some("triangle-alert.svg"),
+                    ));
+                }
             }
             Some(RunnerCommandState::Foreign) => {
                 if let Some(path) = status.and_then(|status| status.path.as_ref()) {
@@ -2917,7 +2957,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     fn shortcut_rows_keep_registry_order_with_one_tab_row_and_no_copy() {
         let overrides = keymap::KeymapOverrides::new();
         let rows = shortcut_rows("", &overrides);
@@ -2939,7 +2979,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     fn fixed_rows_turn_off_and_restore_without_taking_a_custom_key() {
         let tabs = ShortcutRow::TabSelection;
         let close = ShortcutRow::Entry(keymap::entry("close-pane").unwrap());
@@ -2964,7 +3004,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     fn shortcut_search_matches_grouped_tab_terms() {
         let overrides = keymap::KeymapOverrides::new();
         for query in ["tab 3", "⌘3", "go to tab"] {
@@ -3461,56 +3501,92 @@ mod tests {
 
     #[test]
     fn nav_search_filters_labels_and_removes_empty_groups() {
-        let all = filtered_nav_groups("");
-        assert_eq!(all.len(), 3);
-        assert_eq!(all.iter().map(|(_, panes)| panes.len()).sum::<usize>(), 13);
-        assert_eq!(
-            all[0],
-            (
-                "App",
-                vec![
-                    SettingsPane::General,
-                    SettingsPane::Appearance,
-                    SettingsPane::Notifications,
-                    SettingsPane::Missions,
-                    SettingsPane::Terminal,
-                    SettingsPane::Shortcuts,
-                    SettingsPane::Archived,
-                ],
-            )
-        );
+        crate::i18n::testing::with_locale(crate::i18n::Locale::English, || {
+            let all = filtered_nav_groups("");
+            assert_eq!(all.len(), 3);
+            assert_eq!(
+                all.iter().map(|(_, panes)| panes.len()).sum::<usize>(),
+                if cfg!(target_os = "linux") { 12 } else { 13 }
+            );
+            assert_eq!(
+                all[0],
+                (
+                    "App",
+                    vec![
+                        SettingsPane::General,
+                        SettingsPane::Appearance,
+                        SettingsPane::Notifications,
+                        SettingsPane::Missions,
+                        SettingsPane::Terminal,
+                        SettingsPane::Shortcuts,
+                        SettingsPane::Archived,
+                    ],
+                )
+            );
 
-        assert_eq!(
-            all[1],
-            (
-                "Integrations",
-                vec![
-                    SettingsPane::Agents,
-                    SettingsPane::Skills,
-                    SettingsPane::Mcp
-                ]
-            )
-        );
-        assert_eq!(
-            SettingsPane::from_route(Some("skills")),
-            SettingsPane::Skills
-        );
-        assert_eq!(SettingsPane::from_route(Some("mcp")), SettingsPane::Mcp);
-        assert_eq!(
-            filtered_nav_groups("mcp"),
-            vec![("Integrations", vec![SettingsPane::Mcp])]
-        );
-        assert_eq!(
-            filtered_nav_groups("skills"),
-            vec![("Integrations", vec![SettingsPane::Skills])]
-        );
+            assert_eq!(
+                all[1],
+                (
+                    "Integrations",
+                    vec![
+                        SettingsPane::Agents,
+                        SettingsPane::Skills,
+                        SettingsPane::Mcp
+                    ]
+                )
+            );
+            assert_eq!(
+                all[2],
+                (
+                    "System",
+                    vec![
+                        #[cfg(not(target_os = "linux"))]
+                        SettingsPane::Updates,
+                        SettingsPane::Diagnostics,
+                        SettingsPane::About,
+                    ],
+                )
+            );
+            #[cfg(target_os = "linux")]
+            {
+                assert!(filtered_nav_groups("updates").is_empty());
+                assert_eq!(
+                    SettingsPane::from_route(Some("updates")),
+                    SettingsPane::General
+                );
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                assert_eq!(
+                    filtered_nav_groups("updates"),
+                    vec![("System", vec![SettingsPane::Updates])]
+                );
+                assert_eq!(
+                    SettingsPane::from_route(Some("updates")),
+                    SettingsPane::Updates
+                );
+            }
+            assert_eq!(
+                SettingsPane::from_route(Some("skills")),
+                SettingsPane::Skills
+            );
+            assert_eq!(SettingsPane::from_route(Some("mcp")), SettingsPane::Mcp);
+            assert_eq!(
+                filtered_nav_groups("mcp"),
+                vec![("Integrations", vec![SettingsPane::Mcp])]
+            );
+            assert_eq!(
+                filtered_nav_groups("skills"),
+                vec![("Integrations", vec![SettingsPane::Skills])]
+            );
 
-        let terminal = filtered_nav_groups("  TERM  ");
-        assert_eq!(terminal, vec![("App", vec![SettingsPane::Terminal])]);
+            let terminal = filtered_nav_groups("  TERM  ");
+            assert_eq!(terminal, vec![("App", vec![SettingsPane::Terminal])]);
 
-        let archived = filtered_nav_groups("archived");
-        assert_eq!(archived, vec![("App", vec![SettingsPane::Archived])]);
-        assert!(filtered_nav_groups("no such setting").is_empty());
+            let archived = filtered_nav_groups("archived");
+            assert_eq!(archived, vec![("App", vec![SettingsPane::Archived])]);
+            assert!(filtered_nav_groups("no such setting").is_empty());
+        });
     }
 
     #[test]
@@ -3774,7 +3850,11 @@ mod tests {
                     .unwrap();
                 cx.run_until_parked();
                 let back = visual.debug_bounds("SETTINGS_BACK").unwrap();
-                let sidebar_top = if cfg!(windows) { 12. + 32. } else { 52. };
+                let sidebar_top = if cfg!(any(windows, target_os = "linux")) {
+                    12. + 32.
+                } else {
+                    52.
+                };
                 assert!(
                     back.top()
                         >= visual

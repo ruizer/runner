@@ -131,7 +131,11 @@ impl Updater {
                 cx.weak_entity(),
                 cx.to_async(),
             ),
-            available: dev_available(),
+            available: if cfg!(target_os = "linux") {
+                None
+            } else {
+                dev_available()
+            },
         }
     }
 
