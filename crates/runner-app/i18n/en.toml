@@ -1133,3 +1133,8 @@
 "accounts.shared_plugins.other" = "{count} shared plugins"
 "accounts.local_skills" = "local skills kept"
 "accounts.local_plugins" = "plugin state stays here"
+"ui.shortcuts_must_include_ctrl_alt_or_super_function_keys_can_be_used_alone" = "Shortcuts must include Ctrl, Alt, or Super. Function keys can be used alone."
+"ui.open_working_directory" = "Open working directory"
+"ui.desktop_notifications" = "Desktop notifications"
+"ui.desktop_notification_delivery_settings" = "Delivery depends on your desktop notification service. Configure banners and sound in your desktop settings."
+"ui.linux_package_command_removal" = "Installed with the Linux package. Use its installer or package manager to remove it."
