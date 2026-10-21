@@ -4,11 +4,48 @@ Linux in-app installation updates are a later local follow-up; see
 [their separate validation record](823-linux-updates.md). Earlier results below
 retain their original scope and candidate identities.
 
-Current integration base: upstream 200ba72b (Runner 0.17.0), rebased on
+Current integration base: upstream 59c1e162 (Runner 0.17.0), rebased on
 2026-10-21; see the dated rebase reviews below for scoped checks. The earlier
 0.16.5 integration used upstream 4a5e5ecf and brief HEAD 1fff6809. Checkpoints
 1–7 retain their original HEAD769e2e40 / feature base0a65b80d identities and
 results. Each snapshot and binary keeps its original validation identity.
+
+## Upstream PR integration, 2026-10-21
+
+PR #982 targets upstream main. After creation GitHub reported conflicts with
+upstream #978, which moved macOS traffic lights into platform_ui, removed unused
+daemon wake code and dropped cli_install re-exports. The four local commits were
+rebased from `200ba72b` onto `59c1e162`. Keep upstream's macOS implementation,
+place its non-macOS no-op in the existing desktop module and export it on Linux;
+keep Linux foreground CLI setup while calling runner_core directly. No installer,
+updater, package or Agent adapter behavior changes in this integration.
+
+Selected before execution: Mac/Linux runner-app tests and strict workspace Clippy
+cover platform wiring and daemon boot callers; Mac updater-feature Clippy covers
+the Sparkle configuration. Focused daemon cli_install tests cover updated imports
+and package-aware command installation. Formatting/diff checks cover resolution.
+Earlier native tar/deb/Agent tests retain their identities and are not repeated.
+Snapshot31 identifies source HEAD `4efa7050`, archive SHA256
+`83fb9b228327ef453e0d0520fa63782956867f4a2fbc847c22c208f1187aa8a8`
+and source identity
+`8d7ce6288ebbc9d70c07bebe198e094c525c4ef2104c9fe5bebc1554af906386`.
+Only this validation document changes after the checks.
+
+| Platform | Check | Exit / seconds |
+| --- | --- | --- |
+| Mac | runner-app tests, ci/runtime_shaders | 0 /50.29 |
+| Mac | strict workspace Clippy, ci/runtime_shaders | 0 /23.36 |
+| Mac | updater-feature Clippy, ci/runtime_shaders | 0 /18.03 |
+| Mac | runner-daemon cli_install::tests | 0 /26.77; 10 cases |
+| Mac | cargo fmt --all --check | 0 /2.40 |
+| Ubuntu ARM64 | runner-app tests, ci | 0 /82.62 |
+| Ubuntu ARM64 | strict workspace Clippy, ci | 0 /14.03 |
+| Ubuntu ARM64 | runner-daemon cli_install::tests | 0 /26.54; 11 cases |
+
+Diff whitespace checks pass. Windows updater/backend/dialog/settings bytes match
+upstream; Windows execution still requires new hosted CI. Raw logs use
+`target/linux-validation/rebase-0978-`. These are scoped integration checks,
+not a repeated native upgrade or full regression pass.
 
 ## Rebase onto upstream 0.17.0, 2026-10-21
 
