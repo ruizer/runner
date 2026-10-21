@@ -4,11 +4,55 @@ Linux in-app installation updates are a later local follow-up; see
 [their separate validation record](823-linux-updates.md). Earlier results below
 retain their original scope and candidate identities.
 
-Current integration base: upstream 8e523b5e (Runner 0.16.7), rebased on
-2026-10-20; see the dated rebase reviews below for scoped checks. The earlier
+Current integration base: upstream 200ba72b (Runner 0.17.0), rebased on
+2026-10-21; see the dated rebase reviews below for scoped checks. The earlier
 0.16.5 integration used upstream 4a5e5ecf and brief HEAD 1fff6809. Checkpoints
 1–7 retain their original HEAD769e2e40 / feature base0a65b80d identities and
 results. Each snapshot and binary keeps its original validation identity.
+
+## Rebase onto upstream 0.17.0, 2026-10-21
+
+The three Linux commits were rebased from `8e523b5e` onto `200ba72b`. Upstream includes
+Agent settings/Claude account work, restored-mission resume, Active sidebar order
+and toolchain-based CI cache keys. Catalog append conflicts preserve both sets
+of keys. AppStore conflicts preserve upstream removal of activity timestamps and
+Linux's mission-count cfg. Range-diff shows only these integration adjustments;
+the packaging permission fix remains patch-identical. Windows updater source and
+Linux download/installer implementation are unchanged by this rebase.
+
+Selected checks before execution: runner-app tests and strict workspace Clippy on
+Mac/Ubuntu cover merged application/state/settings wiring; Mac updater Clippy
+covers Sparkle cfg; packaging and nightly shell fixtures cover merged publishing
+workflows. Format/diff and catalog parity are checked. No package rebuild, account
+switching, live Agent run or repeat native tar/deb upgrade is selected: those
+implementations are unchanged. Earlier CI/native evidence retains its original
+candidate identity and is not a pass for this rebased candidate.
+
+Snapshot30 binds source HEAD `0ae317d1`, archive SHA256
+`1524e49434fd28025beff15b3c79b1df39886105c83d9b5269f89d6b12a48a11`
+and source identity
+`e6803ef6fd73a7339f904f4d0e7fcb0bcdc73c79c310d517477751afc99e4e3e`.
+Only this documentation changes after the checks.
+
+| Platform | Selected check | Exit / seconds |
+| --- | --- | --- |
+| Mac | runner-app tests, ci profile with runtime_shaders | 0 /58.35 |
+| Mac | strict workspace Clippy, ci profile with runtime_shaders | 0 /41.36 |
+| Mac | updater-feature strict Clippy with runtime_shaders | 0 /19.51 |
+| Mac | packaging fixtures | 0 /1.25; 18 cases, 2 Linux-tool skips |
+| Mac | nightly workflow fixtures | 0 /9.75; 18 cases |
+| Mac | cargo fmt --all --check | 0 /2.38 |
+| Ubuntu ARM64 | runner-app tests, ci profile | 0 /117.17 |
+| Ubuntu ARM64 | strict workspace Clippy, ci profile | 0 /79.73 |
+| Ubuntu ARM64 | packaging fixtures | 0 /0.76; 18 cases |
+
+The application tests include catalog key/placeholder parity. Diff whitespace
+checks also pass. Initial Mac tests exited101 because the network sandbox could
+not resolve crates.io for upstream's new dependency; the unchanged command passed
+outside that sandbox. The failed attempt remains separate from the retry logs.
+Raw evidence uses `target/linux-validation/rebase-0170-`. These are selected
+rebase checks, not a full regression pass. Windows CI has not run on this
+candidate. No push is requested for this rebase.
 
 ## Rebase onto upstream #964 and #967, 2026-10-20
 
