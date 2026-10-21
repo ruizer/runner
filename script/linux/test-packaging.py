@@ -101,6 +101,41 @@ class VersionTests(unittest.TestCase):
             with tempfile.TemporaryDirectory(prefix='r823-rpm-', dir=ROOT / 'target') as database:
                 self.assertEqual(run_captured(['rpm', '--dbpath', database, '--eval', expression]).stdout.strip(), '-1')
 
+    def test_update_signing_requires_all_packages_and_the_trusted_key(self):
+        with tempfile.TemporaryDirectory(prefix='r823-sign-', dir=ROOT / 'target') as scratch:
+            scratch = Path(scratch)
+            script = scratch / 'script/linux/sign-updates'
+            script.parent.mkdir(parents=True)
+            shutil.copy2(ROOT / 'script/linux/sign-updates', script)
+            key = scratch / 'packaging/windows-update-public-key'
+            key.parent.mkdir()
+            fixtures = ROOT / 'crates/runner-app/tests/fixtures/updates'
+            shutil.copy2(fixtures / 'public-key', key)
+            tool = scratch / 'bin/npx'
+            tool.parent.mkdir()
+            tool.write_text('#!/bin/sh\nfor arg do package=$arg; done\ncp "$FIXTURE_SIGNATURE" "$package.sig"\n')
+            tool.chmod(0o755)
+            packages = scratch / 'packages'
+            packages.mkdir()
+            name = 'Runner-99.0.0-linux-aarch64'
+            for ext in ['tar.gz', 'deb', 'rpm']:
+                (packages / f'{name}.{ext}').write_bytes((fixtures / 'installer.txt').read_bytes())
+            env = dict(os.environ, PATH=str(tool.parent) + os.pathsep + os.environ['PATH'],
+                       TAURI_SIGNING_PRIVATE_KEY='test-only-placeholder',
+                       TAURI_SIGNING_PRIVATE_KEY_PASSWORD='',
+                       FIXTURE_SIGNATURE=str(fixtures / 'installer.txt.sig'))
+            command = ['bash', str(script), str(packages), name]
+            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(list(packages.glob('*.sig'))), 3)
+            shutil.copy2(ROOT / 'packaging/windows-update-public-key', key)
+            result = subprocess.run(command, env=env, capture_output=True, text=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('does not match', result.stderr)
+            shutil.copy2(fixtures / 'public-key', key)
+            (packages / f'{name}.rpm').unlink()
+            self.assertNotEqual(subprocess.run(command, env=env, capture_output=True).returncode, 0)
+
     def test_prebuilt_binary_inputs_are_rejected(self):
         # Even real ci binaries cannot be re-labelled as production package inputs.
         result = subprocess.run(['python3', str(ROOT / 'script/bundle-linux'), '--binary-dir', str(ROOT / 'target/ci')], capture_output=True, text=True)

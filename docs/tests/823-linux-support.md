@@ -1,5 +1,9 @@
 # Linux support validation
 
+Linux in-app installation updates are a later local follow-up; see
+[their separate validation record](823-linux-updates.md). Earlier results below
+retain their original scope and candidate identities.
+
 Current integration base: upstream 8e523b5e (Runner 0.16.7), rebased on
 2026-10-20; see the dated rebase reviews below for scoped checks. The earlier
 0.16.5 integration used upstream 4a5e5ecf and brief HEAD 1fff6809. Checkpoints

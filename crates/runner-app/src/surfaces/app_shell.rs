@@ -932,7 +932,7 @@ impl NativeRoot {
             )
             .map(|root| {
                 // Stays inside the content root so the scrim ends at the Windows title bar.
-                #[cfg(windows)]
+                #[cfg(any(windows, target_os = "linux"))]
                 let root = root
                     .children(self.update_dialog.clone().map(deferred))
                     .on_action(cx.listener(Self::open_update_dialog));
@@ -1116,20 +1116,13 @@ impl NativeRoot {
     }
 
     fn render_sidebar_brand(&self, update_version: Option<String>, cx: &Context<Self>) -> Div {
-        #[cfg(not(target_os = "linux"))]
         let zoom = self.settings(cx).app_zoom;
-        #[cfg(not(target_os = "linux"))]
         let updater = global_updater(cx);
-        #[cfg(target_os = "linux")]
-        let _ = update_version;
-        #[cfg(target_os = "linux")]
-        let update_hint = None::<AnyElement>;
-        #[cfg(not(target_os = "linux"))]
         let update_hint = update_version.map(|version| {
             let click_updater = updater.clone();
-            #[cfg(not(windows))]
+            #[cfg(target_os = "macos")]
             let tooltip = crate::platform_ui::update_hint_tooltip(&version);
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             let tooltip =
                 crate::platform_ui::update_hint_tooltip(&version, updater.read(cx).state());
             Tooltip::new(
@@ -1157,9 +1150,9 @@ impl NativeRoot {
                     .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
                     .on_click(move |_, _window, cx| {
                         cx.stop_propagation();
-                        #[cfg(not(windows))]
+                        #[cfg(target_os = "macos")]
                         crate::platform_ui::activate_update_hint(&click_updater, cx);
-                        #[cfg(windows)]
+                        #[cfg(any(windows, target_os = "linux"))]
                         crate::platform_ui::activate_update_hint(&click_updater, _window, cx);
                     })
                     .child(
@@ -3225,7 +3218,7 @@ mod tests {
                     let mark = visual.debug_bounds("SIDEBAR_BRAND_MARK").unwrap();
                     assert_eq!(mark.size, size(px(20. * zoom), px(20. * zoom)));
                     let update = visual.debug_bounds("SIDEBAR_UPDATE");
-                    assert_eq!(update.is_some(), available && !cfg!(target_os = "linux"));
+                    assert_eq!(update.is_some(), available);
                     if let Some(update) = update {
                         let header = visual.debug_bounds("SIDEBAR_HEADER").unwrap();
                         let name = visual.debug_bounds("SIDEBAR_NAME").unwrap();
@@ -3585,9 +3578,9 @@ mod tests {
         cx.update(|cx| {
             cx.set_global(crate::GlobalAppStore(store.clone()));
             cx.set_global(crate::WindowLayoutCheckpoint::default());
-            #[cfg(not(windows))]
+            #[cfg(target_os = "macos")]
             let updater = cx.new(|cx| crate::Updater::new(false, cx));
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             let updater = cx.new(|cx| crate::Updater::new(false, temp.path().join("updates"), cx));
             cx.set_global(crate::GlobalUpdater(updater));
         });
