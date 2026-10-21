@@ -46,7 +46,7 @@ Initial main and secondary windows select an enumerated display even when Waylan
 
 The contract follows the locked [GPUI 0.3.7 source](https://static.crates.io/crates/gpui-pre/0.3.7/download) and [Linux backend 0.3.7 source](https://static.crates.io/crates/gpui-pre-linux/0.3.7/download), both from Zed `1a28cff4b409169bac058bca40dfbfeb7621d19b`. The official `window_shadow.rs` example uses explicit resize requests for client decorations. The Wayland backend reports no primary display and restores its retained normal bounds when unmaximizing, so initial restore bounds must be usable before maximize.
 
-Linux uses the existing custom desktop titlebar and Ctrl shortcuts. Text copy/paste uses GPUI; clipboard file paths are currently unsupported. Window material is solid. There is no Linux in-app updater, Hide/Hide Others or macOS wake observer. Notifications are submitted to GPUI's desktop backend; Runner cannot query a universal Linux permission status or open a universal notification-settings URL, so Settings describes desktop-managed delivery without claiming permission is granted. Agent CLI Update remains separate from app updates.
+Linux uses the existing custom desktop titlebar and Ctrl shortcuts. Text copy/paste uses GPUI; clipboard file paths are currently unsupported. Window material is solid. Hide/Hide Others and the macOS wake observer do not apply. Signed application updates are described below. Notifications are submitted to GPUI's desktop backend; Runner cannot query a universal Linux permission status or open a universal notification-settings URL, so Settings describes desktop-managed delivery without claiming permission is granted. Agent CLI Update remains separate from app updates.
 
 Linux windows use the desktop application ID `runner`, matching `runner.desktop`
 and its `StartupWMClass`. GPUI forwards this window option to Wayland's app ID
@@ -67,7 +67,7 @@ Build on a matching Linux architecture. The bundler always builds both inputs wi
 python3 script/linux/test-packaging.py --packages target/linux-packages
 ```
 
-Outputs are `Runner-<version>-linux-<x86_64|aarch64>.tar.gz`, `.deb` and `.rpm`. Nightlies substitute `nightly.<sha>.<UTC stamp>` for the version label; `--channel remote-nightly` uses `remote-nightly.<sha>.<UTC stamp>` and the Remote Nightly display label, matching the separate upstream channel. Debian/RPM metadata keeps the UTC stamp before the commit for upgrade ordering. Debian metadata uses `amd64`/`arm64`, RPM uses `x86_64`/`aarch64`; ELF machine validation prevents mislabelling. All formats share one staging tree and include the app, sidecar, real same-byte `runnerd`, desktop entry, icon and user service. Packaging uses `dpkg-deb` and `rpmbuild`, without nfpm or a runtime download. Linux artifacts are unsigned in this initial implementation.
+Outputs are `Runner-<version>-linux-<x86_64|aarch64>.tar.gz`, `.deb` and `.rpm`. Nightlies substitute `nightly.<sha>.<UTC stamp>` for the version label; `--channel remote-nightly` uses `remote-nightly.<sha>.<UTC stamp>` and the Remote Nightly display label, matching the separate upstream channel. Debian/RPM metadata keeps the UTC stamp before the commit for upgrade ordering. Debian metadata uses `amd64`/`arm64`, RPM uses `x86_64`/`aarch64`; ELF machine validation prevents mislabelling. All formats share one staging tree and include the app, sidecar, real same-byte `runnerd`, desktop entry, icon and user service. Packaging uses `dpkg-deb` and `rpmbuild`, without nfpm or a runtime download. Local packaging alone does not sign artifacts. Release/nightly builds run `script/linux/sign-updates` and publish a detached `.sig` for each package using the existing updater signing key.
 
 The tarball installs per user:
 
@@ -121,3 +121,43 @@ The app additionally needs WSLg, current Windows GPU drivers and a working Vulka
 ## Validation gaps
 
 Consult the feature record for exact candidate/commands and outcomes. ARM64 native app/package/service results, x86_64 execution, older-distro compatibility, WSLg, real agent hooks and Chinese IME must each be established independently. Synthetic shell/PTY/IPC tests do not establish a real Claude/Codex chat or crew round trip. No release or nightly has been dispatched by this implementation task.
+
+## In-app updates
+
+Linux owns its updater state, scheduling, transport and verification in
+`updater/linux.rs`, installation in `updater/linux/install.rs`, and its update
+settings/dialog in `updates_linux.rs` and `update_dialog_linux.rs`. Windows keeps
+its existing updater and views; macOS retains Sparkle. The application-facing
+updater entry points select the implementation at compile time.
+Stable updates compare semantic versions; nightly/remote-nightly compare UTC
+build stamps within their own channel. Each architecture/format needs its own
+signature; unsigned older releases cannot be installed by the updater.
+
+A user tar installation is recognized by its managed `lib/runner` directory.
+The verified archive is copied to private staging, safely unpacked with bounded
+sizes and no links/special paths, checked against signed release identity and
+ELF architecture, then the entire app/CLI/daemon directory is swapped with
+`renameat2(RENAME_EXCHANGE)` on the same filesystem. No unsafe fallback to
+per-file replacement is attempted if atomic exchange is unavailable. Failure
+before the exchange preserves the old installation. User data stays outside it;
+this does not promise database rollback after future schema migrations.
+
+System package ownership is queried for `/usr/lib/runner/Runner`. The GUI starts
+that root-owned, non-writable executable through `pkexec` in its narrow
+`--runner-install-update` mode. It starts no GUI, daemon, agents or user database
+as root. The authorized process copies package/signature inputs into root-owned
+staging and rechecks the compiled-in trust key, version, channel, architecture
+and runner package metadata before invoking APT/DNF. Neither shell command text
+nor arbitrary executable paths come from a feed. DNF checks repository dependency
+signatures; only the already Runner-verified local RPM uses the detached trust
+chain instead of RPM signing. APT refuses a transaction requiring removals.
+
+Polkit/pkexec and an interactive desktop authentication agent are required for
+system packages; RPM automatic install currently requires DNF. A failed or
+cancelled authorization/transaction keeps the current GUI running, with log and
+retry access. Successful install marks the existing update-quit lifecycle and
+relaunches the installed application as the original user after the old GUI
+exits; new-build daemon replacement/resume follows existing policy. An attempt
+marker survives interrupted installation so the next check can report it.
+PR CI never signs or builds release packages; publishing signatures requires the
+maintainer's existing signing secret, and no release is dispatched by local tests.

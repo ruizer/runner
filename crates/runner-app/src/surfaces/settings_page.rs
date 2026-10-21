@@ -148,7 +148,6 @@ pub(crate) enum SettingsPane {
     Agents,
     Skills,
     Mcp,
-    #[cfg(not(target_os = "linux"))]
     Updates,
     Diagnostics,
     About,
@@ -166,7 +165,6 @@ impl SettingsPane {
             Some("agents") => Self::Agents,
             Some("mcp") => Self::Mcp,
             Some("skills") => Self::Skills,
-            #[cfg(not(target_os = "linux"))]
             Some("updates") => Self::Updates,
             Some("diagnostics") => Self::Diagnostics,
             Some("about") => Self::About,
@@ -186,7 +184,6 @@ impl SettingsPane {
             Self::Agents => "agents",
             Self::Skills => "skills",
             Self::Mcp => "mcp",
-            #[cfg(not(target_os = "linux"))]
             Self::Updates => "updates",
             Self::Diagnostics => "diagnostics",
             Self::About => "about",
@@ -205,7 +202,6 @@ impl SettingsPane {
             Self::Agents => crate::i18n::text("ui.agents"),
             Self::Skills => crate::i18n::text("ui.skills"),
             Self::Mcp => "MCP",
-            #[cfg(not(target_os = "linux"))]
             Self::Updates => crate::i18n::text("ui.updates"),
             Self::Diagnostics => crate::i18n::text("ui.diagnostics"),
             Self::About => crate::i18n::text("ui.about"),
@@ -224,7 +220,6 @@ impl SettingsPane {
             Self::Agents => "bot.svg",
             Self::Skills => "file-text.svg",
             Self::Mcp => "plug.svg",
-            #[cfg(not(target_os = "linux"))]
             Self::Updates => "refresh-cw.svg",
             Self::Diagnostics => "file-text.svg",
             Self::About => "info.svg",
@@ -248,7 +243,6 @@ const INTEGRATION_PANES: &[SettingsPane] = &[
     SettingsPane::Mcp,
 ];
 const SYSTEM_PANES: &[SettingsPane] = &[
-    #[cfg(not(target_os = "linux"))]
     SettingsPane::Updates,
     SettingsPane::Diagnostics,
     SettingsPane::About,
@@ -322,7 +316,6 @@ pub(crate) struct SettingsState {
     agents: Option<Entity<settings::agents::AgentsPane>>,
     skills: Option<Entity<settings::skills::SkillsPane>>,
     mcp: Option<Entity<settings::mcp::McpPane>>,
-    #[cfg(not(target_os = "linux"))]
     updates: Option<Entity<settings::updates::UpdatesPane>>,
     diagnostics: Option<Entity<settings::diagnostics::DiagnosticsPane>>,
     about: Option<Entity<settings::about::AboutPane>>,
@@ -548,7 +541,6 @@ impl SettingsState {
             agents: None,
             skills: None,
             mcp: None,
-            #[cfg(not(target_os = "linux"))]
             updates: None,
             diagnostics: None,
             about: None,
@@ -896,7 +888,6 @@ impl NativeRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        #[cfg(not(target_os = "linux"))]
         if self.settings_page.pane == SettingsPane::Updates && pane != SettingsPane::Updates {
             self.pause_updates_pane(cx);
         }
@@ -978,7 +969,6 @@ impl NativeRoot {
                     mcp.update(cx, |pane, cx| pane.refresh(cx));
                 }
             }
-            #[cfg(not(target_os = "linux"))]
             SettingsPane::Updates => {
                 if self.settings_page.updates.is_none() {
                     let app_store = self.app_store.clone();
@@ -1563,7 +1553,6 @@ impl NativeRoot {
                 .mcp
                 .clone()
                 .map(IntoElement::into_any_element),
-            #[cfg(not(target_os = "linux"))]
             SettingsPane::Updates => self
                 .settings_page
                 .updates
@@ -1613,12 +1602,9 @@ impl NativeRoot {
     }
 
     pub(crate) fn pause_updates_pane(&self, cx: &mut Context<Self>) {
-        #[cfg(not(target_os = "linux"))]
         if let Some(updates) = self.settings_page.updates.clone() {
             updates.update(cx, |pane, _| pane.pause());
         }
-        #[cfg(target_os = "linux")]
-        let _ = cx;
     }
 
     pub(crate) fn settings_confirm_overlay(&self, cx: &App) -> Option<AnyElement> {
@@ -3375,9 +3361,9 @@ mod tests {
         cx.update(|cx| {
             cx.set_global(GlobalAppStore(store.clone()));
             cx.set_global(WindowLayoutCheckpoint::default());
-            #[cfg(not(windows))]
+            #[cfg(target_os = "macos")]
             let updater = cx.new(|cx| Updater::new(false, cx));
-            #[cfg(windows)]
+            #[cfg(any(windows, target_os = "linux"))]
             let updater = cx.new(|cx| Updater::new(false, temp.path().join("updates"), cx));
             cx.set_global(GlobalUpdater(updater));
         });
@@ -3504,10 +3490,7 @@ mod tests {
         crate::i18n::testing::with_locale(crate::i18n::Locale::English, || {
             let all = filtered_nav_groups("");
             assert_eq!(all.len(), 3);
-            assert_eq!(
-                all.iter().map(|(_, panes)| panes.len()).sum::<usize>(),
-                if cfg!(target_os = "linux") { 12 } else { 13 }
-            );
+            assert_eq!(all.iter().map(|(_, panes)| panes.len()).sum::<usize>(), 13);
             assert_eq!(
                 all[0],
                 (
@@ -3540,22 +3523,12 @@ mod tests {
                 (
                     "System",
                     vec![
-                        #[cfg(not(target_os = "linux"))]
                         SettingsPane::Updates,
                         SettingsPane::Diagnostics,
                         SettingsPane::About,
                     ],
                 )
             );
-            #[cfg(target_os = "linux")]
-            {
-                assert!(filtered_nav_groups("updates").is_empty());
-                assert_eq!(
-                    SettingsPane::from_route(Some("updates")),
-                    SettingsPane::General
-                );
-            }
-            #[cfg(not(target_os = "linux"))]
             {
                 assert_eq!(
                     filtered_nav_groups("updates"),
